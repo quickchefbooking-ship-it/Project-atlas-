@@ -1,0 +1,4 @@
+ATLAS_DB_PATH=atlas.db
+ATLAS_API_KEY=replace-with-a-secure-key
+ATLAS_ENABLE_PAID_AI=false
+OPENAI_API_KEY=
