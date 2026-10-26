@@ -1,4 +1,166 @@
-ATLAS_DB_PATH=atlas.db
-ATLAS_API_KEY=replace-with-a-secure-key
-ATLAS_ENABLE_PAID_AI=false
-OPENAI_API_KEY=
+import os
+from typing import Any, Optional
+
+from fastapi import FastAPI, Header, HTTPException, status
+from pydantic import BaseModel
+
+from atlas_engine.task_manager import ProposalReviewInput, TaskAPI, TaskInput
+from atlas_engine.executor import LocalTaskExecutor
+from atlas_engine.evaluator import Evaluator
+from atlas_engine.improvement import ImprovementManager
+from atlas_engine.learning_memory import LearningMemory
+from atlas_engine.safe_testing import SafeTester
+from atlas_engine.task_manager import TaskManager
+from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
+
+app = FastAPI(title="Project Atlas Learning Engine")
+
+
+class StorageBackend:
+    @staticmethod
+    def now_isoformat():
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def save_task(task: dict[str, Any]):
+        from atlas_engine.storage import save_task
+        save_task(task)
+
+    @staticmethod
+    def get_task(task_id: str):
+        from atlas_engine.storage import get_task
+        return get_task(task_id)
+
+    @staticmethod
+    def list_tasks(limit: int = 20):
+        from atlas_engine.storage import list_tasks
+        return list_tasks(limit)
+
+    @staticmethod
+    def update_task(task_id: str, updates: dict[str, Any]):
+        from atlas_engine.storage import update_task
+        update_task(task_id, updates)
+
+
+manager = TaskManager(StorageBackend())
+executor = LocalTaskExecutor("local")
+api = TaskAPI(manager, executor, Evaluator, LearningMemory(), ImprovementManager(), SafeTester())
+
+
+REQUIRE_AUTH = os.getenv("ATLAS_MEDIA_REQUIRE_AUTH", "false").lower() == "true"
+ATLAS_API_KEY = os.getenv("ATLAS_API_KEY")
+
+
+class GenerateImageRequest(BaseModel):
+    prompt: str
+    output_path: Optional[str] = None
+
+
+class GenerateVideoRequest(BaseModel):
+    prompt: str
+    narration: Optional[str] = None
+    output_path: Optional[str] = None
+
+
+def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> bool:
+    if not REQUIRE_AUTH:
+        return True
+    if not ATLAS_API_KEY:
+        raise HTTPException(status_code=500, detail="ATLAS_API_KEY is not configured")
+    if not x_api_key or x_api_key != ATLAS_API_KEY:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key")
+    return True
+
+
+@app.get("/health")
+def health():
+    return api.health()
+
+
+@app.get("/tasks")
+def list_tasks_route():
+    return api.list_tasks()
+
+
+@app.post("/tasks")
+def create_task(payload: TaskInput):
+    return api.create_task(payload)
+
+
+@app.get("/tasks/{task_id}")
+def get_task_route(task_id: str):
+    task = manager.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task.model_dump()
+
+
+@app.post("/tasks/{task_id}/run")
+def run_task(task_id: str):
+    return api.run_task(task_id)
+
+
+@app.get("/tasks/{task_id}/evaluations")
+def get_evaluations(task_id: str):
+    return api.get_evaluations(task_id)
+
+
+@app.get("/lessons")
+def list_lessons_route():
+    return api.list_lessons()
+
+
+@app.post("/proposals")
+def create_proposal(payload: dict):
+    proposal = api.improvement.create_proposal(
+        payload["task_id"],
+        payload["problem"],
+        payload.get("evidence", {}),
+        payload["proposed_change"],
+        payload["expected_benefit"],
+        payload["test_plan"],
+        payload.get("created_by", "human"),
+    )
+    return proposal
+
+
+@app.get("/proposals")
+def proposals():
+    return api.list_proposals()
+
+
+@app.post("/proposals/{proposal_id}/review")
+def review_proposal(proposal_id: str, payload: ProposalReviewInput):
+    return api.review_proposal(proposal_id, payload)
+
+
+@app.get("/dashboard")
+def dashboard():
+    return api.dashboard()
+
+
+@app.get("/media/health")
+def media_health():
+    return {"status": "ok", "media": "Atlas media generation enabled"}
+
+
+@app.post("/media/generate-image")
+def generate_image(payload: GenerateImageRequest, _: bool = require_api_key):
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required")
+    output = generate_image_from_prompt(payload.prompt, payload.output_path)
+    return {"status": "ok", "path": output}
+
+
+@app.post("/media/generate-video")
+def generate_video(payload: GenerateVideoRequest, _: bool = require_api_key):
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required")
+    output = generate_video_from_prompt(payload.prompt, payload.output_path, payload.narration)
+    return {"status": "ok", "path": output}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
