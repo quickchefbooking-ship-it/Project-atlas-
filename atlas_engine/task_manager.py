@@ -1,15 +1,24 @@
-import os
 import json
-from typing import Any, Dict, List
+import os
+from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import BaseModel, Field
 
+class TaskInput(BaseModel):
+    title: str
+    description: str
+    success_criteria: list[dict[str, Any]] | list[str] | dict[str, Any] = Field(default_factory=list)
+
+class ProposalReviewInput(BaseModel):
+    action: str
+    approved_by: str
 
 class Task(BaseModel):
     id: str
     title: str
     description: str
-    success_criteria: list[dict[str, Any]] | list[str] | dict[str, Any] = Field(default_factory=list)
+    success_criteria: Any = Field(default_factory=list)
     status: str = "pending"
     attempts: int = 0
     score: float = 0.0
@@ -17,62 +26,101 @@ class Task(BaseModel):
     created_at: str
     updated_at: str
 
-
-class TaskState(BaseModel):
-    task_id: str
-    status: str
-    attempts: int
-    score: float
-    result: dict[str, Any] | None = None
-
-
 class TaskManager:
     def __init__(self, storage_backend: Any):
         self.storage_backend = storage_backend
 
-    def create_task(self, title: str, description: str, success_criteria: Any, task_type: str = "local_safe_math") -> Task:
-        if not title.strip():
-            raise ValueError("Task title is required.")
-        if not description.strip():
-            raise ValueError("Task description is required.")
-        task = Task(
-            id=f"task-{abs(hash(title + description + os.urandom(4).hex()))}",
-            title=title,
-            description=description,
-            success_criteria=success_criteria,
-            status="pending",
-            attempts=0,
-            score=0.0,
-            result=None,
-            created_at=self.storage_backend.now_isoformat(),
-            updated_at=self.storage_backend.now_isoformat(),
-        )
-        self.storage_backend.save_task(task.model_dump())
-        return task
+    def create_task(self, title: str, description: str, success_criteria: Any) -> Task:
+        if not title.strip() or not description.strip():
+            raise ValueError("Task title and description are required.")
+        now = self.storage_backend.now_isoformat()
+        criteria = success_criteria if success_criteria is not None else []
+        task_id = f"task-{os.urandom(12).hex()}"
+        row = {
+            "id": task_id, "title": title, "description": description,
+            "success_criteria_json": json.dumps(criteria), "status": "pending",
+            "attempts": 0, "score": 0.0, "result_json": None,
+            "created_at": now, "updated_at": now,
+        }
+        self.storage_backend.save_task(row)
+        return Task(id=task_id, title=title, description=description,
+                    success_criteria=criteria, created_at=now, updated_at=now)
 
     def get_task(self, task_id: str) -> Task | None:
         row = self.storage_backend.get_task(task_id)
         if row is None:
             return None
-        return Task(**row)
+        return Task(
+            id=row["id"], title=row["title"], description=row["description"],
+            success_criteria=json.loads(row["success_criteria_json"]),
+            status=row["status"], attempts=row["attempts"], score=row["score"],
+            result=json.loads(row["result_json"]) if row.get("result_json") else None,
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
 
     def list_tasks(self, limit: int = 20) -> list[Task]:
         rows = self.storage_backend.list_tasks(limit)
-        return [Task(**row) for row in rows]
+        return [self.get_task(row["id"]) for row in rows]
 
-    def update_status(self, task_id: str, status: str, score: float | None = None, result: dict[str, Any] | None = None) -> Task | None:
+    def update_status(self, task_id: str, status: str, score: float | None = None,
+                      result: dict[str, Any] | None = None) -> Task | None:
         task = self.get_task(task_id)
         if task is None:
             return None
-        task.status = status
-        task.score = score if score is not None else task.score
+        updates: dict[str, Any] = {"status": status, "updated_at": self.storage_backend.now_isoformat()}
+        if score is not None:
+            updates["score"] = score
         if result is not None:
-            task.result = result
-        task.updated_at = self.storage_backend.now_isoformat()
-        self.storage_backend.update_task(task_id, {
-            "status": task.status,
-            "score": task.score,
-            "result_json": json.dumps(task.result, sort_keys=True) if task.result is not None else None,
-            "updated_at": task.updated_at,
-        })
-        return task
+            updates["result_json"] = json.dumps(result, sort_keys=True)
+        self.storage_backend.update_task(task_id, updates)
+        return self.get_task(task_id)
+
+class TaskAPI:
+    def __init__(self, manager, executor, evaluator, memory, improvement, tester):
+        self.manager, self.executor, self.evaluator = manager, executor, evaluator
+        self.memory, self.improvement, self.tester = memory, improvement, tester
+
+    def health(self):
+        return {"status": "ok", "service": "Project Atlas Learning Engine"}
+
+    def create_task(self, payload: TaskInput):
+        return self.manager.create_task(payload.title, payload.description, payload.success_criteria).model_dump()
+
+    def list_tasks(self):
+        return [task.model_dump() for task in self.manager.list_tasks()]
+
+    def run_task(self, task_id: str):
+        task = self.manager.get_task(task_id)
+        if task is None:
+            return {"error": "Task not found"}
+        self.manager.update_status(task_id, "running")
+        try:
+            result = self.executor.execute({"title": task.title, "description": task.description})
+            evaluation = self.evaluator.evaluate(result, task.success_criteria)
+            status = "passed" if evaluation["passed"] else "failed"
+            self.manager.update_status(task_id, status, evaluation["score"], result)
+            if not evaluation["passed"]:
+                self.memory.save_lesson_for_task(task_id, "failure", "Task failed its success criteria.",
+                                                  "deterministic-evaluation", {"evaluation": evaluation}, validated=False)
+            return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
+        except Exception as exc:
+            self.manager.update_status(task_id, "failed")
+            return {"task_id": task_id, "status": "failed", "error": str(exc)}
+
+    def get_evaluations(self, task_id: str):
+        from .storage import get_evaluations_for_task
+        return get_evaluations_for_task(task_id)
+
+    def list_lessons(self):
+        from .storage import list_lessons
+        return list_lessons()
+
+    def list_proposals(self):
+        return self.improvement.list_proposals()
+
+    def review_proposal(self, proposal_id: str, payload: ProposalReviewInput):
+        return self.improvement.review_proposal(proposal_id, payload.action, payload.approved_by)
+
+    def dashboard(self):
+        return {"tasks": self.list_tasks(), "lessons": self.list_lessons(),
+                "proposals": self.list_proposals()}
