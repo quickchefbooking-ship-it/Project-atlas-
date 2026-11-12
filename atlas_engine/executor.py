@@ -1,28 +1,53 @@
-import os
-import json
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+import ast
+import operator
+from typing import Any
 
-from .storage import save_task, update_task, get_task
-from .storage import save_lesson
 from .config import USE_PAID_AI
-from .storage import get_connection
-from .storage import list_lessons, list_tasks
-from .storage import save_evaluation
-from .evaluator import Evaluator
-from .executor import safe_execute_local
 
+_ALLOWED = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod, ast.Pow: operator.pow,
+    ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
+
+def _safe_math(node):
+    if isinstance(node, ast.Expression):
+        return _safe_math(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED:
+        left, right = _safe_math(node.left), _safe_math(node.right)
+        if isinstance(node.op, ast.Pow) and abs(right) > 10:
+            raise ValueError("Exponent is too large")
+        value = _ALLOWED[type(node.op)](left, right)
+        if abs(value) > 1e15:
+            raise ValueError("Result is too large")
+        return value
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED:
+        return _ALLOWED[type(node.op)](_safe_math(node.operand))
+    raise ValueError("Only basic arithmetic is permitted")
+
+def safe_execute_local(task: dict[str, Any]) -> dict[str, Any]:
+    description = str(task.get("description", "")).strip()
+    if not description:
+        raise ValueError("Task description is empty")
+    try:
+        expression = ast.parse(description, mode="eval")
+        value = _safe_math(expression)
+    except (SyntaxError, ZeroDivisionError, OverflowError) as exc:
+        raise ValueError("Task is not a supported arithmetic expression") from exc
+    return {"type": "safe_math", "value": value}
 
 class LocalTaskExecutor:
-    def __init__(self, provider: Optional[str] = None):
+    def __init__(self, provider: str | None = None):
         self.provider = provider or "local"
-        self.enabled = not (provider and provider != "local" and not USE_PAID_AI)
+        if self.provider != "local" and not USE_PAID_AI:
+            raise RuntimeError("Paid AI providers are disabled.")
+        if self.provider != "local":
+            raise RuntimeError("External AI providers are not implemented in this build.")
 
-    def execute(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        if self.provider == "local":
-            return safe_execute_local(task)
-        if self.provider in {"openai"}:
-            if not USE_PAID_AI:
-                raise RuntimeError("Paid AI providers are disabled unless explicitly configured.")
-            raise RuntimeError("External AI providers are not enabled in this build.")
-        raise ValueError(f"Unsupported provider: {self.provider}")
+    def execute(self, task: dict[str, Any]) -> dict[str, Any]:
+        if self.provider != "local":
+            raise ValueError("Unsupported provider")
+        return safe_execute_local(task)
