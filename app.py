@@ -352,6 +352,13 @@ def get_task_cancellation_route(task_id: str):
     return storage.get_task_cancellation(task_id)
 
 
+@app.get("/tasks/{task_id}/retry-schedules", dependencies=[Depends(require_api_key)])
+def list_task_retry_schedules_route(task_id: str):
+    if manager.get_task(task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return storage.list_task_retry_schedules(task_id)
+
+
 @app.post("/tasks/{task_id}/recovery-decision", dependencies=[Depends(require_api_key)])
 def resolve_task_recovery_route(task_id: str, payload: TaskRecoveryDecisionInput):
     if manager.get_task(task_id) is None:
