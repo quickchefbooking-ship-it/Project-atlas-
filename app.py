@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import FastAPI, Header, HTTPException, status, Depends
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from atlas_engine.config import API_KEY, API_REQUIRE_AUTH
@@ -64,6 +65,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_request, exc: RequestValidationError):
+    """Return safe, serializable validation details without echoing request values."""
+    details = [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": str(error.get("msg", "Invalid request.")),
+            "type": str(error.get("type", "value_error")),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": details})
 
 
 def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
