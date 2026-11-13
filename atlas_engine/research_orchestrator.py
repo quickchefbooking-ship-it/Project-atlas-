@@ -289,6 +289,68 @@ class ProfessorResearchOrchestrator:
             conn.close()
 
     @staticmethod
+    def recover_interrupted_runs(*, stale_before: str) -> dict[str, Any]:
+        """Mark old in-flight runs failed; never resume or re-execute their steps.
+
+        The caller must choose a conservative, timezone-aware cutoff. This method
+        is explicit (not called automatically at startup) to avoid classifying a
+        slow but healthy run as abandoned.
+        """
+        try:
+            cutoff = datetime.fromisoformat(stale_before.replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("stale_before must be a timezone-aware ISO-8601 timestamp.") from exc
+        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+            raise ValueError("stale_before must be a timezone-aware ISO-8601 timestamp.")
+        cutoff_text = cutoff.astimezone(timezone.utc).isoformat()
+        recovered_at = _now()
+        conn = storage.get_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                """SELECT run_id FROM professor_research_runs
+                   WHERE status = 'running' AND started_at < ?""",
+                (cutoff_text,),
+            ).fetchall()
+            run_ids = [row["run_id"] for row in rows]
+            for run_id in run_ids:
+                conn.execute(
+                    """UPDATE professor_research_steps
+                       SET status = CASE
+                           WHEN status = 'running' THEN 'failed'
+                           WHEN status = 'pending' THEN 'skipped'
+                           ELSE status END,
+                           finished_at = CASE
+                           WHEN status IN ('running','pending') THEN ?
+                           ELSE finished_at END,
+                           error_type = CASE
+                           WHEN status = 'running' THEN 'InterruptedRunRecovered'
+                           WHEN status = 'pending' THEN 'PriorStepInterrupted'
+                           ELSE error_type END
+                       WHERE run_id = ? AND status IN ('running','pending')""",
+                    (recovered_at, run_id),
+                )
+                conn.execute(
+                    """UPDATE professor_research_runs
+                       SET status = 'failed', finished_at = ?,
+                           error_type = 'InterruptedRunRecovered'
+                       WHERE run_id = ? AND status = 'running'""",
+                    (recovered_at, run_id),
+                )
+            conn.commit()
+            return {
+                "recovered_run_ids": run_ids,
+                "recovered_count": len(run_ids),
+                "recovery_policy": "fail_without_resume",
+                "recovered_at": recovered_at,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    @staticmethod
     def get_run(run_id: str) -> dict[str, Any] | None:
         _ensure_research_tables()
         conn = storage.get_connection()

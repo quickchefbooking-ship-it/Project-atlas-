@@ -159,3 +159,70 @@ def test_orchestrator_preflights_scopes_before_persisting_a_run(monkeypatch, tmp
         assert conn.execute("SELECT COUNT(*) FROM professor_research_runs").fetchone()[0] == 0
     finally:
         conn.close()
+
+def test_recovery_marks_stale_run_failed_without_reexecuting(monkeypatch, tmp_path):
+    _setup_db(monkeypatch, tmp_path)
+    executor = FakeExecutor()
+    orchestrator = ProfessorResearchOrchestrator(executor)
+    result = orchestrator.run(
+        _plan(), granted_scopes=frozenset({"knowledge.approved.read"})
+    )
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            """UPDATE professor_research_runs
+               SET status='running', finished_at=NULL, started_at=?
+               WHERE run_id=?""",
+            ("2020-01-01T00:00:00+00:00", result["run_id"]),
+        )
+        conn.execute(
+            """UPDATE professor_research_steps
+               SET status='running', finished_at=NULL
+               WHERE run_id=? AND step_id='discover'""",
+            (result["run_id"],),
+        )
+        conn.execute(
+            """UPDATE professor_research_steps
+               SET status='pending', finished_at=NULL
+               WHERE run_id=? AND step_id='compare'""",
+            (result["run_id"],),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    recovered = orchestrator.recover_interrupted_runs(
+        stale_before="2021-01-01T00:00:00Z"
+    )
+    saved = orchestrator.get_run(result["run_id"])
+
+    assert recovered["recovered_count"] == 1
+    assert recovered["recovery_policy"] == "fail_without_resume"
+    assert saved["status"] == "failed"
+    assert saved["error_type"] == "InterruptedRunRecovered"
+    assert [step["status"] for step in saved["steps"]] == ["failed", "skipped"]
+    assert executor.calls == ["source.approved_retrieval", "source.approved_retrieval"]
+
+
+def test_recovery_does_not_touch_fresh_or_terminal_runs(monkeypatch, tmp_path):
+    _setup_db(monkeypatch, tmp_path)
+    orchestrator = ProfessorResearchOrchestrator(FakeExecutor())
+    result = orchestrator.run(
+        _plan(), granted_scopes=frozenset({"knowledge.approved.read"})
+    )
+
+    recovered = orchestrator.recover_interrupted_runs(
+        stale_before="2000-01-01T00:00:00Z"
+    )
+    saved = orchestrator.get_run(result["run_id"])
+
+    assert recovered["recovered_count"] == 0
+    assert saved["status"] == "completed"
+
+
+@pytest.mark.parametrize("cutoff", ["not-a-date", "2026-11-13T12:00:00"])
+def test_recovery_requires_timezone_aware_iso_timestamp(monkeypatch, tmp_path, cutoff):
+    _setup_db(monkeypatch, tmp_path)
+    orchestrator = ProfessorResearchOrchestrator(FakeExecutor())
+    with pytest.raises(ValueError, match="timezone-aware ISO-8601"):
+        orchestrator.recover_interrupted_runs(stale_before=cutoff)
