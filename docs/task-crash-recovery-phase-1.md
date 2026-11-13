@@ -1,6 +1,6 @@
 # Phase 1 — Safe task crash recovery
 
-**Status:** design approved for implementation on the existing AtlasOnePro recovery branch. This document defines the safety contract; it does not claim the recovery workflow is implemented.
+**Status:** implementation in progress on the existing AtlasOnePro recovery branch. Fenced leases, heartbeats, expiry marking, authenticated inspection routes and explicit recovery decisions are implemented and under CI validation. Distributed recovery and verified operator identity remain out of scope.
 
 ## Objective
 
@@ -74,6 +74,17 @@ The shared API key is only a prototype gate, not verified operator identity. Bef
 3. Add stale-attempt inspection and expiry marking, without automatic reclaim.
 4. Add explicit recovery decisions with fencing and atomic audit records.
 5. Add deterministic fault-injection, concurrency and restart tests; run the full CI suite.
+
+## Implemented in the current prototype slice
+
+- Idempotent task-attempt schema and indexes.
+- Atomic leased claim with worker ID and fencing token.
+- Heartbeat restricted to the current, unexpired lease owner.
+- Expiry scanning marks attempts recovery_required without requeueing tasks.
+- Authenticated inspection routes for recovery queue and attempt history.
+- Explicit mark_failed decision writes task state, evaluation and decision audit in one transaction.
+- Explicit retry requires both retry_safe and side_effects_reconciled confirmations, records the decision, and returns the task to pending without automatically running it.
+- TaskAPI now claims a lease, maintains a heartbeat during execution and atomically completes the task, evaluation and lease.
 
 ## Explicitly out of scope for Phase 1
 

@@ -90,6 +90,14 @@ class PublicSourceFetchRequest(BaseModel):
 class PublicWebFetchRequest(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
 
+class TaskRecoveryDecisionInput(BaseModel):
+    attempt_id: str = Field(min_length=1, max_length=128)
+    action: str = Field(pattern="^(mark_failed|retry)$")
+    actor: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=500)
+    retry_safe: bool = False
+    side_effects_reconciled: bool = False
+
 
 class GenerateImageRequest(BaseModel):
     prompt: str
@@ -309,6 +317,28 @@ def list_task_attempts_route(task_id: str):
     if manager.get_task(task_id) is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return storage.get_task_attempts(task_id)
+
+
+@app.post("/tasks/{task_id}/recovery-decision", dependencies=[Depends(require_api_key)])
+def resolve_task_recovery_route(task_id: str, payload: TaskRecoveryDecisionInput):
+    if manager.get_task(task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        recorded = storage.resolve_task_recovery(
+            task_id, payload.attempt_id,
+            payload.action, payload.actor, payload.reason,
+            retry_safe=payload.retry_safe,
+            side_effects_reconciled=payload.side_effects_reconciled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not recorded:
+        raise HTTPException(status_code=409, detail="The attempt is not awaiting recovery or has already been resolved.")
+    return {
+        "status": "recovery_decision_recorded",
+        "task": manager.get_task(task_id).model_dump(),
+        "decisions": storage.list_task_recovery_decisions(task_id),
+    }
 
 
 @app.get("/tasks", dependencies=[Depends(require_api_key)])

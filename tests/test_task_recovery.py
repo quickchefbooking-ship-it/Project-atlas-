@@ -201,3 +201,72 @@ def test_recovery_routes_are_authenticated_and_never_auto_retry(tmp_path, monkey
     assert listed.json()[0]["attempt_id"] == claim["attempt_id"]
     assert app_module.manager.get_task(task.id).status == "running"
     assert storage.claim_task_with_lease(task.id, "worker-retry", 30) is None
+
+
+
+def test_recovery_retry_requires_explicit_safety_and_reconciliation(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Retry gate", "Do not retry uncertain work", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-lost", 5)
+    assert claim is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+
+    import pytest
+    with pytest.raises(ValueError, match="Retry requires explicit confirmation"):
+        storage.resolve_task_recovery(
+            task.id, claim["attempt_id"], "retry", "operator", "Not yet verified"
+        )
+
+    assert storage.resolve_task_recovery(
+        task.id, claim["attempt_id"], "retry", "operator",
+        "Confirmed local operation is safe to replay",
+        retry_safe=True, side_effects_reconciled=True,
+    )
+    assert manager.get_task(task.id).status == "pending"
+    attempts = storage.get_task_attempts(task.id)
+    assert attempts[0]["state"] == "abandoned"
+    decisions = storage.list_task_recovery_decisions(task.id)
+    assert len(decisions) == 1
+    assert decisions[0]["action"] == "retry"
+    assert decisions[0]["retry_safe"] == 1
+    assert decisions[0]["side_effects_reconciled"] == 1
+    next_claim = storage.claim_task_with_lease(task.id, "worker-retry", 30)
+    assert next_claim["attempt_number"] == 2
+    assert next_claim["fencing_token"] == 2
+
+
+def test_recovery_mark_failed_writes_task_evaluation_and_decision_atomically(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Mark failed", "Persist operator decision", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-lost", 5)
+    assert claim is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+
+    assert storage.resolve_task_recovery(
+        task.id, claim["attempt_id"], "mark_failed", "operator",
+        "Worker stopped and no completed result could be recovered",
+    )
+    assert manager.get_task(task.id).status == "failed"
+    attempts = storage.get_task_attempts(task.id)
+    assert attempts[0]["state"] == "failed"
+    evaluations = storage.get_evaluations_for_task(task.id)
+    assert len(evaluations) == 1
+    assert evaluations[0]["method"] == "recovery_operator_decision"
+    assert storage.list_task_recovery_decisions(task.id)[0]["action"] == "mark_failed"
+
+
+def test_recovery_decision_cannot_be_applied_twice(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Single decision", "Recovery decisions are one-shot", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-lost", 5)
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    assert storage.resolve_task_recovery(
+        task.id, claim["attempt_id"], "mark_failed", "operator", "Confirmed failed"
+    )
+    assert not storage.resolve_task_recovery(
+        task.id, claim["attempt_id"], "mark_failed", "operator", "Duplicate decision"
+    )
+    assert len(storage.list_task_recovery_decisions(task.id)) == 1

@@ -59,6 +59,25 @@ def init_db() -> None:
             ON task_attempts(task_id, attempt_number DESC)
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS task_recovery_decisions (
+                decision_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                attempt_id TEXT NOT NULL,
+                action TEXT NOT NULL CHECK(action IN ('mark_failed','retry')),
+                actor TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                retry_safe INTEGER NOT NULL DEFAULT 0,
+                side_effects_reconciled INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(task_id) REFERENCES tasks(id),
+                FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_recovery_decisions_task
+            ON task_recovery_decisions(task_id, created_at DESC)
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS evaluations (
                 id TEXT PRIMARY KEY, task_id TEXT NOT NULL, passed INTEGER NOT NULL,
                 score REAL NOT NULL, reasons_json TEXT NOT NULL,
@@ -293,6 +312,123 @@ def get_task_attempts(task_id: str) -> list[Dict[str, Any]]:
     try:
         rows = conn.execute(
             "SELECT * FROM task_attempts WHERE task_id = ? ORDER BY attempt_number ASC",
+            (task_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def resolve_task_recovery(
+    task_id: str, attempt_id: str, action: str, actor: str, reason: str,
+    retry_safe: bool = False, side_effects_reconciled: bool = False,
+) -> bool:
+    """Record an explicit recovery decision; retry only after safety is attested."""
+    if action not in {"mark_failed", "retry"}:
+        raise ValueError("Recovery action must be mark_failed or retry.")
+    if not isinstance(actor, str) or not actor.strip() or len(actor) > 128:
+        raise ValueError("Recovery actor must contain 1 to 128 characters.")
+    if not isinstance(reason, str) or not reason.strip() or len(reason) > 500:
+        raise ValueError("Recovery reason must contain 1 to 500 characters.")
+    if action == "retry" and not (retry_safe is True and side_effects_reconciled is True):
+        raise ValueError("Retry requires explicit confirmation that replay is safe and side effects are reconciled.")
+    now = now_isoformat()
+    decision_id = f"recovery-{os.urandom(12).hex()}"
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        attempt = conn.execute(
+            "SELECT * FROM task_attempts WHERE task_id = ? AND attempt_id = ?",
+            (task_id, attempt_id),
+        ).fetchone()
+        task = conn.execute(
+            "SELECT status FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if attempt is None or attempt["state"] != "recovery_required" or task is None or task["status"] != "running":
+            conn.rollback()
+            return False
+
+        if action == "mark_failed":
+            cursor = conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'failed', score = 0.0,
+                    result_json = ?, updated_at = ?
+                WHERE id = ? AND status = 'running'
+                """,
+                (json.dumps({"error_type": "WorkerInterrupted"}, sort_keys=True), now, task_id),
+            )
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return False
+            conn.execute(
+                """
+                INSERT INTO evaluations (
+                    id, task_id, passed, score, reasons_json,
+                    missing_requirements_json, method, created_at
+                ) VALUES (?, ?, 0, 0.0, ?, ?, ?, ?)
+                """,
+                (
+                    f"evaluation-{os.urandom(12).hex()}", task_id,
+                    json.dumps(["Worker lease expired; operator marked the interrupted attempt failed."]),
+                    json.dumps(["Task execution completed with a verified outcome."]),
+                    "recovery_operator_decision", now,
+                ),
+            )
+            attempt_state = "failed"
+            error_type = "WorkerInterrupted"
+        else:
+            cursor = conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'pending', score = 0.0, result_json = NULL, updated_at = ?
+                WHERE id = ? AND status = 'running'
+                """,
+                (now, task_id),
+            )
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return False
+            attempt_state = "abandoned"
+            error_type = "RetryExplicitlyApproved"
+
+        attempt_cursor = conn.execute(
+            """
+            UPDATE task_attempts
+            SET state = ?, finished_at = ?, error_type = ?
+            WHERE task_id = ? AND attempt_id = ? AND state = 'recovery_required'
+            """,
+            (attempt_state, now, error_type, task_id, attempt_id),
+        )
+        if attempt_cursor.rowcount != 1:
+            conn.rollback()
+            return False
+        conn.execute(
+            """
+            INSERT INTO task_recovery_decisions (
+                decision_id, task_id, attempt_id, action, actor, reason,
+                retry_safe, side_effects_reconciled, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                decision_id, task_id, attempt_id, action, actor.strip(), reason.strip(),
+                int(retry_safe is True), int(side_effects_reconciled is True), now,
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def list_task_recovery_decisions(task_id: str) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM task_recovery_decisions WHERE task_id = ? ORDER BY created_at ASC",
             (task_id,),
         ).fetchall()
         return [dict(row) for row in rows]
