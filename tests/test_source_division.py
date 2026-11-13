@@ -23,7 +23,6 @@ def test_source_documents_are_not_retrievable_until_approved(monkeypatch, tmp_pa
         "Evidence about reliable orchestration",
         "https://example.org/paper",
         "Reliable orchestration requires bounded retries and durable task state.",
-        trust_level="reviewed",
     )
 
     assert retrieve("reliable orchestration") == []
