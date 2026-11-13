@@ -5,7 +5,7 @@ through a separately authorised capability registry and orchestrator.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PLAN_SCHEMA_VERSION = "1.0"
@@ -21,6 +21,7 @@ class ResearchStep(BaseModel):
     objective: str = Field(min_length=1, max_length=500)
     capability_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.:-]+$")
     capability_version: str = Field(min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
     rationale: str = Field(min_length=1, max_length=500)
     expected_evidence: str = Field(min_length=1, max_length=500)
     depends_on: list[str] = Field(default_factory=list, max_length=MAX_PLAN_STEPS)
