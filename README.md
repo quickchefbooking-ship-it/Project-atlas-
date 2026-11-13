@@ -80,6 +80,8 @@ Open `/professor/sources` in the running AtlasOnePro instance to use the browser
 - POST /tasks/{task_id}/cancel
 - GET /tasks/{task_id}/cancellation
 - GET /tasks/{task_id}/retry-schedules
+- GET /tasks/retries/due
+- POST /tasks/retries/expire
 - GET /lessons
 - GET /proposals
 - POST /proposals/{proposal_id}/review
@@ -92,7 +94,7 @@ Task attempts use durable SQLite leases and fencing tokens. An expired lease is 
 
 Cancellation requests are durable and tied to one attempt. The worker checks at safe points around the bounded synchronous local executor; it does not kill work mid-operation. If a request arrives after a retry has been scheduled but before its next attempt is claimed, the schedule is cancelled and the task is terminalised. If the lease has expired, cancellation requires operator recovery.
 
-Retry schedules are persisted with due time, deadline, attempt number, capability metadata, idempotency key and policy snapshot. Claims before the due time or after the deadline are blocked. The current executor does not create retry schedules, there is no unattended retry scheduler, and no automatic retry is enabled. The retry-schedule endpoint is read-only inspection.
+Retry schedules are persisted with due time, deadline, attempt number, capability metadata, idempotency key and policy snapshot. Claims before the due time or after the deadline are blocked. Authenticated due-schedule inspection is read-only; authenticated expiry maintenance terminalises overdue tasks with an evaluation. Inspection responses omit idempotency keys and internal policy/capability snapshots. The current executor does not create retry schedules, there is no unattended retry scheduler, and no automatic retry is enabled.
 
 Execution failures are persisted with a sanitised evaluation. A secondary `execution_failure` lesson may be recorded as unvalidated, with only the exception class and evaluation ID; unvalidated lessons are excluded from retrieval until reviewed. If the evaluation transaction fails, the API returns `outcome_unconfirmed` and does not claim a durable terminal result.
 
