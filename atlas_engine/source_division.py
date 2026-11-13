@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -116,8 +117,61 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
     return storage.get_source_document(document_id)
 
 
+def load_bundled_knowledge() -> int:
+    """Copy curated Markdown references into the local library once per content hash."""
+    library_root = Path(__file__).resolve().parent.parent / "knowledge_library"
+    bundled = [
+        (
+            "bundled-owasp-security",
+            "OWASP Gen AI Security Project — curated knowledge notes",
+            "knowledge_library/security/llm-security-and-prompt-injection.md",
+            "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+        ),
+        (
+            "bundled-owasp-security",
+            "OWASP Gen AI Security Project — knowledge integrity notes",
+            "knowledge_library/security/knowledge-library-integrity-and-rag.md",
+            "https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/",
+        ),
+    ]
+    register_source(
+        "bundled-owasp-security",
+        "Bundled OWASP security knowledge",
+        "curated_markdown_library",
+        metadata={"collection": "security", "origin": "repository_bundle"},
+    )
+    imported = 0
+    for source_id, title, relative_path, uri in bundled:
+        path = library_root.parent / relative_path
+        if not path.is_file():
+            continue
+        content = path.read_text(encoding="utf-8")
+        normalized = content.strip()
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        storage.save_source_document({
+            "id": f"bundle-{digest[:24]}",
+            "source_id": source_id,
+            "title": title,
+            "uri": uri,
+            "content": normalized,
+            "content_sha256": digest,
+            "trust_level": "reviewed",
+            "state": "approved",
+            "metadata_json": _encode_metadata({
+                "bundle_path": relative_path,
+                "review_status": "curated_reference",
+                "retrieved_at": "2026-11-13",
+            }),
+            "created_at": _now(),
+            "updated_at": _now(),
+        })
+        imported += 1
+    return imported
+
+
 def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
     """Keyword retrieval over approved material only; return provenance with every hit."""
+    load_bundled_knowledge()
     if not isinstance(query, str) or not query.strip():
         return []
     if not isinstance(limit, int) or limit < 1 or limit > 50:
