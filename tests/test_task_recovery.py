@@ -105,3 +105,63 @@ def test_recovery_required_attempt_blocks_claim_even_if_task_is_reset_pending(tm
     storage.update_task(task.id, {"status": "pending", "updated_at": storage.now_isoformat()})
     assert storage.claim_task_with_lease(task.id, "worker-new", 30) is None
     assert storage.list_recovery_required_attempts()[0]["attempt_id"] == claim["attempt_id"]
+
+
+
+def test_task_api_completes_lease_and_evaluation_atomically(tmp_path, monkeypatch):
+    from atlas_engine.task_manager import TaskAPI
+    from atlas_engine.evaluator import Evaluator
+
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task(
+        "Leased execution", "Complete task and lease together",
+        [{"field": "value", "operator": "==", "expected_value": 7}],
+    )
+
+    class Executor:
+        @staticmethod
+        def execute(_payload):
+            return {"value": 7}
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+    api = TaskAPI(manager, Executor(), Evaluator(), Memory(), None, None)
+    response = api.run_task(task.id)
+
+    assert response["status"] == "passed"
+    attempts = storage.get_task_attempts(task.id)
+    assert len(attempts) == 1
+    assert attempts[0]["state"] == "passed"
+    assert attempts[0]["finished_at"] is not None
+    assert len(storage.get_evaluations_for_task(task.id)) == 1
+
+
+def test_task_api_execution_failure_completes_lease_with_failure_evaluation(tmp_path, monkeypatch):
+    from atlas_engine.task_manager import TaskAPI
+    from atlas_engine.evaluator import Evaluator
+
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Leased failure", "Failure must be audited", [])
+
+    class BrokenExecutor:
+        @staticmethod
+        def execute(_payload):
+            raise RuntimeError("private exception detail")
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+    api = TaskAPI(manager, BrokenExecutor(), Evaluator(), Memory(), None, None)
+    response = api.run_task(task.id)
+
+    assert response["status"] == "failed"
+    attempts = storage.get_task_attempts(task.id)
+    assert len(attempts) == 1
+    assert attempts[0]["state"] == "failed"
+    assert len(storage.get_evaluations_for_task(task.id)) == 1
+    assert "private exception detail" not in str(response)

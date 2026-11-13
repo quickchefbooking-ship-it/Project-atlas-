@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -66,14 +67,26 @@ class TaskManager:
         return [self.get_task(row["id"]) for row in rows]
 
     def claim_task(self, task_id: str) -> bool:
-        """Claim a pending task using the storage backend's atomic compare-and-set."""
+        """Legacy atomic claim retained for callers that do not use lease tracking."""
         return self.storage_backend.claim_task(task_id)
 
+    def claim_task_with_lease(self, task_id: str, worker_id: str,
+                              lease_seconds: int = 60) -> dict[str, Any] | None:
+        return self.storage_backend.claim_task_with_lease(task_id, worker_id, lease_seconds)
+
+    def heartbeat_task_attempt(self, task_id: str, attempt: dict[str, Any],
+                               lease_seconds: int = 60) -> bool:
+        return self.storage_backend.heartbeat_task_attempt(
+            task_id, attempt["attempt_id"], attempt["worker_id"],
+            attempt["fencing_token"], lease_seconds,
+        )
+
     def complete_with_evaluation(self, task_id: str, record: dict[str, Any],
-                                 status: str, result: dict[str, Any]) -> bool:
-        """Persist the terminal outcome and evaluation through the configured backend."""
+                                 status: str, result: dict[str, Any],
+                                 attempt: dict[str, Any] | None = None) -> bool:
+        """Persist task, evaluation and lease completion in one transaction."""
         return self.storage_backend.complete_task_with_evaluation(
-            task_id, record, status, result
+            task_id, record, status, result, attempt=attempt
         )
 
     def update_status(self, task_id: str, status: str, score: float | None = None,
@@ -110,17 +123,40 @@ class TaskAPI:
         task = self.manager.get_task(task_id)
         if task is None:
             return {"error": "Task not found"}
-        if not self.manager.claim_task(task_id):
+        worker_id = f"worker-{os.urandom(12).hex()}"
+        lease = self.manager.claim_task_with_lease(task_id, worker_id, lease_seconds=60)
+        if lease is None:
             current = self.manager.get_task(task_id)
             return {
                 "task_id": task_id,
                 "status": current.status if current is not None else "unavailable",
-                "error": "Task is already running or is not pending.",
+                "error": "Task is already running, awaiting recovery, or is not pending.",
             }
         # Reload after the atomic claim so the executor sees the persisted attempt count.
         task = self.manager.get_task(task_id)
         if task is None:
             return {"task_id": task_id, "status": "unavailable", "error": "Task is unavailable."}
+        heartbeat_stop = threading.Event()
+        heartbeat_lost = threading.Event()
+
+        def maintain_lease():
+            while not heartbeat_stop.wait(20):
+                try:
+                    if not self.manager.heartbeat_task_attempt(task_id, lease, lease_seconds=60):
+                        heartbeat_lost.set()
+                        return
+                except Exception as heartbeat_error:
+                    logger.warning(
+                        "Task lease heartbeat failed for task_id=%s error_type=%s",
+                        task_id, type(heartbeat_error).__name__,
+                    )
+                    heartbeat_lost.set()
+                    return
+
+        heartbeat_thread = threading.Thread(
+            target=maintain_lease, name=f"atlas-lease-{lease['attempt_id']}", daemon=True
+        )
+        heartbeat_thread.start()
         phase = "execution"
         try:
             # Retrieve only validated lessons; pass them as context to capable executors.
@@ -160,7 +196,7 @@ class TaskAPI:
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
             phase = "persistence"
-            if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result):
+            if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result, attempt=lease):
                 current = self.manager.get_task(task_id)
                 logger.error(
                     "Task completion was not committed for task_id=%s current_status=%s",
@@ -223,7 +259,7 @@ class TaskAPI:
             }
             try:
                 committed = self.manager.complete_with_evaluation(
-                    task_id, failure_record, "failed", {"error_type": error_type}
+                    task_id, failure_record, "failed", {"error_type": error_type}, attempt=lease
                 )
                 if not committed:
                     current = self.manager.get_task(task_id)
@@ -256,6 +292,9 @@ class TaskAPI:
                 "status": "failed",
                 "error": "Task execution failed. Check the server diagnostics using the task ID.",
             }
+        finally:
+            heartbeat_stop.set()
+            heartbeat_thread.join(timeout=1)
 
     def get_evaluations(self, task_id: str):
         from .storage import get_evaluations_for_task

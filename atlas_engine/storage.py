@@ -386,6 +386,7 @@ def complete_task_with_evaluation(
     record: Dict[str, Any],
     status: str,
     result: Dict[str, Any],
+    attempt: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Persist a task's terminal state and evaluation as one SQLite transaction.
 
@@ -403,6 +404,21 @@ def complete_task_with_evaluation(
     conn = get_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
+        if attempt is not None:
+            lease_now = now_isoformat()
+            lease_cursor = conn.execute(
+                """
+                UPDATE task_attempts
+                SET state = ?, finished_at = ?
+                WHERE task_id = ? AND attempt_id = ? AND worker_id = ?
+                  AND fencing_token = ? AND state = 'active' AND lease_expires_at > ?
+                """,
+                (status, lease_now, task_id, attempt["attempt_id"],
+                 attempt["worker_id"], attempt["fencing_token"], lease_now),
+            )
+            if lease_cursor.rowcount != 1:
+                conn.rollback()
+                return False
         cursor = conn.execute(
             """
             UPDATE tasks
