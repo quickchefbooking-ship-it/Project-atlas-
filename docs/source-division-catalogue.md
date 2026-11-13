@@ -8,9 +8,9 @@ This is a discovery and integration backlog for the Professor's Source Division.
 
 | Resource family | Available resource/tool candidates | Intended use | Initial access |
 | --- | --- | --- | --- |
-| Public web and pages | Firecrawl search, scrape, map and crawl; official websites | Discover and extract public information with canonical URLs | Read-only |
+| Public web and pages | Official public APIs and later bounded web extraction | Discover and extract public information with canonical URLs | Read-only |
 | Scholarly research | Consensus, SciSpace, Firecrawl research index | Papers, abstracts, citations and open-access full text | Read-only |
-| Developer knowledge | GitHub public repository metadata; later repository files/issues/official docs | Repository identity, description, language, topics, license and activity metadata | Read-only public API |
+| Developer knowledge | GitHub public repository metadata | Repository identity, description, language, topics, license and activity metadata | Read-only public API |
 | Models and datasets | Hugging Face public model and dataset metadata | Resource identity, tags, pipeline/library metadata, license and usage signals | Read-only public API |
 | Internal files | ChatGPT Files / Library and explicitly selected project documents | User-approved documents, plans and internal reference material | Read-only; explicit selection |
 | Email and communications | Gmail and other separately authorised messaging integrations | Search and summarise approved messages; draft responses | Read-only / draft-only |
@@ -24,7 +24,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 ## Integration order
 
 1. **Local foundation:** source registry, normalized document format, content hashes, approval queue and provenance-aware retrieval.
-2. **Public research:** bounded GitHub and Hugging Face metadata adapters are now implemented; next add official legal and public-web source adapters, then scholarly metadata and document extraction.
+2. **Public research:** bounded GitHub and Hugging Face metadata adapters and an official UK legislation search/text adapter are implemented; next add carefully scoped general public-web extraction and scholarly metadata.
 3. **Project knowledge:** selected GitHub repositories and explicitly selected project files.
 4. **Business systems:** narrowly scoped read-only adapters, one connector at a time.
 5. **Private communications:** only after identity, user consent, tenant isolation, retention and deletion controls are implemented.
@@ -41,7 +41,7 @@ No credential harvesting, unrestricted crawling, access-control bypass, private 
 
 The current repository implementation is a local ingestion and retrieval foundation, not a live connector suite. It validates absolute HTTP(S) and git+https source references at the ingestion boundary, rejects embedded URL credentials and malformed hosts or ports, hashes normalized content, and deduplicates records by source and content hash. New imports remain pending and unverified. A successful approval changes the document state to approved and its trust classification to reviewed; rejected material remains excluded from retrieval. These controls do not authenticate the reviewer: reviewer names are audit metadata until identity and role-based authorization are implemented.
 
-The bundled curated notes are imported idempotently at application startup. External web, GitHub, Hugging Face, Lawve, research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
+The bundled curated notes are imported idempotently at application startup. General public-web extraction, Lawve, scholarly research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. GitHub, Hugging Face and UK legislation have bounded public read-only adapters. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
 
 ## Authenticated API surface
 
@@ -106,3 +106,12 @@ Request example:
 \`\`\`
 
 For GitHub, use \`provider: "github"\`, \`resource_type: "repository"\` and an \`owner/repository\` identifier.
+
+
+### Official UK legislation adapter
+
+The first legal-research adapter uses the National Archives' public \`legislation.gov.uk\` API. It searches the Atom feed using a title query and a restricted legislation-type allowlist, then retrieves the matched legislation as XML and extracts its text. It is read-only and makes no account or credential requests. Requests specify a user agent, use an eight-second timeout and are limited to 1 MB each; no more than five search results are staged per request.
+
+Supported type codes are \`ukpga\`, \`uksi\`, \`asp\`, \`anaw\`, \`nia\`, \`nisr\` and \`ukla\`. The official API supports Atom search feeds and XML representations of legislation; its public data is available for reuse under the Open Government Licence. The legislation dataset is not complete for every historical item, so absence from search is not proof that a law does not exist. Always verify current force, amendments, commencement, territorial extent and point-in-time version against the official legislation page before legal reliance.
+
+The browser fetch form offers UK legislation title search. Every returned document is staged as pending/unverified and carries its official URL, publisher, retrieval timestamp, format and content hash. The API route is \`POST /sources/fetch\` with \`provider: "legislation"\`, a supported \`resource_type\` type code and a title \`identifier\`.
