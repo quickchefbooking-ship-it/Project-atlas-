@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import re
 from typing import FrozenSet
 
 
@@ -15,10 +16,17 @@ class TerminalExecutionError(Exception):
     """An execution failure that must never be automatically retried."""
 
 
+_ERROR_CODE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
+
+
 class RetryableExecutionError(Exception):
     """A narrowly classified transient failure from an opted-in capability."""
 
     def __init__(self, error_code: str, message: str = "Transient execution failure"):
+        if not isinstance(error_code, str) or not _ERROR_CODE_PATTERN.fullmatch(error_code):
+            raise ValueError("error_code must be a 1-64 character identifier")
+        if not isinstance(message, str):
+            raise ValueError("message must be a string")
         super().__init__(message)
         self.error_code = error_code
 
@@ -70,19 +78,32 @@ class CapabilityRetryContract:
             raise ValueError("capability_name is required")
         if not isinstance(self.version, str) or not self.version.strip():
             raise ValueError("capability version is required")
-        if not isinstance(self.retryable_error_codes, (set, frozenset)) or any(
-            not isinstance(code, str) or not code.strip() for code in self.retryable_error_codes
+        for name, value in (
+            ("idempotent", self.idempotent),
+            ("side_effects_declared", self.side_effects_declared),
+            ("duplicate_suppression_verified", self.duplicate_suppression_verified),
         ):
-            raise ValueError("retryable error codes must be non-empty strings")
+            if type(value) is not bool:
+                raise ValueError(f"{name} must be a boolean")
+        if not isinstance(self.retryable_error_codes, (set, frozenset)) or any(
+            not isinstance(code, str) or not _ERROR_CODE_PATTERN.fullmatch(code)
+            for code in self.retryable_error_codes
+        ):
+            raise ValueError("retryable error codes must be valid 1-64 character identifiers")
+        # A frozen dataclass does not freeze a mutable set supplied by its caller.
+        # Copy to a frozenset so the allowlist cannot change after validation.
+        object.__setattr__(self, "capability_name", self.capability_name.strip())
+        object.__setattr__(self, "version", self.version.strip())
+        object.__setattr__(self, "retryable_error_codes", frozenset(self.retryable_error_codes))
 
     @property
     def retry_is_safe(self) -> bool:
         return bool(
-            self.capability_name.strip()
-            and self.version.strip()
-            and self.idempotent
-            and self.side_effects_declared
-            and self.duplicate_suppression_verified
+            self.capability_name
+            and self.version
+            and self.idempotent is True
+            and self.side_effects_declared is True
+            and self.duplicate_suppression_verified is True
             and self.retryable_error_codes
         )
 
@@ -111,8 +132,10 @@ def evaluate_retry(
     Unknown errors fail closed. jitter_fraction is an injected value in [0, 1]
     so tests and a future scheduler can control randomness without sleeping.
     """
-    if attempt_number < 1:
-        raise ValueError("attempt_number must be at least 1")
+    if isinstance(attempt_number, bool) or not isinstance(attempt_number, int) or attempt_number < 1:
+        raise ValueError("attempt_number must be a positive integer")
+    if not isinstance(policy, RetryPolicy):
+        raise ValueError("policy must be a validated RetryPolicy")
     if isinstance(elapsed_seconds, bool) or not isinstance(elapsed_seconds, (int, float)) or not math.isfinite(elapsed_seconds) or elapsed_seconds < 0:
         raise ValueError("elapsed_seconds must be a finite non-negative number")
     if isinstance(jitter_fraction, bool) or not isinstance(jitter_fraction, (int, float)) or not math.isfinite(jitter_fraction) or not 0 <= jitter_fraction <= 1:
@@ -126,7 +149,7 @@ def evaluate_retry(
         return RetryDecision(False, "cancellation_requested")
     if not isinstance(error, RetryableExecutionError):
         return RetryDecision(False, "error_not_explicitly_retryable")
-    if capability is None or not capability.retry_is_safe:
+    if not isinstance(capability, CapabilityRetryContract) or not capability.retry_is_safe:
         return RetryDecision(False, "capability_not_proven_idempotent")
     if error.error_code not in capability.retryable_error_codes:
         return RetryDecision(False, "error_code_not_allowlisted")
