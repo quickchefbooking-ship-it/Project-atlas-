@@ -38,13 +38,18 @@ class LearningMemory:
         if not isinstance(evidence, dict):
             raise ValueError("Lesson evidence must be an object.")
 
+        try:
+            evidence_json = json.dumps(evidence, sort_keys=True, allow_nan=False)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("Lesson evidence must contain only finite JSON values.") from exc
+
         payload = {
             "id": f"lesson-{uuid4().hex}",
             "task_id": task_id.strip(),
             "lesson_type": lesson_type.strip(),
             "summary": summary.strip(),
             "source": source.strip(),
-            "evidence_json": json.dumps(evidence, sort_keys=True),
+            "evidence_json": evidence_json,
             "validated": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
