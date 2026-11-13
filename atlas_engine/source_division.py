@@ -125,7 +125,7 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
 def _frontmatter_value(frontmatter: str, key: str, allow_indented: bool = False) -> str | None:
     """Read a simple YAML scalar without adding a YAML dependency."""
     prefix = r"^\s*" if allow_indented else r"^"
-    match = re.search(rf"{prefix}{re.escape(key)}:\\s*(.+)$", frontmatter, re.MULTILINE)
+    match = re.search(rf"{prefix}{re.escape(key)}:\s*(.+)$", frontmatter, re.MULTILINE)
     return match.group(1).strip().strip('"').strip("'") if match else None
 
 
