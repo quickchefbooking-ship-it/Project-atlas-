@@ -132,7 +132,7 @@ Retry scheduling now has durable, fenced storage primitives, but is not enabled 
 - Scheduling atomically finalises the failed attempt, persists its evaluation, returns the task to pending and stores a policy snapshot, idempotency key, next-attempt number, due time and hard deadline.
 - Claims are blocked before due time, after the deadline, after schedule cancellation/expiry, or when the next attempt number does not match. A due claim atomically consumes the schedule and links it to the new fenced attempt.
 - Expired schedules become `expired` and atomically terminalise the pending task with an evaluation; they are not silently requeued. A cancellation request against a pending scheduled retry cancels the schedule and terminalises the task with a cancellation evaluation so it cannot be claimed or left pending.
-- No public endpoint or current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
+- An authenticated read-only `GET /tasks/{task_id}/retry-schedules` endpoint exposes schedule history; there is no public schedule-creation endpoint and no current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
 
 Cancellation is now a durable, cooperative runtime path for the current synchronous local executor:
 
@@ -143,7 +143,7 @@ Cancellation is now a durable, cooperative runtime path for the current synchron
 - Expired worker leases move pending cancellation requests to `requires_recovery`; a late request against a completed/terminal attempt is recorded as `too_late`.
 - The API reports `cancelled`; the current task schema records its terminal task status as `failed` with `TaskCancelled`, and the evaluation method as `cancelled`. This preserves the existing task status constraint without a destructive schema migration.
 
-This is not yet an unattended runtime retry system. Durable schedule persistence and due-time claim gates exist, but there is no registered capability registry, scheduler that discovers and dispatches due work, or per-attempt hard timeout. The default retry policy remains one attempt, and the local executor is not opted in. The current cancellation checkpoints are appropriate only for the bounded synchronous local executor; future long-running or external capabilities need their own safe-point and side-effect reconciliation contracts.
+This is not yet an unattended runtime retry system. Durable schedule persistence and due-time claim gates exist, but there is no registered capability registry, scheduler that discovers and dispatches due work, or per-attempt hard timeout. The capability evidence value is a caller-supplied reference string, not independently verified by the runtime; it must not be treated as proof until a trusted registry and reviewable evidence-verification process exist. The default retry policy remains one attempt, and the local executor is not opted in. The current cancellation checkpoints are appropriate only for the bounded synchronous local executor; future long-running or external capabilities need their own safe-point and side-effect reconciliation contracts.
 
 ## Exit gate
 
