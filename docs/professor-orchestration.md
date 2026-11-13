@@ -74,7 +74,9 @@ Use separate memory layers:
 - **Episodic records:** durable task inputs, outputs, evaluation evidence, timestamps and capability versions.
 - **Validated lessons:** reusable guidance promoted only after a defined review process.
 
-A failed task is evidence of a failure, not proof that the proposed lesson is correct. Repeated outcomes, independent checks and human review should be required before promotion. Validation must be attributable and reversible, and records should be scoped to the correct user or organisation. The current evaluator supports deterministic criteria only; criteria marked `deterministic: false` are explicitly rejected as unsupported rather than silently scored as objective. A separate, evidence-backed subjective review path must be designed before those criteria can be used.
+A failed task is evidence of a failure, not proof that the proposed lesson is correct. Repeated outcomes, independent checks and human review should be required before promotion. Validation must be attributable and reversible, and records should be scoped to the correct user or organisation. Task execution claims are persisted with a single conditional database update: only a task still in `pending` can become `running`, and the attempt counter increments in that same operation. Concurrent duplicate run requests therefore cannot both claim the same pending task. This is a local SQLite coordination guarantee, not a distributed worker queue.
+
+The current evaluator supports deterministic criteria only; criteria marked `deterministic: false` are explicitly rejected as unsupported rather than silently scored as objective. A separate, evidence-backed subjective review path must be designed before those criteria can be used.
 
 The current SQLite schema is suitable only for the prototype. Before multi-user use, add tenant scoping, provenance and validation history, retention controls, migration tests, backups and an append-only audit trail.
 
