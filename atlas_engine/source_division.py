@@ -18,6 +18,18 @@ from . import storage
 
 MAX_DOCUMENT_CHARS = 1_000_000
 TRUST_LEVELS = {"unverified", "reviewed", "authoritative"}
+ALLOWED_SOURCE_URI_SCHEMES = {"http", "https", "git+https"}
+
+
+def _validate_source_uri(uri: str) -> None:
+    """Require an absolute web/repository URI without embedded credentials."""
+    if not isinstance(uri, str) or not uri.strip():
+        raise ValueError("Document source URI is required.")
+    parsed = urlparse(uri.strip())
+    if parsed.scheme not in ALLOWED_SOURCE_URI_SCHEMES or not parsed.hostname:
+        raise ValueError("Source URI must be an absolute HTTP(S) or git+https URL.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Credentials must not be embedded in source URIs.")
 DOCUMENT_STATES = {"pending", "approved", "rejected"}
 
 
@@ -87,8 +99,7 @@ def ingest_document(
     """Store bounded source material as unverified and pending review."""
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Document title is required.")
-    if not isinstance(uri, str) or not uri.strip():
-        raise ValueError("Document source URI is required.")
+    _validate_source_uri(uri)
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Document content is required.")
     if len(content) > MAX_DOCUMENT_CHARS:
