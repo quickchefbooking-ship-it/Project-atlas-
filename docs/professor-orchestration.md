@@ -204,6 +204,6 @@ A tool connected to ChatGPT is not automatically connected to the AtlasOnePro ru
 
 ### Prototype implementation status
 
-The current recovery branch adds a local SQLite source registry and source-document store, content hashing, pending/approved/rejected review states, reviewer metadata, bounded document size and keyword retrieval limited to approved documents. Task execution now receives approved source documents as reference context.
+The current recovery branch adds a local SQLite source registry and source-document store, content hashing, pending/approved/rejected review states, reviewer metadata, bounded document size and bounded metadata (16 KiB, 32 nesting levels, finite JSON only, credential-like keys rejected), and keyword retrieval limited to approved documents. Task execution now receives approved source documents as reference context.
 
 This is a foundation, not a live connector suite. No external source adapter, vector database, embedding model, background crawler, automatic account sync or production knowledge ingestion is enabled yet. The current reviewer field is audit metadata only; the shared API key is not verified human identity. Before private multi-user sources are connected, add identity-based review permissions, tenant isolation, encryption, audit history and retention/deletion controls.
