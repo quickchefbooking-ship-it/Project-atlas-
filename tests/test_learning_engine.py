@@ -163,6 +163,12 @@ def test_task_failure_does_not_expose_exception_details(tmp_path, monkeypatch, c
     assert "RuntimeError" in caplog.text
     assert "private-token-and-path-must-not-leak" not in caplog.text
     assert manager.get_task(task.id).status == "failed"
+    evaluations = storage.get_evaluations_for_task(task.id)
+    assert len(evaluations) == 1
+    assert evaluations[0]["passed"] == 0
+    assert evaluations[0]["method"] == "execution_error"
+    assert "RuntimeError" in evaluations[0]["reasons_json"]
+    assert "private-token-and-path-must-not-leak" not in evaluations[0]["reasons_json"]
 
 
 def test_storage_enforces_foreign_key_relationships(tmp_path, monkeypatch):
