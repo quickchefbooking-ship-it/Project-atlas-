@@ -1341,14 +1341,17 @@ def list_proposals(limit: int = 50) -> list[Dict[str, Any]]:
         conn.close()
 
 
-def update_proposal_status(proposal_id: str, status: str, approved_by: Optional[str] = None) -> None:
+def update_proposal_status(proposal_id: str, status: str, approved_by: Optional[str] = None) -> bool:
+    """Atomically transition a pending proposal; return False if another review won."""
     conn = get_connection()
     try:
-        conn.execute(
-            "UPDATE proposals SET status = ?, approved_by = ? WHERE id = ?",
+        cursor = conn.execute(
+            "UPDATE proposals SET status = ?, approved_by = ? "
+            "WHERE id = ? AND status = 'pending'",
             (status, approved_by, proposal_id),
         )
         conn.commit()
+        return cursor.rowcount == 1
     finally:
         conn.close()
 
