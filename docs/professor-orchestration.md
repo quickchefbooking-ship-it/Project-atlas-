@@ -12,7 +12,7 @@ The current repository is an early, local Python prototype:
 - SQLite persists tasks, evaluation records, lessons and improvement proposals.
 - Task attempts and evaluation outcomes are recorded.
 - Lesson retrieval excludes records unless they are marked validated. Failed-task lessons are currently saved as unvalidated, and there is not yet a complete evidence-based lesson-validation workflow.
-- Proposal review supports approval or rejection. The proposal action that marks a proposal tested is deliberately disabled until real test evidence can be produced.
+- Proposal review supports approval or rejection through a conditional pending-to-terminal SQLite update, so concurrent reviewers cannot overwrite one another. The stored approver label remains caller-supplied audit metadata, not verified identity. The proposal action that marks a proposal tested is deliberately disabled until real test evidence can be produced.
 - Protected API routes use a shared API key by default. This is a development access control, not user identity, role-based access or tenant isolation.
 - Media generation is constrained to its configured output directory.
 - The local executor supports basic arithmetic only. It is not a general-purpose agent.
