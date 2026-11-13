@@ -96,6 +96,9 @@ def test_bundled_knowledge_is_copied_into_local_library_and_retrievable(monkeypa
     # Re-importing the same bundle must neither duplicate nor rewrite records.
     assert load_bundled_knowledge() == 0
     assert len(storage.list_source_documents(approved_only=True, limit=100)) == 7
+    import json
+    imported = storage.list_source_documents(approved_only=True, limit=100)
+    assert all(json.loads(item["metadata_json"])["retrieved_at"] == "2026-11-13" for item in imported)
 
 def test_bundled_library_discovery_accepts_only_explicit_curated_frontmatter(tmp_path):
     from atlas_engine.source_division import _bundled_document_metadata
