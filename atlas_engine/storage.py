@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from .config import DB_PATH
@@ -32,6 +32,31 @@ def init_db() -> None:
                 attempts INTEGER NOT NULL DEFAULT 0, score REAL NOT NULL DEFAULT 0.0,
                 result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
             )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS task_attempts (
+                attempt_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                attempt_number INTEGER NOT NULL,
+                fencing_token INTEGER NOT NULL,
+                worker_id TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('active','recovery_required','completed','failed','abandoned')),
+                claimed_at TEXT NOT NULL,
+                heartbeat_at TEXT NOT NULL,
+                lease_expires_at TEXT NOT NULL,
+                finished_at TEXT,
+                error_type TEXT,
+                UNIQUE(task_id, attempt_number),
+                FOREIGN KEY(task_id) REFERENCES tasks(id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_attempts_state_expiry
+            ON task_attempts(state, lease_expires_at)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_attempts_task_history
+            ON task_attempts(task_id, attempt_number DESC)
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS evaluations (
@@ -109,6 +134,172 @@ def claim_task(task_id: str) -> bool:
         return cursor.rowcount == 1
     finally:
         conn.close()
+
+
+def _validate_lease_seconds(lease_seconds: int) -> int:
+    if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int):
+        raise ValueError("Lease duration must be an integer number of seconds.")
+    if not 5 <= lease_seconds <= 3600:
+        raise ValueError("Lease duration must be between 5 and 3600 seconds.")
+    return lease_seconds
+
+
+def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60) -> Optional[Dict[str, Any]]:
+    """Atomically claim a pending task and create its fenced worker lease.
+
+    An expired/recovery-required attempt is never reclaimed automatically.
+    """
+    _validate_lease_seconds(lease_seconds)
+    if not isinstance(worker_id, str) or not worker_id.strip() or len(worker_id) > 128:
+        raise ValueError("A non-empty worker ID of at most 128 characters is required.")
+    now = datetime.now(timezone.utc)
+    claimed_at = now.isoformat()
+    expires_at = (now + timedelta(seconds=lease_seconds)).isoformat()
+    attempt_id = f"attempt-{os.urandom(12).hex()}"
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        task = conn.execute(
+            "SELECT attempts, status FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if task is None or task["status"] != "pending":
+            conn.rollback()
+            return None
+        active = conn.execute(
+            "SELECT 1 FROM task_attempts WHERE task_id = ? AND state = 'active' LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        if active is not None:
+            conn.rollback()
+            return None
+        attempt_number = int(task["attempts"]) + 1
+        fencing_token = conn.execute(
+            "SELECT COALESCE(MAX(fencing_token), 0) + 1 FROM task_attempts WHERE task_id = ?",
+            (task_id,),
+        ).fetchone()[0]
+        updated = conn.execute(
+            "UPDATE tasks SET status = 'running', attempts = ?, updated_at = ? "
+            "WHERE id = ? AND status = 'pending'",
+            (attempt_number, claimed_at, task_id),
+        )
+        if updated.rowcount != 1:
+            conn.rollback()
+            return None
+        conn.execute(
+            """
+            INSERT INTO task_attempts (
+                attempt_id, task_id, attempt_number, fencing_token, worker_id,
+                state, claimed_at, heartbeat_at, lease_expires_at
+            ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
+            """,
+            (attempt_id, task_id, attempt_number, fencing_token, worker_id,
+             claimed_at, claimed_at, expires_at),
+        )
+        conn.commit()
+        return {
+            "attempt_id": attempt_id, "task_id": task_id,
+            "attempt_number": attempt_number, "fencing_token": fencing_token,
+            "worker_id": worker_id, "state": "active",
+            "claimed_at": claimed_at, "heartbeat_at": claimed_at,
+            "lease_expires_at": expires_at,
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def heartbeat_task_attempt(
+    task_id: str, attempt_id: str, worker_id: str, fencing_token: int,
+    lease_seconds: int = 60,
+) -> bool:
+    """Extend only the matching, still-live lease; expired leases need recovery."""
+    _validate_lease_seconds(lease_seconds)
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    expires_at = (now + timedelta(seconds=lease_seconds)).isoformat()
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE task_attempts
+            SET heartbeat_at = ?, lease_expires_at = ?
+            WHERE task_id = ? AND attempt_id = ? AND worker_id = ?
+              AND fencing_token = ? AND state = 'active' AND lease_expires_at > ?
+            """,
+            (now_text, expires_at, task_id, attempt_id, worker_id,
+             fencing_token, now_text),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
+def mark_expired_task_attempts(now: Optional[str] = None, limit: int = 100) -> int:
+    """Mark stale leases for operator recovery; never requeue or rerun their tasks."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+        raise ValueError("Expiry scan limit must be between 1 and 500.")
+    now_text = now or now_isoformat()
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT attempt_id FROM task_attempts
+            WHERE state = 'active' AND lease_expires_at <= ?
+            ORDER BY lease_expires_at ASC LIMIT ?
+            """,
+            (now_text, limit),
+        ).fetchall()
+        ids = [row["attempt_id"] for row in rows]
+        if ids:
+            conn.executemany(
+                "UPDATE task_attempts SET state = 'recovery_required' "
+                "WHERE attempt_id = ? AND state = 'active' AND lease_expires_at <= ?",
+                [(attempt_id, now_text) for attempt_id in ids],
+            )
+        conn.commit()
+        return len(ids)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def list_recovery_required_attempts(limit: int = 100) -> list[Dict[str, Any]]:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+        raise ValueError("Recovery list limit must be between 1 and 500.")
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT a.*, t.title AS task_title, t.status AS task_status
+            FROM task_attempts a JOIN tasks t ON t.id = a.task_id
+            WHERE a.state = 'recovery_required'
+            ORDER BY a.lease_expires_at ASC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_task_attempts(task_id: str) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM task_attempts WHERE task_id = ? ORDER BY attempt_number ASC",
+            (task_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 
 
 def save_task(task_row: Dict[str, Any]) -> None:

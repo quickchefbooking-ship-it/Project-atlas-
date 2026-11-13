@@ -1,0 +1,94 @@
+from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+
+from atlas_engine import storage
+from atlas_engine.task_manager import TaskManager
+
+
+def _manager(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "task-recovery.db"))
+    storage.init_db()
+    return TaskManager(storage)
+
+
+def test_task_attempt_schema_migration_is_idempotent(tmp_path, monkeypatch):
+    _manager(tmp_path, monkeypatch)
+    storage.init_db()
+    conn = storage.get_connection()
+    try:
+        tables = {row["name"] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        assert "task_attempts" in tables
+    finally:
+        conn.close()
+
+
+def test_claim_with_lease_is_atomic_and_fenced(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Lease claim", "Only one worker may own this task", [])
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        claims = list(pool.map(
+            lambda i: storage.claim_task_with_lease(task.id, f"worker-{i}", 30),
+            range(8),
+        ))
+    successful = [claim for claim in claims if claim is not None]
+    assert len(successful) == 1
+    claim = successful[0]
+    assert claim["fencing_token"] == 1
+    assert claim["attempt_number"] == 1
+    persisted = manager.get_task(task.id)
+    assert persisted.status == "running"
+    assert persisted.attempts == 1
+    assert len(storage.get_task_attempts(task.id)) == 1
+
+
+def test_heartbeat_requires_matching_live_owner_and_fencing_token(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Heartbeat", "Only the lease owner may renew", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    assert not storage.heartbeat_task_attempt(
+        task.id, claim["attempt_id"], "worker-b", claim["fencing_token"], 30
+    )
+    assert not storage.heartbeat_task_attempt(
+        task.id, claim["attempt_id"], "worker-a", claim["fencing_token"] + 1, 30
+    )
+    assert storage.heartbeat_task_attempt(
+        task.id, claim["attempt_id"], "worker-a", claim["fencing_token"], 30
+    )
+
+
+def test_expired_lease_requires_recovery_and_is_never_auto_requeued(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Crash recovery", "Do not rerun uncertain work", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-crashed", 5)
+    assert claim is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    pending = storage.list_recovery_required_attempts()
+    assert len(pending) == 1
+    assert pending[0]["attempt_id"] == claim["attempt_id"]
+    assert pending[0]["state"] == "recovery_required"
+    assert manager.get_task(task.id).status == "running"
+    assert storage.claim_task_with_lease(task.id, "worker-retry", 30) is None
+    assert len(storage.get_task_attempts(task.id)) == 1
+
+
+def test_expired_lease_cannot_be_renewed_even_before_expiry_scan(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Expired heartbeat", "Expired lease cannot revive itself", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 5)
+    assert claim is not None
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_attempts SET lease_expires_at = ? WHERE attempt_id = ?",
+            ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(), claim["attempt_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert not storage.heartbeat_task_attempt(
+        task.id, claim["attempt_id"], "worker-a", claim["fencing_token"], 30
+    )
