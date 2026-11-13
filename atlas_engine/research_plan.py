@@ -20,6 +20,7 @@ class ResearchStep(BaseModel):
     step_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
     objective: str = Field(min_length=1, max_length=500)
     capability_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.:-]+$")
+    capability_version: str = Field(min_length=1, max_length=64)
     rationale: str = Field(min_length=1, max_length=500)
     expected_evidence: str = Field(min_length=1, max_length=500)
     depends_on: list[str] = Field(default_factory=list, max_length=MAX_PLAN_STEPS)
@@ -58,7 +59,6 @@ class ResearchPlan(BaseModel):
                 raise ValueError("Research step dependency refers to an unknown step.")
             if step.step_id in step.depends_on:
                 raise ValueError("A research step cannot depend on itself.")
-        # Reject cycles with a small deterministic depth-first traversal.
         graph = {step.step_id: step.depends_on for step in self.steps}
         visiting: set[str] = set()
         visited: set[str] = set()
