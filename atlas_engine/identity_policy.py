@@ -1,4 +1,4 @@
-"""Fail-closed authorization primitives for a future verified request principal.
+"Fail-closed authorization primitives for a future verified request principal.
 
 This module deliberately does not authenticate tokens or create principals from
 HTTP input. A trusted OIDC integration must construct RequestPrincipal only
@@ -61,6 +61,10 @@ def authorize_tenant_resource(
         # Keep the denial generic to avoid confirming another tenant's records.
         raise AuthorizationDenied("Resource access denied.")
 
+    # A bare string is iterable too, but treating "tasks:read" as a set of
+    # individual characters would make malformed caller input ambiguous.
+    if isinstance(required_scopes, (str, bytes)):
+        raise AuthorizationDenied("Valid capability scopes required.")
     try:
         required = frozenset(required_scopes)
     except (TypeError, ValueError):
