@@ -182,3 +182,70 @@ def test_application_startup_imports_curated_bundle(monkeypatch, tmp_path):
     documents = storage.list_source_documents(approved_only=True, limit=100)
     assert len(documents) == 2
     assert all(item["trust_level"] == "reviewed" for item in documents)
+
+def test_json_batch_import_stages_pending_documents_and_preserves_provenance(monkeypatch, tmp_path):
+    import json
+    from atlas_engine.source_adapters import import_json_batch
+
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("chatgpt-research", "ChatGPT Research", "research_export")
+    payload = json.dumps({
+        "schema_version": 1,
+        "documents": [{
+            "title": "A source-backed note",
+            "uri": "https://example.org/knowledge",
+            "content": "A carefully summarised source-backed learning note.",
+            "metadata": {"publisher": "Example Institute", "retrieved_at": "2026-11-13"},
+        }],
+    })
+
+    imported = import_json_batch("chatgpt-research", payload)
+
+    assert len(imported) == 1
+    assert imported[0]["state"] == "pending"
+    assert imported[0]["trust_level"] == "unverified"
+    assert imported[0]["uri"] == "https://example.org/knowledge"
+    assert retrieve("source-backed learning") == []
+
+
+def test_source_adapter_contract_stages_only_registered_bounded_results(monkeypatch, tmp_path):
+    from atlas_engine.source_adapters import SourceDocument, stage_adapter_results
+
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("huggingface", "Hugging Face Research", "research_connector")
+
+    class DemoAdapter:
+        source_id = "huggingface"
+
+        def search(self, query, limit=10):
+            assert query == "retrieval augmented generation"
+            return [SourceDocument(
+                title="RAG overview",
+                uri="https://example.org/rag",
+                content="Retrieval augments generation with external reference material.",
+                metadata={"publisher": "Example Docs"},
+            )]
+
+    results = stage_adapter_results(DemoAdapter(), "retrieval augmented generation", limit=3)
+
+    assert len(results) == 1
+    assert results[0]["state"] == "pending"
+    assert results[0]["trust_level"] == "unverified"
+
+
+def test_json_batch_import_rejects_bad_envelopes_and_non_web_uris(monkeypatch, tmp_path):
+    import json
+    from atlas_engine.source_adapters import import_json_batch
+
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("web", "Web Research", "web")
+    with pytest.raises(ValueError):
+        import_json_batch("web", '{"schema_version": 2, "documents": []}')
+    with pytest.raises(ValueError):
+        import_json_batch("web", json.dumps({
+            "schema_version": 1,
+            "documents": [{
+                "title": "Unsafe URI", "uri": "file:///etc/passwd",
+                "content": "This must not be imported.",
+            }],
+        }))
