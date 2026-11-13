@@ -208,7 +208,12 @@ def test_invalid_json_schema_is_rejected_at_definition_time():
 
 
 def test_schema_validation_error_does_not_echo_untrusted_value():
-    definition = _definition()
+    definition = _definition(input_schema={
+        "type": "object",
+        "properties": {"query": {"type": "string", "maxLength": 8}},
+        "required": ["query"],
+        "additionalProperties": False,
+    })
     secret = "do-not-echo-this-secret"
     with pytest.raises(ValueError) as captured:
         definition.validate_input({"query": secret})
