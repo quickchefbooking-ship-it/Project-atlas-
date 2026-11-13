@@ -315,3 +315,21 @@ def test_evaluator_handles_non_string_contains_expected_value():
     assert result["passed"] is False
     assert result["score"] == 0.0
     assert result["reasons"] == ["expected value is not a string"]
+
+
+
+def test_task_claim_is_atomic_and_increments_attempt_once(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "atomic-task-claim.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Atomic claim", "Ensure one worker owns this task", [])
+
+    assert manager.claim_task(task.id) is True
+    assert manager.claim_task(task.id) is False
+
+    persisted = manager.get_task(task.id)
+    assert persisted.status == "running"
+    assert persisted.attempts == 1
