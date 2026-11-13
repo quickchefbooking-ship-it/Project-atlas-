@@ -128,8 +128,12 @@ class Evaluator:
         satisfied = 0
 
         for criterion in criteria:
-            field_value = result_obj.get(criterion.field)
-            ok, reason = cls._compare(field_value, criterion.operator, criterion.expected_value)
+            if criterion.field not in result_obj:
+                # A missing field is not evidence that an inequality criterion passed.
+                ok, reason = False, "field is missing"
+            else:
+                field_value = result_obj[criterion.field]
+                ok, reason = cls._compare(field_value, criterion.operator, criterion.expected_value)
             if ok:
                 satisfied += 1
             else:
