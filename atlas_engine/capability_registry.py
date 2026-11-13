@@ -93,7 +93,7 @@ def _validate_payload(schema: Mapping[str, Any], payload: Any, direction: str) -
         raise ValueError(f"Capability {direction} must contain finite JSON values.") from exc
     if len(encoded.encode("utf-8")) > MAX_CAPABILITY_PAYLOAD_BYTES:
         raise ValueError(
-            f"Capability {direction} exceeds the {MAX_CAPABILITY_PAYLOAD_BYTES}-byte limit."
+            f"Capability {direction} exceeds the 64-KiB limit ({MAX_CAPABILITY_PAYLOAD_BYTES} bytes)."
         )
 
     validator = Draft202012Validator(_thaw(schema))
