@@ -269,3 +269,32 @@ def test_task_execution_receives_relevant_validated_memory(tmp_path, monkeypatch
     assert executor.payload["relevant_lessons"] == [trusted_lesson]
     assert len(executor.payload["source_documents"]) == 1
     assert executor.payload["source_documents"][0]["uri"] == "https://example.org/arithmetic"
+
+def test_evaluator_rejects_subjective_criteria_until_a_subjective_evaluator_exists():
+    result = Evaluator.evaluate(
+        {"summary": "Looks good"},
+        [{
+            "field": "summary",
+            "operator": "contains",
+            "expected_value": "good",
+            "deterministic": False,
+            "description": "Human-quality review",
+        }],
+    )
+
+    assert result["passed"] is False
+    assert result["score"] == 0.0
+    assert result["method"] == "deterministic"
+    assert "Subjective criteria require an evaluator" in result["reasons"][0]
+    assert result["missing_requirements"] == ["Human-quality review"]
+
+
+def test_evaluator_handles_non_string_contains_expected_value():
+    result = Evaluator.evaluate(
+        {"summary": "A valid summary"},
+        [{"field": "summary", "operator": "contains", "expected_value": 42}],
+    )
+
+    assert result["passed"] is False
+    assert result["score"] == 0.0
+    assert result["reasons"] == ["expected value is not a string"]
