@@ -13,6 +13,9 @@ def now_isoformat() -> str:
 
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
+    # SQLite does not enforce declared foreign keys unless enabled per connection.
+    # Enable it here so every storage operation gets the same integrity guarantees.
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn
 
