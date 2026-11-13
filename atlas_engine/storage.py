@@ -171,12 +171,17 @@ def save_lesson(record: Dict[str, Any]) -> None:
         conn.close()
 
 
-def list_lessons(limit: int = 50) -> list[Dict[str, Any]]:
+def list_lessons(limit: int = 50, validated_only: bool = False) -> list[Dict[str, Any]]:
     conn = get_connection()
     try:
-        rows = conn.execute(
-            "SELECT * FROM lessons ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
+        if validated_only:
+            rows = conn.execute(
+                "SELECT * FROM lessons WHERE validated = 1 ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM lessons ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()
