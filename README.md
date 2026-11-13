@@ -52,6 +52,10 @@ The API key is a shared-secret development control, not per-user identity, role-
 
 Media output paths are constrained to ATLAS_MEDIA_OUTPUT_DIR. Path traversal and symlink escapes are rejected by the media generator.
 
+## Architecture
+
+See [the Professor orchestration blueprint](docs/professor-orchestration.md) for the verified current boundaries, target octopus/capability model, staged delivery plan and release gates. It is design guidance, not a claim that the future orchestration or integrations are already implemented.
+
 ## Useful endpoints
 
 - GET /dashboard
