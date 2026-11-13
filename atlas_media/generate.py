@@ -18,6 +18,20 @@ def _ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+def _resolve_output_path(output_path: Optional[str], default_name: str) -> Path:
+    """Keep generated files inside the configured media output directory."""
+    root = OUTPUT_DIR.resolve()
+    candidate = (root / default_name) if output_path is None else Path(output_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise ValueError("Output path must remain inside the configured media output directory")
+    if resolved == root:
+        raise ValueError("Output path must name a file inside the media output directory")
+    return resolved
+
+
 def _local_placeholder(prompt: str, output_path: Path) -> str:
     """Create a deterministic local visual when no source image is available."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +69,7 @@ def _local_placeholder(prompt: str, output_path: Path) -> str:
 def generate_image_from_prompt(prompt: str, output_path: Optional[str] = None) -> str:
     if not prompt or not prompt.strip():
         raise ValueError("Prompt is required")
-    target = Path(output_path) if output_path else OUTPUT_DIR / f"atlas-image-{uuid.uuid4().hex[:10]}.png"
+    target = _resolve_output_path(output_path, f"atlas-image-{uuid.uuid4().hex[:10]}.png")
     target.parent.mkdir(parents=True, exist_ok=True)
 
     # Try a public image source first; always retain a local fallback.
@@ -81,7 +95,7 @@ def create_video_from_images(
         raise ValueError("No images supplied for video generation")
     if not _ffmpeg_available():
         raise RuntimeError("ffmpeg is required to create video output")
-    final_path = Path(output_path)
+    final_path = _resolve_output_path(output_path, f"atlas-video-{uuid.uuid4().hex[:10]}.mp4")
     final_path.parent.mkdir(parents=True, exist_ok=True)
     concat_file = OUTPUT_DIR / f"concat-{uuid.uuid4().hex[:10]}.txt"
     clip_paths = []
@@ -126,5 +140,5 @@ def generate_video_from_prompt(
     if narration and narration.strip():
         audio_path = str(OUTPUT_DIR / f"atlas-voice-{uuid.uuid4().hex[:10]}.mp3")
         synthesize_voice(narration.strip(), audio_path)
-    target = output_path or str(OUTPUT_DIR / f"atlas-video-{uuid.uuid4().hex[:10]}.mp4")
+    target = str(_resolve_output_path(output_path, f"atlas-video-{uuid.uuid4().hex[:10]}.mp4"))
     return create_video_from_images([image_path], target, audio_path=audio_path)
