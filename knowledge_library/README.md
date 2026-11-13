@@ -62,12 +62,13 @@ Every imported item should retain:
 - A provider-neutral `SourceAdapter` contract now standardises read-only connector results as title, canonical URI, text content and metadata.
 - A versioned JSON import envelope (`schema_version: 1`) supports safe copy/paste or file-based batch imports of up to 100 documents.
 - Adapter and JSON batches are validated before any writes; credentials embedded in source URLs are rejected, and imported records remain pending/unverified until review.
-- The bundled OWASP notes are curated repository material; they are not live provider integrations.
-- Lawve is available as a read-only research connector in the current ChatGPT environment; direct automatic ingestion into AtlasOnePro is not yet wired.
-- Hugging Face search/documentation tools are available in the current environment; direct automatic ingestion is not yet wired.
-- GitHub is used for controlled repository work; it is not yet an autonomous general-purpose Professor knowledge connector.
-- Internet retrieval is available through the current research environment; automatic URL-to-library ingestion still needs a dedicated adapter.
-- ChatGPT-to-Professor two-way collaboration is specified in the architecture document but not yet implemented.
+- Seven curated reference notes are currently bundled: two OWASP security notes, a Hugging Face RAG/model due-diligence note, a UK legal research/citation note, a GitHub repository-safety note, a ChatGPT/OpenAI boundary note and an internet-research quality note.
+- The bundled notes are version-controlled repository material; they are not live provider integrations.
+- Lawve is available as a read-only research source in the current ChatGPT environment; jurisdiction-aware automatic ingestion into AtlasOnePro is not yet wired.
+- Hugging Face official documentation is included; a direct Hub/model adapter is not yet wired into AtlasOnePro.
+- GitHub is used for controlled repository work; a separate general-purpose Professor knowledge adapter is not yet implemented.
+- Public web search and page retrieval are available through the current research environment; automatic URL-to-library ingestion still needs a dedicated Atlas adapter.
+- ChatGPT-to-Professor two-way collaboration is specified as a future capability but is not yet implemented.
 
 ## Next engineering steps
 
