@@ -77,3 +77,27 @@ Improvement reporting remains **Not measured** until a documented protocol suppl
 - Improvement remains Not measured until comparable cohorts and a documented protocol exist.
 
 **Current truthful status:** Professor records outcomes and stores lesson validation flags. This proposal does not claim that lesson-use attribution or measured self-improvement exists yet.
+
+
+## Verified implementation inspection (2026-11-13)
+
+The current Professor source was inspected before proposing a migration:
+
+- `atlas_engine/storage.py` creates `tasks`, `task_attempts`, `evaluations` and `lessons`. `task_attempts.attempt_id` and `lessons.id` are primary keys; both are linked to `tasks.id`. SQLite foreign-key enforcement is enabled in the shared connection factory.
+- `atlas_engine/task_manager.py` claims a fenced task attempt, retrieves validated lessons through `LearningMemory.get_relevant_lessons`, and passes the resulting list to `executor.execute` as `relevant_lessons`.
+- `atlas_engine/executor.py` currently implements only the bounded local arithmetic executor. It reads the task description and deadline; it does not read or consume `relevant_lessons`. Paid/external AI execution is not implemented.
+- Task completion and its evaluation are persisted atomically by the existing completion transaction. Failure lessons are saved after that transaction and are forced unvalidated.
+
+### Consequence for the first implementation
+
+There is currently no executor that consumes lesson content. Therefore the present runtime can truthfully record **candidate retrieval** (if separately instrumented), but it cannot truthfully record **lesson use**. No `lesson_use_events` table or write helper should be added until an executor has an explicit, testable contract proving which lesson IDs it consumed. Otherwise an internal caller could record a false use merely by passing IDs to storage.
+
+### Safe next sequence
+
+1. Keep the current retrieval-only behaviour unchanged.
+2. Add an explicit executor result contract in a future capability-aware executor, e.g. a bounded list of lesson IDs actually consumed, validated against the exact lesson context supplied to that attempt.
+3. Add the append-only event write inside the same transaction that commits the task outcome/evaluation, after validating the attempt fencing token and the consumed lesson IDs. Do not create an event for a failed-to-commit attempt.
+4. Add tests proving that the arithmetic executor reports no consumed lessons, forged/unknown IDs are rejected, duplicate event IDs are idempotent, and event writes roll back with task completion.
+5. Only then expose candidate retrieval and confirmed use as separate dashboard metrics.
+
+This inspection intentionally blocks a premature schema migration. It avoids storing false-positive usage events and avoids modifying a stable task completion transaction before the consumption contract exists.
