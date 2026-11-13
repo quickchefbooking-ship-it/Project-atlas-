@@ -107,7 +107,7 @@ Every transition must be conditional on the current state and fencing token. Mig
 | Default compatibility | Existing local executor and legacy tasks execute at most once |
 | Attempt ceiling | No more than configured attempts, including under concurrent claims and repeated scheduler scans |
 | Back-off | Formula, cap, jitter bounds, immutable policy snapshot and persisted due time/deadline are validated; claims cannot start early or after expiry |
-| Deadline/timeout | No attempt begins after total deadline; timeout is recorded without leaking exception details |
+| Deadline/timeout | The bounded local executor checks a monotonic per-attempt deadline during AST evaluation, rejects over-complex expressions, and returns a sanitised timeout failure; no claim of hard termination for uninterruptible code |
 | Idempotency | Missing/invalid capability declaration or missing test-evidence reference blocks retry; duplicate idempotency key cannot cause a second side effect in the fake provider |
 | Recovery | Expired lease remains held; no retry until prior outcome is reconciled; stale fencing token cannot schedule or complete |
 | Cancellation | Request persists across restart; worker acknowledges at a safe point; claim/cancel race has one deterministic winner |
@@ -139,6 +139,7 @@ Cancellation is now a durable, cooperative runtime path for the current synchron
 - SQLite stores one idempotent cancellation request per task attempt, with `requested`, `acknowledged`, `too_late` and `requires_recovery` states.
 - Authenticated `POST /tasks/{task_id}/cancel` and `GET /tasks/{task_id}/cancellation` routes expose request and status operations. Actor labels are caller-supplied audit metadata, not verified identity.
 - The worker checks for a request before execution, after bounded context retrieval, after the local executor returns, and before normal completion. It does not kill synchronous work mid-operation.
+- The bounded local executor receives a 30-second monotonic per-attempt deadline, checks it around parsing and during AST evaluation, and caps AST complexity at 128 nodes. This is cooperative for the local arithmetic executor, not a hard kill for uninterruptible code or future external capabilities.
 - A requested cancellation blocks normal task/evaluation completion. Acknowledgement is fenced by attempt ID, worker ID, fencing token and live lease, and atomically records the cancellation evaluation and task/attempt outcome.
 - Expired worker leases move pending cancellation requests to `requires_recovery`; a late request against a completed/terminal attempt is recorded as `too_late`.
 - The API reports `cancelled`; the current task schema records its terminal task status as `failed` with `TaskCancelled`, and the evaluation method as `cancelled`. This preserves the existing task status constraint without a destructive schema migration.
