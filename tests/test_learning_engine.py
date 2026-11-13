@@ -475,3 +475,70 @@ def test_task_outcome_persistence_failure_does_not_write_unpaired_terminal_statu
     assert "OSError" in caplog.text
     assert manager.get_task(task.id).status == "running"
     assert storage.get_evaluations_for_task(task.id) == []
+
+def test_task_completion_false_result_never_writes_unpaired_terminal_status(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "completion-false-result.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Completion race",
+        "A false completion result must not create a terminal status without evaluation",
+        [{"field": "value", "operator": "==", "expected_value": 11}],
+    )
+
+    class Executor:
+        @staticmethod
+        def execute(_payload):
+            return {"value": 11}
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            raise AssertionError("A passing task must not save a failure lesson")
+
+    monkeypatch.setattr(manager, "complete_with_evaluation", lambda *_args, **_kwargs: False)
+    api = TaskAPI(manager, Executor(), Evaluator(), Memory(), None, None)
+
+    response = api.run_task(task.id)
+
+    assert response["status"] == "outcome_unconfirmed"
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_evaluations_for_task(task.id) == []
+
+
+def test_execution_failure_completion_false_result_keeps_task_non_terminal(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "failure-completion-false.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Failure completion race", "Preserve paired outcome records", [])
+
+    class BrokenExecutor:
+        @staticmethod
+        def execute(_payload):
+            raise RuntimeError("private detail must not leak")
+
+    class Memory:
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr(manager, "complete_with_evaluation", lambda *_args, **_kwargs: False)
+    api = TaskAPI(manager, BrokenExecutor(), Evaluator(), Memory(), None, None)
+
+    response = api.run_task(task.id)
+
+    assert response["status"] == "outcome_unconfirmed"
+    assert "private detail" not in str(response)
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_evaluations_for_task(task.id) == []
+
