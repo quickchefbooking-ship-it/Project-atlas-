@@ -58,7 +58,7 @@ Current limits:
 - Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
 - Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
-At code head `f211eb95a52662242a0fdcc9bde89e39b1082d44`, both PR and push workflows passed **193 tests** with one non-blocking Starlette/AnyIO deprecation warning.
+At code head `2aabf6592ec0a7cd92262932a12ae7c36dcf6e28`, both PR and push workflows passed **193 tests** with one non-blocking Starlette/AnyIO deprecation warning. Retry schedule inspection responses explicitly redact idempotency keys and internal policy/capability snapshots.
 
 Acceptance gates:
 - Tests prove retry limits are enforced under concurrent requests and due-time claims.
