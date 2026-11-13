@@ -122,6 +122,7 @@ def test_fixed_host_research_adapters_reject_redirects(monkeypatch, getter_name,
     assert opener.calls == 1
     assert len(seen_handlers) == 1
     assert isinstance(seen_handlers[0], HTTPRedirectHandler)
+    assert seen_handlers[0].redirect_request(None, None, 302, "Found", {}, "http://127.0.0.1/admin") is None
 
 
 def test_authenticated_fetch_stages_github_metadata_pending(monkeypatch, tmp_path):
