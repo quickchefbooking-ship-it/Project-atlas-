@@ -131,6 +131,16 @@ class CapabilityDefinition:
         object.__setattr__(self, "input_schema", _freeze(self.input_schema))
         object.__setattr__(self, "output_schema", _freeze(self.output_schema))
 
+    def validate_input(self, value: Any) -> None:
+        """Reject malformed inputs before a registered handler is invoked."""
+        from .capability_schema import validate_json_value
+        validate_json_value(value, self.input_schema, path=f"{self.name}.input")
+
+    def validate_output(self, value: Any) -> None:
+        """Reject malformed handler outputs before they are returned to a caller."""
+        from .capability_schema import validate_json_value
+        validate_json_value(value, self.output_schema, path=f"{self.name}.output")
+
     @property
     def identity(self) -> tuple[str, str]:
         return self.name, self.version
