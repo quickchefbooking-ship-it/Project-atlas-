@@ -120,3 +120,42 @@ def test_learning_overview_rejects_invalid_recent_limits(monkeypatch, tmp_path, 
     _isolated_db(monkeypatch, tmp_path)
     with pytest.raises(ValueError):
         storage.get_learning_overview(recent_limit=limit)
+
+
+def test_learning_overview_route_requires_api_key(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    import app as professor_app
+
+    _isolated_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(professor_app, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(professor_app, "API_KEY", "overview-test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+
+    with TestClient(professor_app.app) as client:
+        denied = client.get("/learning/overview")
+        allowed = client.get(
+            "/learning/overview",
+            headers={"X-API-Key": "overview-test-secret"},
+        )
+
+    assert denied.status_code == 401
+    assert allowed.status_code == 200
+    assert allowed.json()["improvement"]["status"] == "not_measured"
+
+
+def test_learning_overview_route_rejects_excessive_limit(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    import app as professor_app
+
+    _isolated_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(professor_app, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(professor_app, "API_KEY", "overview-test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+
+    with TestClient(professor_app.app) as client:
+        response = client.get(
+            "/learning/overview?limit=51",
+            headers={"X-API-Key": "overview-test-secret"},
+        )
+
+    assert response.status_code == 422
