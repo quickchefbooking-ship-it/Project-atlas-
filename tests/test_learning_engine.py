@@ -338,8 +338,14 @@ def test_task_claim_is_atomic_and_increments_attempt_once(tmp_path, monkeypatch)
     manager = TaskManager(storage)
     task = manager.create_task("Atomic claim", "Ensure one worker owns this task", [])
 
-    assert manager.claim_task(task.id) is True
-    assert manager.claim_task(task.id) is False
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Race several independent callers against the same pending task.
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        claims = list(workers.map(lambda _index: manager.claim_task(task.id), range(8)))
+
+    assert claims.count(True) == 1
+    assert claims.count(False) == 7
 
     persisted = manager.get_task(task.id)
     assert persisted.status == "running"
