@@ -75,10 +75,53 @@ def test_provider_response_limit_is_enforced(monkeypatch):
             return False
         def read(self, limit):
             return b"x" * limit
-    monkeypatch.setattr("atlas_engine.public_research_adapters.urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("atlas_engine.public_research_adapters._open_without_redirect", lambda request: Response())
     with pytest.raises(PublicSourceError, match="1 MB"):
         from atlas_engine.public_research_adapters import _get_json
         _get_json("https://api.github.com/repos/octocat/Hello-World")
+
+
+@pytest.mark.parametrize(
+    "getter_name,url",
+    [
+        ("_get_json", "https://api.github.com/repos/octocat/Hello-World"),
+        ("_get_xml_text", "https://www.legislation.gov.uk/search/data.feed"),
+    ],
+)
+def test_fixed_host_research_adapters_reject_redirects(monkeypatch, getter_name, url):
+    from urllib.error import HTTPError
+    from urllib.request import HTTPRedirectHandler
+    import atlas_engine.public_research_adapters as adapters
+
+    class RedirectingOpener:
+        calls = 0
+
+        def open(self, request, timeout):
+            self.calls += 1
+            raise HTTPError(
+                request.full_url,
+                302,
+                "Found",
+                {"Location": "http://127.0.0.1/admin"},
+                None,
+            )
+
+    opener = RedirectingOpener()
+    seen_handlers = []
+
+    def fake_build_opener(*handlers):
+        seen_handlers.extend(handlers)
+        return opener
+
+    monkeypatch.setattr(adapters, "build_opener", fake_build_opener)
+    getter = getattr(adapters, getter_name)
+
+    with pytest.raises(PublicSourceError, match="HTTP 302"):
+        getter(url)
+
+    assert opener.calls == 1
+    assert len(seen_handlers) == 1
+    assert isinstance(seen_handlers[0], HTTPRedirectHandler)
 
 
 def test_authenticated_fetch_stages_github_metadata_pending(monkeypatch, tmp_path):
