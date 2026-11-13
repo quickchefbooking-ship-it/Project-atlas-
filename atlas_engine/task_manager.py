@@ -2,10 +2,13 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from .retry_policy import RetryPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -210,11 +213,13 @@ class TaskAPI:
             # The local executor is deterministic and bounded. Cancellation is
             # cooperative: a request received during this synchronous call is
             # acknowledged immediately after it returns, before evaluation/commit.
+            execution_deadline = time.monotonic() + RetryPolicy().per_attempt_timeout_seconds
             result = self.executor.execute({
                 "title": task.title,
                 "description": task.description,
                 "relevant_lessons": relevant_lessons,
                 "source_documents": source_documents,
+                "_execution_deadline_monotonic": execution_deadline,
             })
             cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
             if cancellation is not None and cancellation["state"] == "requested":
