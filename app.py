@@ -14,6 +14,10 @@ from atlas_engine.learning_memory import LearningMemory
 from atlas_engine.safe_testing import SafeTester
 from atlas_engine import storage
 from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
+from atlas_engine.source_division import load_bundled_knowledge
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class StorageBackend:
@@ -27,6 +31,13 @@ class StorageBackend:
 manager = TaskManager(StorageBackend())
 api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), ImprovementManager(), SafeTester())
 app = FastAPI(title="AtlasOnePro — Professor Core")
+
+
+@app.on_event("startup")
+def bootstrap_knowledge_library():
+    """Import repository-owned curated references into the persistent local store."""
+    imported = load_bundled_knowledge()
+    logger.info("Imported %s new curated knowledge documents", imported)
 
 
 def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
