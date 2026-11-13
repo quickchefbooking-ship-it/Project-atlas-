@@ -31,9 +31,9 @@ Remaining Phase 1 limitations: local SQLite only; no distributed worker coordina
 
 ## Phase 2 — Bounded retries and cancellation
 
-**Status: design contract committed; implementation next.**
+**Status: initial policy primitives implemented; durable scheduling and cancellation remain.**
 
-Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`. The design preserves default no-retry behaviour, requires capability-level idempotency, treats unknown errors as terminal, persists cooperative cancellation, and forbids replay of uncertain expired leases.
+Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`. Added `atlas_engine/retry_policy.py` with typed retryable/terminal errors, immutable server-side limits, a pure fail-closed eligibility evaluator and bounded jittered back-off calculation. Added regression coverage for default no-retry, error classification, capability idempotency, max attempts, deadline, jitter and invalid policy values. Both PR and push workflows passed 144 tests on head `a72af1ab2fe5f28aacde341f68c3651e534a7561`. This code does not schedule or execute retries.
 
 Deliverables:
 - Define retryable versus terminal error classes; do not retry validation, permission or policy failures.
