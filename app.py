@@ -5,6 +5,7 @@ import os
 from typing import Optional, Any
 
 from fastapi import FastAPI, Header, HTTPException, status, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from atlas_engine.config import API_KEY, API_REQUIRE_AUTH
@@ -16,7 +17,7 @@ from atlas_engine.learning_memory import LearningMemory
 from atlas_engine.safe_testing import SafeTester
 from atlas_engine import storage
 from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
-from atlas_engine.source_division import load_bundled_knowledge, list_sources, retrieve
+from atlas_engine.source_division import load_bundled_knowledge, list_sources, retrieve, register_source
 from atlas_engine.source_adapters import import_json_batch, MAX_BATCH_JSON_CHARS
 import logging
 
@@ -37,6 +38,8 @@ api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), 
 async def lifespan(app: FastAPI):
     """Import repository-owned curated references into the persistent local store."""
     imported = load_bundled_knowledge()
+    if storage.get_source("manual-paste") is None:
+        register_source("manual-paste", "Manual Research Imports", "manual_paste", access_mode="approval_gated")
     logger.info("Imported %s new curated knowledge documents", imported)
     yield
 
@@ -70,6 +73,12 @@ class GenerateVideoRequest(BaseModel):
     prompt: str
     narration: Optional[str] = None
     output_path: Optional[str] = None
+
+
+@app.get("/professor/sources", include_in_schema=False)
+def professor_sources_ui():
+    """Serve the static Source Division operator interface; data remains API-key protected."""
+    return FileResponse("static/professor_sources.html", media_type="text/html")
 
 
 @app.get("/health")
