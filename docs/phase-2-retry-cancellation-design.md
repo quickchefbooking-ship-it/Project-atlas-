@@ -126,7 +126,16 @@ The initial policy-only foundation is implemented in `atlas_engine/retry_policy.
 - `evaluate_retry` requires a positive integer attempt number and fails closed for unknown errors, invalid capability objects, cancellation, lease uncertainty and persistence failure.
 - The evaluator computes a bounded delay only; it does not sleep, schedule, claim or execute another attempt.
 
-This is not a runtime retry system. There is no durable retry schedule, cancellation table, worker cancellation checkpoint, capability registry or scheduler yet. The default policy remains one attempt, and the local executor is not opted in.
+Cancellation is now a durable, cooperative runtime path for the current synchronous local executor:
+
+- SQLite stores one idempotent cancellation request per task attempt, with `requested`, `acknowledged`, `too_late` and `requires_recovery` states.
+- Authenticated `POST /tasks/{task_id}/cancel` and `GET /tasks/{task_id}/cancellation` routes expose request and status operations. Actor labels are caller-supplied audit metadata, not verified identity.
+- The worker checks for a request before execution, after bounded context retrieval, after the local executor returns, and before normal completion. It does not kill synchronous work mid-operation.
+- A requested cancellation blocks normal task/evaluation completion. Acknowledgement is fenced by attempt ID, worker ID, fencing token and live lease, and atomically records the cancellation evaluation and task/attempt outcome.
+- Expired worker leases move pending cancellation requests to `requires_recovery`; a late request against a completed/terminal attempt is recorded as `too_late`.
+- The API reports `cancelled`; the current task schema records its terminal task status as `failed` with `TaskCancelled`, and the evaluation method as `cancelled`. This preserves the existing task status constraint without a destructive schema migration.
+
+This is not yet a runtime retry system. There is no durable retry schedule, registered capability registry, due-work scheduler or per-attempt hard timeout. The default retry policy remains one attempt, and the local executor is not opted in. The current cancellation checkpoints are appropriate only for the bounded synchronous local executor; future long-running or external capabilities need their own safe-point contract.
 
 ## Exit gate
 
