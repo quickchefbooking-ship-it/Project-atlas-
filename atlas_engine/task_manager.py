@@ -89,6 +89,13 @@ class TaskManager:
             task_id, record, status, result, attempt=attempt
         )
 
+    def get_task_cancellation(self, task_id: str, attempt_id: str | None = None):
+        return self.storage_backend.get_task_cancellation(task_id, attempt_id)
+
+    def acknowledge_task_cancellation(self, task_id: str, attempt: dict[str, Any],
+                                      record: dict[str, Any]) -> bool:
+        return self.storage_backend.acknowledge_task_cancellation(task_id, attempt, record)
+
     def update_status(self, task_id: str, status: str, score: float | None = None,
                       result: dict[str, Any] | None = None,
                       increment_attempt: bool = False) -> Task | None:
@@ -118,6 +125,25 @@ class TaskAPI:
 
     def list_tasks(self):
         return [task.model_dump() for task in self.manager.list_tasks()]
+
+    def _finish_cancelled(self, task_id: str, lease: dict[str, Any], cancellation: dict[str, Any]):
+        record = {
+            "id": f"evaluation-{os.urandom(12).hex()}",
+            "task_id": task_id,
+            "method": "cancelled",
+        }
+        if self.manager.acknowledge_task_cancellation(task_id, lease, record):
+            return {
+                "task_id": task_id,
+                "status": "cancelled",
+                "cancellation_id": cancellation["cancellation_id"],
+                "message": "Cancellation acknowledged at a safe point.",
+            }
+        return {
+            "task_id": task_id,
+            "status": "outcome_unconfirmed",
+            "error": "Cancellation could not be confirmed by the current lease owner. Recovery is required.",
+        }
 
     def run_task(self, task_id: str):
         task = self.manager.get_task(task_id)
@@ -159,6 +185,10 @@ class TaskAPI:
         heartbeat_thread.start()
         phase = "execution"
         try:
+            cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
+            if cancellation is not None and cancellation["state"] == "requested":
+                return self._finish_cancelled(task_id, lease, cancellation)
+
             # Retrieve only validated lessons; pass them as context to capable executors.
             # The restricted local arithmetic executor deliberately ignores this context.
             relevant_lessons = self.memory.get_relevant_lessons(task.description) if hasattr(
@@ -174,12 +204,18 @@ class TaskAPI:
                     type(source_error).__name__,
                 )
                 source_documents = []
+            # The local executor is deterministic and bounded. Cancellation is
+            # cooperative: a request received during this synchronous call is
+            # acknowledged immediately after it returns, before evaluation/commit.
             result = self.executor.execute({
                 "title": task.title,
                 "description": task.description,
                 "relevant_lessons": relevant_lessons,
                 "source_documents": source_documents,
             })
+            cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
+            if cancellation is not None and cancellation["state"] == "requested":
+                return self._finish_cancelled(task_id, lease, cancellation)
             evaluation = self.evaluator.evaluate(result, task.success_criteria)
             status = "passed" if evaluation["passed"] else "failed"
 
@@ -197,6 +233,9 @@ class TaskAPI:
             }
             phase = "persistence"
             if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result, attempt=lease):
+                cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
+                if cancellation is not None and cancellation["state"] == "requested":
+                    return self._finish_cancelled(task_id, lease, cancellation)
                 current = self.manager.get_task(task_id)
                 logger.error(
                     "Task completion was not committed for task_id=%s current_status=%s",
@@ -230,6 +269,15 @@ class TaskAPI:
             return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
         except Exception as exc:
             error_type = type(exc).__name__
+            try:
+                cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
+                if cancellation is not None and cancellation["state"] == "requested":
+                    return self._finish_cancelled(task_id, lease, cancellation)
+            except Exception as cancellation_error:
+                logger.warning(
+                    "Cancellation check failed for task_id=%s error_type=%s",
+                    task_id, type(cancellation_error).__name__,
+                )
             if phase == "persistence":
                 # The completion transaction rolls back on failure. Do not write a
                 # separate terminal status without its evaluation: that would create
