@@ -186,13 +186,40 @@ class TaskAPI:
                     )
             return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
         except Exception as exc:
-            self.manager.update_status(task_id, "failed")
+            # Execution exceptions are failed outcomes too. Persist a sanitised,
+            # zero-score evaluation with the terminal task state when storage allows.
+            error_type = type(exc).__name__
+            failure_record = {
+                "id": f"evaluation-{os.urandom(12).hex()}",
+                "task_id": task_id,
+                "passed": False,
+                "score": 0.0,
+                "reasons_json": json.dumps(["Task execution failed.", f"error_type={error_type}"]),
+                "missing_requirements_json": json.dumps(["Task execution completed successfully."]),
+                "method": "execution_error",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            try:
+                committed = self.manager.complete_with_evaluation(
+                    task_id, failure_record, "failed", {"error_type": error_type}
+                )
+                if not committed:
+                    current = self.manager.get_task(task_id)
+                    if current is not None and current.status == "running":
+                        self.manager.update_status(task_id, "failed")
+            except Exception as persistence_error:
+                logger.error(
+                    "Task failure outcome persistence failed for task_id=%s error_type=%s",
+                    task_id,
+                    type(persistence_error).__name__,
+                )
+
             # Keep exception messages out of API responses and logs: they can contain
             # credentials, file paths or private task data. Record only the error type.
             logger.error(
                 "Task execution failed for task_id=%s error_type=%s",
                 task_id,
-                type(exc).__name__,
+                error_type,
             )
             return {
                 "task_id": task_id,
