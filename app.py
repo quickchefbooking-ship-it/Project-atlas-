@@ -34,6 +34,7 @@ class StorageBackend:
     list_tasks = staticmethod(storage.list_tasks)
     update_task = staticmethod(storage.update_task)
     claim_task = staticmethod(storage.claim_task)
+    complete_task_with_evaluation = staticmethod(storage.complete_task_with_evaluation)
 
 
 manager = TaskManager(StorageBackend())
