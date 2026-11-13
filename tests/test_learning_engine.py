@@ -131,8 +131,22 @@ def test_evaluator_treats_missing_or_incompatible_ordered_values_as_failed_crite
 
     assert result["passed"] is False
     assert result["score"] == 0.0
-    assert result["reasons"] == ["field and expected value are not comparable"]
+    assert result["reasons"] == ["field is missing"]
     assert result["missing_requirements"] == ["count gt 3"]
+
+
+def test_evaluator_does_not_pass_not_equal_when_result_field_is_missing():
+    criteria = [{"field": "status", "operator": "!=", "expected_value": "complete"}]
+
+    missing = Evaluator.evaluate({}, criteria)
+    present = Evaluator.evaluate({"status": "pending"}, criteria)
+
+    assert missing["passed"] is False
+    assert missing["score"] == 0.0
+    assert missing["reasons"] == ["field is missing"]
+    assert missing["missing_requirements"] == ["status != complete"]
+    assert present["passed"] is True
+    assert present["score"] == 1.0
 
 
 def test_task_failure_does_not_expose_exception_details(tmp_path, monkeypatch, caplog):
