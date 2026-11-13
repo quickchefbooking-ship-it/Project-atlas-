@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import app
@@ -31,15 +32,11 @@ def test_executor_rejects_unsupported_code():
     "(-1) ** 0.5",
 ])
 def test_executor_rejects_out_of_range_non_finite_and_complex_results(expression):
-    import pytest
-
     with pytest.raises(ValueError):
         safe_execute_local({"description": expression})
 
 
 def test_executor_rejects_oversized_arithmetic_expression():
-    import pytest
-
     with pytest.raises(ValueError, match="maximum permitted length"):
         safe_execute_local({"description": "1" + " " * 256 + "+ 1"})
 
