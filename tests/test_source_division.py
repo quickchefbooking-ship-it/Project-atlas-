@@ -260,3 +260,44 @@ def test_huggingface_rag_note_is_imported_and_searchable(monkeypatch, tmp_path):
     results = retrieve("retrieval augmented generation model cards")
     assert results
     assert any("huggingface.co/docs" in item["uri"] for item in results)
+
+def test_json_batch_validates_entire_batch_before_writing(monkeypatch, tmp_path):
+    import json
+    from atlas_engine.source_adapters import import_json_batch
+
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("web", "Web Research", "web")
+    payload = json.dumps({
+        "schema_version": 1,
+        "documents": [
+            {"title": "Valid first", "uri": "https://example.org/one", "content": "First valid record."},
+            {"title": 42, "uri": "https://example.org/two", "content": "Invalid title type."},
+        ],
+    })
+
+    with pytest.raises(ValueError):
+        import_json_batch("web", payload)
+
+    assert storage.list_source_documents(limit=100) == []
+
+
+def test_adapter_rejects_credentials_embedded_in_source_url(monkeypatch, tmp_path):
+    from atlas_engine.source_adapters import SourceDocument, stage_adapter_results
+
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("web", "Web Research", "web")
+
+    class UnsafeAdapter:
+        source_id = "web"
+
+        def search(self, query, limit=10):
+            return [SourceDocument(
+                title="Credential URL",
+                uri="https://user:password@example.org/private",
+                content="Do not persist credentials in source URLs.",
+            )]
+
+    with pytest.raises(ValueError):
+        stage_adapter_results(UnsafeAdapter(), "credentials", limit=1)
+
+    assert storage.list_source_documents(limit=100) == []
