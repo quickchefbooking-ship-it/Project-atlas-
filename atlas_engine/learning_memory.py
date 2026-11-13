@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from uuid import uuid4
 
 from .storage import list_lessons, save_lesson, get_evaluations_for_task
 
@@ -17,7 +18,7 @@ class LearningMemory:
     @staticmethod
     def save_lesson_for_task(task_id: str, lesson_type: str, summary: str, source: str, evidence: Dict[str, Any], validated: bool = False) -> Dict[str, Any]:
         payload = {
-            "id": f"lesson-{task_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+            "id": f"lesson-{uuid4().hex}",
             "task_id": task_id,
             "lesson_type": lesson_type,
             "summary": summary,
