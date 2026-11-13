@@ -338,6 +338,26 @@ class TaskAPI:
 
             # Keep exception messages out of API responses and logs: they can contain
             # credentials, file paths or private task data. Record only the error type.
+            if callable(getattr(self.memory, "save_lesson_for_task", None)):
+                try:
+                    self.memory.save_lesson_for_task(
+                        task_id,
+                        "execution_failure",
+                        "Task execution failed; review the sanitised diagnostic type before reusing this pattern.",
+                        "execution-error",
+                        {
+                            "error_type": error_type,
+                            "evaluation_id": failure_record["id"],
+                        },
+                        validated=False,
+                    )
+                except Exception as lesson_error:
+                    # Learning is best-effort and must not alter the committed failure outcome.
+                    logger.warning(
+                        "Execution failure lesson persistence unavailable for task_id=%s error_type=%s",
+                        task_id,
+                        type(lesson_error).__name__,
+                    )
             logger.error(
                 "Task execution failed for task_id=%s error_type=%s",
                 task_id,
