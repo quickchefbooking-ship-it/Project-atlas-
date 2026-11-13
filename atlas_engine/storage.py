@@ -220,6 +220,51 @@ def _validate_lease_seconds(lease_seconds: int) -> int:
     return lease_seconds
 
 
+def _expire_retry_schedule_in_transaction(
+    conn: sqlite3.Connection, schedule: sqlite3.Row, now_text: str,
+) -> bool:
+    """Expire one due retry and terminalise its pending task atomically."""
+    cursor = conn.execute(
+        "UPDATE task_retry_schedules SET state = 'expired' "
+        "WHERE schedule_id = ? AND state = 'scheduled' AND deadline_at <= ?",
+        (schedule["schedule_id"], now_text),
+    )
+    if cursor.rowcount != 1:
+        return False
+    task_cursor = conn.execute(
+        """
+        UPDATE tasks
+        SET status = 'failed', score = 0.0, result_json = ?, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+        """,
+        (
+            json.dumps({
+                "error_type": "RetryDeadlineExpired",
+                "schedule_id": schedule["schedule_id"],
+            }, sort_keys=True),
+            now_text,
+            schedule["task_id"],
+        ),
+    )
+    if task_cursor.rowcount == 1:
+        conn.execute(
+            """
+            INSERT INTO evaluations (
+                id, task_id, passed, score, reasons_json,
+                missing_requirements_json, method, created_at
+            ) VALUES (?, ?, 0, 0.0, ?, ?, 'retry_expired', ?)
+            """,
+            (
+                f"evaluation-{os.urandom(12).hex()}",
+                schedule["task_id"],
+                json.dumps(["The scheduled retry deadline elapsed before another attempt was claimed."]),
+                json.dumps(["A new attempt requires a fresh, explicitly reviewed task."]),
+                now_text,
+            ),
+        )
+    return True
+
+
 def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60) -> Optional[Dict[str, Any]]:
     """Atomically claim a pending task and create its fenced worker lease.
 
@@ -268,10 +313,7 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
                 conn.rollback()
                 return None
             if schedule["deadline_at"] <= claimed_at:
-                conn.execute(
-                    "UPDATE task_retry_schedules SET state = 'expired' WHERE schedule_id = ? AND state = 'scheduled'",
-                    (schedule["schedule_id"],),
-                )
+                _expire_retry_schedule_in_transaction(conn, schedule, claimed_at)
                 conn.commit()
                 return None
             if schedule["due_at"] > claimed_at or int(schedule["next_attempt_number"]) != int(task["attempts"]) + 1:
@@ -915,19 +957,18 @@ def expire_task_retry_schedules(now: Optional[str] = None, limit: int = 100) -> 
         conn.execute("BEGIN IMMEDIATE")
         rows = conn.execute(
             """
-            SELECT schedule_id FROM task_retry_schedules
+            SELECT * FROM task_retry_schedules
             WHERE state = 'scheduled' AND deadline_at <= ?
             ORDER BY deadline_at ASC LIMIT ?
             """,
             (now_text, limit),
         ).fetchall()
-        if rows:
-            conn.executemany(
-                "UPDATE task_retry_schedules SET state = 'expired' WHERE schedule_id = ? AND state = 'scheduled'",
-                [(row["schedule_id"],) for row in rows],
-            )
+        expired_count = sum(
+            1 for row in rows
+            if _expire_retry_schedule_in_transaction(conn, row, now_text)
+        )
         conn.commit()
-        return len(rows)
+        return expired_count
     except Exception:
         conn.rollback()
         raise
@@ -980,15 +1021,50 @@ def request_task_cancellation(
         if task["status"] == "pending" and attempt_row["state"] == "failed":
             scheduled_retry = conn.execute(
                 """
-                SELECT schedule_id FROM task_retry_schedules
+                SELECT * FROM task_retry_schedules
                 WHERE task_id = ? AND originating_attempt_id = ? AND state = 'scheduled'
                 """,
                 (task_id, attempt_id),
             ).fetchone()
             if scheduled_retry is not None:
-                conn.execute(
-                    "UPDATE task_retry_schedules SET state = 'cancelled' WHERE schedule_id = ? AND state = 'scheduled'",
+                schedule_cursor = conn.execute(
+                    "UPDATE task_retry_schedules SET state = 'cancelled' "
+                    "WHERE schedule_id = ? AND state = 'scheduled'",
                     (scheduled_retry["schedule_id"],),
+                )
+                task_cursor = conn.execute(
+                    """
+                    UPDATE tasks
+                    SET status = 'failed', score = 0.0, result_json = ?, updated_at = ?
+                    WHERE id = ? AND status = 'pending'
+                    """,
+                    (
+                        json.dumps({
+                            "error_type": "TaskCancelled",
+                            "cancelled_before_retry": True,
+                            "schedule_id": scheduled_retry["schedule_id"],
+                        }, sort_keys=True),
+                        now,
+                        task_id,
+                    ),
+                )
+                if schedule_cursor.rowcount != 1 or task_cursor.rowcount != 1:
+                    conn.rollback()
+                    return None
+                conn.execute(
+                    """
+                    INSERT INTO evaluations (
+                        id, task_id, passed, score, reasons_json,
+                        missing_requirements_json, method, created_at
+                    ) VALUES (?, ?, 0, 0.0, ?, ?, 'cancelled', ?)
+                    """,
+                    (
+                        f"evaluation-{os.urandom(12).hex()}",
+                        task_id,
+                        json.dumps(["A scheduled retry was cancelled before another attempt began."]),
+                        json.dumps(["The task was cancelled before retry execution."]),
+                        now,
+                    ),
                 )
                 cancellation_state = "acknowledged"
             else:
@@ -1006,11 +1082,11 @@ def request_task_cancellation(
             """
             INSERT INTO task_cancellations (
                 cancellation_id, task_id, attempt_id, actor, reason,
-                state, requested_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                state, requested_at, acknowledged_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (cancellation_id, task_id, attempt_id, actor.strip(), reason.strip(),
-             cancellation_state, now),
+             cancellation_state, now, now if cancellation_state == "acknowledged" else None),
         )
         row = conn.execute(
             "SELECT * FROM task_cancellations WHERE cancellation_id = ?",
