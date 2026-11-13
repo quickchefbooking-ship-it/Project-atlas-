@@ -74,3 +74,11 @@ def test_source_catalog_is_persistent_and_does_not_expose_credentials(monkeypatc
     assert sources[0]["id"] == "github"
     assert "token" not in sources[0]
     assert "secret" not in sources[0]
+
+def test_source_metadata_rejects_credential_like_fields(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    with pytest.raises(ValueError):
+        register_source(
+            "unsafe-metadata", "Unsafe metadata", "test",
+            metadata={"nested": {"api_key": "must-not-be-stored"}},
+        )
