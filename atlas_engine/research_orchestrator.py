@@ -7,7 +7,6 @@ execute model-generated code.
 from __future__ import annotations
 
 import json
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -133,7 +132,7 @@ class ProfessorResearchOrchestrator:
         # Validate every capability and its arguments before persisting or executing
         # any step. An invalid later step must not leave a partially executed run.
         for step in ordered:
-            validate_research_capability_call(
+            definition, _arguments = validate_research_capability_call(
                 self.executor.registry,
                 ProposedCapabilityCall(
                     capability_id=step.capability_id,
@@ -141,6 +140,11 @@ class ProfessorResearchOrchestrator:
                     arguments=step.arguments,
                 ),
             )
+            missing_scopes = set(definition.required_scopes) - set(granted_scopes)
+            if missing_scopes:
+                raise PermissionError(
+                    "The caller does not hold the required research capability scope."
+                )
 
         run_id = f"research-{uuid4().hex}"
         started_at = _now()
