@@ -58,7 +58,7 @@ See [the Professor orchestration blueprint](docs/professor-orchestration.md) for
 
 ## Professor Source Division interface
 
-Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste`, `github-public` and `huggingface-public` sources are registered at application startup. The page can fetch bounded public GitHub repository metadata and Hugging Face model/dataset metadata through fixed HTTPS APIs. Fetches are GET-only, size/time limited and staged as pending/unverified; no private resources, model weights, credentials or write actions are accessed. The interface does not approve documents.
+Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste`, `github-public` and `huggingface-public` sources are registered at application startup. The page can fetch bounded public GitHub repository metadata, Hugging Face model/dataset metadata, and official UK legislation search results and XML text. Fetches are GET-only, size/time limited and staged as pending/unverified; no private resources, model weights, credentials or write actions are accessed. UK legislation searches use the National Archives' public legislation.gov.uk API and stage no more than five results. The interface does not approve documents.
 
 ## Useful endpoints
 
