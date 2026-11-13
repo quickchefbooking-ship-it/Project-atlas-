@@ -1,10 +1,35 @@
 import json
+import math
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import uuid4
 
 from .storage import save_lesson, search_validated_lessons
+
+
+MAX_LESSON_EVIDENCE_BYTES = 16 * 1024
+
+
+def _validate_json_value(value: Any, path: str = "evidence") -> None:
+    """Reject Python-only values before serialising persistent evidence."""
+    if value is None or type(value) in (str, bool, int):
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{path} contains a non-finite number.")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_json_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{path} contains a non-string object key.")
+            _validate_json_value(item, f"{path}.{key}")
+        return
+    raise ValueError(f"{path} contains a value that is not JSON-compatible.")
 
 
 class LearningMemory:
@@ -38,10 +63,18 @@ class LearningMemory:
         if not isinstance(evidence, dict):
             raise ValueError("Lesson evidence must be an object.")
 
+        _validate_json_value(evidence)
         try:
-            evidence_json = json.dumps(evidence, sort_keys=True, allow_nan=False)
-        except (TypeError, ValueError, OverflowError) as exc:
+            evidence_json = json.dumps(
+                evidence, sort_keys=True, allow_nan=False, separators=(",", ":")
+            )
+            evidence_size = len(evidence_json.encode("utf-8"))
+        except (TypeError, ValueError, OverflowError, UnicodeError) as exc:
             raise ValueError("Lesson evidence must contain only finite JSON values.") from exc
+        if evidence_size > MAX_LESSON_EVIDENCE_BYTES:
+            raise ValueError(
+                f"Lesson evidence exceeds the {MAX_LESSON_EVIDENCE_BYTES}-byte limit."
+            )
 
         payload = {
             "id": f"lesson-{uuid4().hex}",
