@@ -24,3 +24,28 @@ def test_private_routes_require_the_configured_api_key(monkeypatch):
     response = client.get("/tasks", headers={"X-API-Key": "test-secret"})
 
     assert response.status_code == 200
+
+
+def test_every_private_api_route_declares_the_api_key_dependency():
+    from fastapi.routing import APIRoute
+
+    intentionally_public = {
+        ("/health", "GET"),
+        ("/media/health", "GET"),
+        ("/professor/sources", "GET"),
+    }
+    unprotected = []
+    for route in app_module.app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        for method in route.methods or set():
+            if (route.path, method) in intentionally_public:
+                continue
+            has_api_key_dependency = any(
+                dependency.call is app_module.require_api_key
+                for dependency in route.dependant.dependencies
+            )
+            if not has_api_key_dependency:
+                unprotected.append(f"{method} {route.path}")
+
+    assert unprotected == []
