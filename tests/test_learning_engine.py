@@ -428,3 +428,50 @@ def test_failed_task_result_survives_failure_to_save_learning_lesson(tmp_path, m
     assert len(storage.get_evaluations_for_task(task.id)) == 1
     assert "OSError" in caplog.text
     assert "private storage location" not in caplog.text
+
+
+
+def test_task_outcome_persistence_failure_does_not_write_unpaired_terminal_status(
+    tmp_path, monkeypatch, caplog
+):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "outcome-persistence-failure.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Persistence failure",
+        "Do not mark complete without a durable evaluation",
+        [{"field": "value", "operator": "==", "expected_value": 7}],
+    )
+
+    class Executor:
+        @staticmethod
+        def execute(_payload):
+            return {"value": 7}
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            raise AssertionError("No failure lesson should be saved for a passing evaluation")
+
+    def fail_completion(*_args, **_kwargs):
+        raise OSError("private database path must not be logged")
+
+    monkeypatch.setattr(manager, "complete_with_evaluation", fail_completion)
+    api = TaskAPI(manager, Executor(), Evaluator(), Memory(), None, None)
+
+    response = api.run_task(task.id)
+
+    assert response["status"] == "outcome_unconfirmed"
+    assert "could not be persisted" in response["error"]
+    assert "private database path" not in str(response)
+    assert "private database path" not in caplog.text
+    assert "OSError" in caplog.text
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_evaluations_for_task(task.id) == []
