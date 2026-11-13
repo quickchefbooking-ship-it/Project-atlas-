@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .source_adapters import SourceDocument
 
@@ -26,10 +26,21 @@ class PublicSourceError(ValueError):
     """A public provider request failed or returned unusable data."""
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    """Reject redirects from fixed public API hosts instead of following them."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open_without_redirect(request):
+    return build_opener(_NoRedirect()).open(request, timeout=REQUEST_TIMEOUT_SECONDS)
+
+
 def _get_json(url: str) -> dict[str, Any]:
     request = Request(url, headers={"Accept": "application/vnd.github+json, application/json", "User-Agent": USER_AGENT})
     try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with _open_without_redirect(request) as response:
             body = response.read(MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
         if exc.code == 404:
