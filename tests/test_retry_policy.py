@@ -216,3 +216,75 @@ def test_retry_evaluator_rejects_non_finite_timing_values():
         evaluate_retry(**args, elapsed_seconds=float("nan"))
     with pytest.raises(ValueError):
         evaluate_retry(**args, elapsed_seconds=0, jitter_fraction=float("inf"))
+
+
+def test_capability_allowlist_is_frozen_from_mutable_input():
+    codes = {"temporary_unavailable"}
+    contract = CapabilityRetryContract(
+        capability_name="test.read",
+        version="1",
+        idempotent=True,
+        side_effects_declared=True,
+        duplicate_suppression_verified=True,
+        retryable_error_codes=codes,
+    )
+    codes.add("permission_denied")
+    assert contract.retryable_error_codes == frozenset({"temporary_unavailable"})
+    assert isinstance(contract.retryable_error_codes, frozenset)
+    decision = evaluate_retry(
+        RetryableExecutionError("permission_denied"),
+        attempt_number=1,
+        policy=RetryPolicy(max_attempts=3),
+        capability=contract,
+        elapsed_seconds=0,
+    )
+    assert not decision.eligible
+    assert decision.reason == "error_code_not_allowlisted"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"idempotent": "true"},
+        {"side_effects_declared": 1},
+        {"duplicate_suppression_verified": None},
+    ],
+)
+def test_capability_contract_requires_real_boolean_flags(kwargs):
+    with pytest.raises(ValueError, match="must be a boolean"):
+        CapabilityRetryContract(
+            capability_name="test.read",
+            version="1",
+            retryable_error_codes=frozenset({"temporary_unavailable"}),
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize("error_code", ["", " ", "not safe!", "x" * 65, [], None])
+def test_retryable_error_requires_bounded_identifier(error_code):
+    with pytest.raises(ValueError, match="1-64 character identifier"):
+        RetryableExecutionError(error_code)
+
+
+@pytest.mark.parametrize("attempt_number", [True, 1.5, "1", 0, -1])
+def test_retry_evaluator_requires_positive_integer_attempt_number(attempt_number):
+    with pytest.raises(ValueError, match="positive integer"):
+        evaluate_retry(
+            RetryableExecutionError("temporary_unavailable"),
+            attempt_number=attempt_number,
+            policy=RetryPolicy(max_attempts=3),
+            capability=_safe_contract(),
+            elapsed_seconds=0,
+        )
+
+
+def test_invalid_capability_object_fails_closed():
+    decision = evaluate_retry(
+        RetryableExecutionError("temporary_unavailable"),
+        attempt_number=1,
+        policy=RetryPolicy(max_attempts=3),
+        capability=object(),
+        elapsed_seconds=0,
+    )
+    assert not decision.eligible
+    assert decision.reason == "capability_not_proven_idempotent"
