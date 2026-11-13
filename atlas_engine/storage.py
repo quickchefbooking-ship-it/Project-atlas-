@@ -189,6 +189,68 @@ def save_evaluation(record: Dict[str, Any]) -> None:
         conn.close()
 
 
+def complete_task_with_evaluation(
+    task_id: str,
+    record: Dict[str, Any],
+    status: str,
+    result: Dict[str, Any],
+) -> bool:
+    """Persist a task's terminal state and evaluation as one SQLite transaction.
+
+    Only a currently running task can be completed. If either write fails, both
+    writes roll back so the task cannot appear complete without its evaluation.
+    """
+    if status not in {"passed", "failed"}:
+        raise ValueError("Task completion status must be passed or failed.")
+    if record.get("task_id") != task_id:
+        raise ValueError("Evaluation task ID does not match the task being completed.")
+    expected_status = "passed" if bool(record.get("passed")) else "failed"
+    if status != expected_status:
+        raise ValueError("Task status does not match the evaluation outcome.")
+
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?, score = ?, result_json = ?, updated_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (
+                status,
+                record["score"],
+                json.dumps(result, sort_keys=True),
+                record["created_at"],
+                task_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            return False
+
+        conn.execute(
+            """
+            INSERT INTO evaluations (
+                id, task_id, passed, score, reasons_json,
+                missing_requirements_json, method, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record["id"], record["task_id"], int(record["passed"]),
+                record["score"], record["reasons_json"],
+                record["missing_requirements_json"], record["method"], record["created_at"],
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def get_evaluations_for_task(task_id: str) -> list[Dict[str, Any]]:
     conn = get_connection()
     try:
