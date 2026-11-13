@@ -234,6 +234,41 @@ def list_lessons(limit: int = 50, validated_only: bool = False) -> list[Dict[str
         conn.close()
 
 
+def search_validated_lessons(keywords: list[str], limit: int = 5) -> list[Dict[str, Any]]:
+    """Return exact-token matches ranked across all validated lessons."""
+    if not isinstance(limit, int) or limit < 1 or limit > 50:
+        raise ValueError("Lesson retrieval limit must be between 1 and 50.")
+    if not isinstance(keywords, list):
+        raise ValueError("Lesson keywords must be a list.")
+
+    safe_keywords = sorted({
+        word.lower() for word in keywords
+        if isinstance(word, str) and word and all(char.isalnum() or char == "_" for char in word)
+    })[:64]
+    if not safe_keywords:
+        return []
+
+    patterns = ["*[^a-z0-9_]" + word + "[^a-z0-9_]*" for word in safe_keywords]
+    match_expression = " OR ".join(
+        "lower(' ' || summary || ' ' || source || ' ') GLOB ?" for _ in patterns
+    )
+    score_expression = " + ".join(
+        "CASE WHEN lower(' ' || summary || ' ' || source || ' ') GLOB ? THEN 1 ELSE 0 END"
+        for _ in patterns
+    )
+    columns = "id, task_id, lesson_type, summary, source, evidence_json, validated, created_at"
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT " + columns + " FROM lessons WHERE validated = 1 AND (" + match_expression + ") "
+            "ORDER BY (" + score_expression + ") DESC, created_at DESC, id DESC LIMIT ?",
+            tuple(patterns + patterns + [limit]),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def save_proposal(record: Dict[str, Any]) -> None:
     conn = get_connection()
     try:
