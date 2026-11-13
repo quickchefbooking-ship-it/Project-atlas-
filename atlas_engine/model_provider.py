@@ -67,7 +67,7 @@ class ProviderResponse(BaseModel):
 
 
 class ProviderDescriptor(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     provider_id: str
     model_id: str
