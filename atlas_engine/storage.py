@@ -58,6 +58,24 @@ def init_db() -> None:
                 FOREIGN KEY(task_id) REFERENCES tasks(id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sources (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, source_type TEXT NOT NULL,
+                access_mode TEXT NOT NULL CHECK(access_mode IN ('read_only','draft_only','approval_gated')),
+                enabled INTEGER NOT NULL DEFAULT 0, metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS source_documents (
+                id TEXT PRIMARY KEY, source_id TEXT NOT NULL, title TEXT NOT NULL,
+                uri TEXT NOT NULL, content TEXT NOT NULL, content_sha256 TEXT NOT NULL,
+                trust_level TEXT NOT NULL CHECK(trust_level IN ('unverified','reviewed','authoritative')),
+                state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
+                metadata_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                FOREIGN KEY(source_id) REFERENCES sources(id)
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -234,6 +252,98 @@ def update_proposal_status(proposal_id: str, status: str, approved_by: Optional[
             (status, approved_by, proposal_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def save_source(record: Dict[str, Any]) -> None:
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO sources (id, name, source_type, access_mode, enabled, metadata_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, source_type=excluded.source_type,
+                access_mode=excluded.access_mode, enabled=excluded.enabled,
+                metadata_json=excluded.metadata_json, updated_at=excluded.updated_at
+        """, (record["id"], record["name"], record["source_type"], record["access_mode"],
+              int(record.get("enabled", False)), record["metadata_json"],
+              record["created_at"], record["updated_at"]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_source(source_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        conn.close()
+
+
+def list_sources() -> list[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM sources ORDER BY name COLLATE NOCASE").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def save_source_document(record: Dict[str, Any]) -> Dict[str, Any]:
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO source_documents (
+                id, source_id, title, uri, content, content_sha256, trust_level,
+                state, metadata_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (record["id"], record["source_id"], record["title"], record["uri"],
+              record["content"], record["content_sha256"], record["trust_level"],
+              record["state"], record["metadata_json"], record["created_at"], record["updated_at"]))
+        conn.commit()
+        return dict(conn.execute("SELECT * FROM source_documents WHERE id = ?", (record["id"],)).fetchone())
+    finally:
+        conn.close()
+
+
+def get_source_document(document_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM source_documents WHERE id = ?", (document_id,)).fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        conn.close()
+
+
+def list_source_documents(approved_only: bool = False, limit: int = 100) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        if approved_only:
+            rows = conn.execute(
+                "SELECT * FROM source_documents WHERE state = 'approved' ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM source_documents ORDER BY updated_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def review_source_document(document_id: str, decision: str, reviewer: str, updated_at: str) -> bool:
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "UPDATE source_documents SET state = ?, updated_at = ? WHERE id = ? AND state = 'pending'",
+            (decision, updated_at, document_id),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
     finally:
         conn.close()
 
