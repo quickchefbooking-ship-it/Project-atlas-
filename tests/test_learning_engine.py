@@ -81,3 +81,27 @@ def test_task_run_persists_evaluation_and_increments_attempts(tmp_path, monkeypa
     assert len(evaluations) == 1
     assert evaluations[0]["passed"] == 1
     assert evaluations[0]["score"] == 1.0
+
+
+def test_private_api_routes_require_api_key(monkeypatch):
+    import app as service
+
+    monkeypatch.setattr(service, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(service, "API_KEY", "test-only-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    client = TestClient(service.app)
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/tasks").status_code == 401
+    assert client.get("/tasks", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/tasks", headers={"X-API-Key": "test-only-secret"}).status_code == 200
+
+
+def test_private_api_fails_closed_when_key_missing(monkeypatch):
+    import app as service
+
+    monkeypatch.setattr(service, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(service, "API_KEY", None)
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    response = TestClient(service.app).get("/dashboard")
+    assert response.status_code == 503
