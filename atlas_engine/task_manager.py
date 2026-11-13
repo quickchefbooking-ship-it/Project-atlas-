@@ -69,6 +69,13 @@ class TaskManager:
         """Claim a pending task using the storage backend's atomic compare-and-set."""
         return self.storage_backend.claim_task(task_id)
 
+    def complete_with_evaluation(self, task_id: str, record: dict[str, Any],
+                                 status: str, result: dict[str, Any]) -> bool:
+        """Persist the terminal outcome and evaluation through the configured backend."""
+        return self.storage_backend.complete_task_with_evaluation(
+            task_id, record, status, result
+        )
+
     def update_status(self, task_id: str, status: str, score: float | None = None,
                       result: dict[str, Any] | None = None,
                       increment_attempt: bool = False) -> Task | None:
@@ -141,7 +148,6 @@ class TaskAPI:
 
             # Commit the terminal task state and its evaluation together. A partial
             # write must never leave a terminal task without its audit record.
-            from .storage import complete_task_with_evaluation
             evaluation_record = {
                 "id": f"evaluation-{os.urandom(12).hex()}",
                 "task_id": task_id,
@@ -152,7 +158,7 @@ class TaskAPI:
                 "method": evaluation["method"],
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            if not complete_task_with_evaluation(task_id, evaluation_record, status, result):
+            if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result):
                 current = self.manager.get_task(task_id)
                 return {
                     "task_id": task_id,
