@@ -927,3 +927,69 @@ def test_execution_failure_persists_only_sanitised_unvalidated_lesson(tmp_path, 
     }
     assert "secret token" not in str(lessons)
     assert "private task content" not in str(lessons)
+
+
+def test_due_retry_scan_is_read_only_and_excludes_future_or_expired_work(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    due_task = manager.create_task("Due retry scan", "Expose due schedule only", [])
+    due_claim = storage.claim_task_with_lease(due_task.id, "worker-due", 30)
+    assert due_claim is not None
+    due_schedule = _schedule_retry(due_task.id, due_claim, due_seconds=20)
+
+    future_task = manager.create_task("Future retry scan", "Do not show early", [])
+    future_claim = storage.claim_task_with_lease(future_task.id, "worker-future", 30)
+    assert future_claim is not None
+    future_schedule = _schedule_retry(future_task.id, future_claim, due_seconds=40)
+
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET due_at = ? WHERE schedule_id = ?",
+            (past, due_schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    due = storage.list_due_task_retry_schedules()
+    assert [row["schedule_id"] for row in due] == [due_schedule["schedule_id"]]
+    assert storage.list_task_retry_schedules(due_task.id)[0]["state"] == "scheduled"
+    assert storage.list_task_retry_schedules(future_task.id)[0]["state"] == "scheduled"
+
+
+def test_due_retry_scan_and_expiry_routes_are_authenticated(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "retry-maintenance-route.db"))
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    storage.init_db()
+    task = app_module.manager.create_task("Retry maintenance route", "Inspect and expire schedules", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-route", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim, due_seconds=20)
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET due_at = ?, deadline_at = ? WHERE schedule_id = ?",
+            (past, past, schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = TestClient(app_module.app)
+    assert client.get("/tasks/retries/due").status_code == 401
+    assert client.post("/tasks/retries/expire").status_code == 401
+    headers = {"X-API-Key": "test-secret"}
+    due = client.get("/tasks/retries/due", headers=headers)
+    assert due.status_code == 200
+    assert due.json() == []
+    expired = client.post("/tasks/retries/expire", headers=headers)
+    assert expired.status_code == 200
+    assert expired.json()["expired"] == 1
+    assert app_module.manager.get_task(task.id).status == "failed"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "retry_expired"
