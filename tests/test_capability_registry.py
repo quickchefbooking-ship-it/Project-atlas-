@@ -131,3 +131,37 @@ def test_unsafe_retry_contract_is_rejected():
             retry_contract=contract,
             idempotency_key_scope="tenant+request",
         )
+
+
+def test_nested_remote_schema_references_and_non_finite_numbers_are_rejected():
+    with pytest.raises(ValueError, match="schema references"):
+        _definition(input_schema={
+            "type": "object",
+            "properties": {
+                "nested": {"type": "object", "properties": {
+                    "value": {"$ref": "https://example.invalid/schema.json"}
+                }}
+            },
+        })
+    with pytest.raises(ValueError, match="JSON-compatible"):
+        _definition(input_schema={
+            "type": "object",
+            "properties": {"limit": {"type": "number", "default": float("inf")}},
+        })
+
+
+def test_retry_contract_must_match_registered_capability_identity():
+    contract = CapabilityRetryContract(
+        capability_name="another.capability",
+        version="1",
+        idempotent=True,
+        side_effects_declared=True,
+        duplicate_suppression_verified=True,
+        verification_evidence="tests/test_capability_registry.py::test_provider_deduplicates",
+        retryable_error_codes=frozenset({"temporary_unavailable"}),
+    )
+    with pytest.raises(ValueError, match="identity must match"):
+        _definition(
+            retry_contract=contract,
+            idempotency_key_scope="tenant+request",
+        )
