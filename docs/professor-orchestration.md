@@ -48,6 +48,10 @@ Each arm must expose a narrow, typed contract. It must not receive every other a
 
 A task should move through explicit states such as **pending**, **planned**, **awaiting_approval**, **running**, **succeeded**, **failed** and **cancelled**. State transitions must be validated rather than assigned freely.
 
+### Task intake bounds
+
+The current task-creation boundary rejects blank titles/descriptions, limits titles to 200 characters and descriptions to 10,000 characters, and caps success criteria at 100 top-level entries and 16 KiB of UTF-8 JSON. Non-finite numeric values and criteria that cannot be serialized as finite JSON are rejected before persistence. These are application-level field bounds; they are not a substitute for an upstream HTTP request-body limit or a reverse-proxy rate/size policy.
+
 ## 4. Capability contract
 
 A future capability registry should require each arm to declare:
