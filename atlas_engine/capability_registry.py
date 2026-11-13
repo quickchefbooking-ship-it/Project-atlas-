@@ -116,7 +116,10 @@ class CapabilityDefinition:
         if self.retry_contract is not None:
             if not isinstance(self.retry_contract, CapabilityRetryContract):
                 raise ValueError("retry_contract must be a validated retry contract.")
-            if self.retry_contract.identity != (self.name.strip(), self.version.strip()):
+            if (
+                self.retry_contract.capability_name != self.name.strip()
+                or self.retry_contract.version != self.version.strip()
+            ):
                 raise ValueError("Retry contract identity must match the capability.")
             if not self.retry_contract.retry_is_safe:
                 raise ValueError("Retry contract does not prove safe duplicate suppression.")
