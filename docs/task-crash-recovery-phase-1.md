@@ -1,6 +1,6 @@
 # Phase 1 — Safe task crash recovery
 
-**Status:** implementation in progress on the existing AtlasOnePro recovery branch. Fenced leases, heartbeats, expiry marking, authenticated inspection routes and explicit recovery decisions are implemented and under CI validation. Distributed recovery and verified operator identity remain out of scope.
+**Status:** Phase 1 prototype implementation is complete on the existing AtlasOnePro recovery branch, pending final CI and code review. Fenced leases, heartbeats, expiry marking, authenticated inspection routes and explicit recovery decisions are implemented. Distributed recovery and verified operator identity remain out of scope.
 
 ## Objective
 

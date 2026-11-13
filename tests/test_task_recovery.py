@@ -270,3 +270,62 @@ def test_recovery_decision_cannot_be_applied_twice(tmp_path, monkeypatch):
         task.id, claim["attempt_id"], "mark_failed", "operator", "Duplicate decision"
     )
     assert len(storage.list_task_recovery_decisions(task.id)) == 1
+
+
+
+def test_recovery_lease_survives_database_reinitialization(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Restart recovery", "Lease records survive process restart", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-before-restart", 5)
+    assert claim is not None
+
+    storage.init_db()
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    recovered = storage.list_recovery_required_attempts()
+    assert len(recovered) == 1
+    assert recovered[0]["attempt_id"] == claim["attempt_id"]
+    assert manager.get_task(task.id).status == "running"
+
+
+def test_authenticated_recovery_decision_route_records_explicit_retry(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "recovery-decision-route.db"))
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    storage.init_db()
+    task = app_module.manager.create_task("Route retry", "Retry only after explicit safety checks", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-stopped", 5)
+    assert claim is not None
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_attempts SET lease_expires_at = ? WHERE attempt_id = ?",
+            (expired, claim["attempt_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert storage.mark_expired_task_attempts() == 1
+
+    client = TestClient(app_module.app)
+    headers = {"X-API-Key": "test-secret"}
+    response = client.post(
+        f"/tasks/{task.id}/recovery-decision",
+        headers=headers,
+        json={
+            "attempt_id": claim["attempt_id"],
+            "action": "retry",
+            "actor": "operator",
+            "reason": "Confirmed no external side effect occurred",
+            "retry_safe": True,
+            "side_effects_reconciled": True,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "recovery_decision_recorded"
+    assert response.json()["task"]["status"] == "pending"
+    assert response.json()["decisions"][0]["action"] == "retry"
