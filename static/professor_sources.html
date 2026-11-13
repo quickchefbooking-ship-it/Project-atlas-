@@ -74,6 +74,14 @@ a{color:#9dc9f8;overflow-wrap:anywhere}.warning{border-left:3px solid #d6a85b;pa
 <div id="fetchResult" class="status" role="status" aria-live="polite"></div>
 </section>
 <section class="panel">
+<h2>Fetch an approved public web page</h2>
+<p class="muted">One page at a time from a strict allowlist of public HTTPS documentation hosts (including GOV.UK, legislation.gov.uk, ICO, NIST, OWASP, Python, FastAPI, GitHub, Hugging Face and OpenAI). HTML/plain text only; redirects are revalidated; maximum 1 MB and 8 seconds. External text is explicitly untrusted and remains pending review.</p>
+<label for="webUrl">Public page URL</label>
+<input id="webUrl" type="url" autocomplete="url" placeholder="https://www.gov.uk/government/publications/...">
+<div class="row" style="margin-top:12px"><button id="fetchWeb">Fetch page &amp; stage for review</button><span class="muted">No unrestricted crawling, private hosts, downloads or write actions.</span></div>
+<div id="webResult" class="status" role="status" aria-live="polite"></div>
+</section>
+<section class="panel">
 <h2>Import copied research</h2>
 <p class="muted">Paste a JSON envelope. Each document needs a title, canonical source URL and text content. Optional metadata should identify publisher and retrieval date. Imports are validated as a complete batch and remain pending.</p>
 <label for="sourceId">Registered source</label>
@@ -182,6 +190,19 @@ a{color:#9dc9f8;overflow-wrap:anywhere}.warning{border-left:3px solid #d6a85b;pa
   el("refreshSources").addEventListener("click", async () => { try { await loadSources(); } catch(e) { setStatus("connection", e.message); } });
   el("refreshQueue").addEventListener("click", async () => { try { await loadQueue(); } catch(e) { setStatus("connection", e.message); } });
   el("state").addEventListener("change", async () => { try { await loadQueue(); } catch(e) { setStatus("connection", e.message); } });
+  el("fetchWeb").addEventListener("click", async () => {
+    try {
+      const url = el("webUrl").value.trim();
+      if (!url) throw new Error("Enter an approved public HTTPS page URL.");
+      const result = await request("/sources/fetch-url", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({url})
+      });
+      setStatus("webResult", result.count + " page staged as untrusted, pending review. Check the original source before relying on it.");
+      await loadQueue();
+    } catch(error) { setStatus("webResult", error.message); }
+  });
   el("import").addEventListener("click", async () => {
     try {
       const payload = JSON.parse(el("payload").value);
