@@ -13,7 +13,7 @@ This phase does not add distributed scheduling, multi-host coordination, arbitra
 1. **Default to no retry.** Existing tasks and executors retain one execution attempt unless a policy explicitly opts in.
 2. **Capability opt-in is mandatory.** Automatic retry requires a registered capability contract that declares itself idempotent, defines its idempotency-key scope, and has no undeclared side effects. A task description or caller-supplied boolean is not a capability contract.
 3. **Fail closed.** Unknown exceptions, validation errors, permission/authentication failures, policy denials, malformed inputs, and persistence errors are terminal or recovery-required; never classify them as retryable by default.
-4. **Only known transient failures may retry.** A capability may map a narrow, documented exception set to retryable failures. The classifier must not infer retryability from message text.
+4. **Only known transient failures may retry.** A capability may map a narrow, documented exception set to retryable failures. The classifier must not infer retryability from message text. The capability contract must retain a verifiable test-evidence reference; a boolean claim alone is insufficient.
 5. **Bound every dimension.** Enforce a hard maximum attempt count, per-attempt execution timeout, total task deadline, maximum back-off, and bounded jitter. Configuration is validated and capped server-side.
 6. **No retry while an earlier attempt is uncertain.** Expired leases remain `recovery_required`. A retry can be scheduled only after the old attempt is terminal/reconciled and the idempotency contract guarantees duplicate suppression.
 7. **Fence all state changes.** Heartbeats, cancellation acknowledgements, retry scheduling, and completion must match the current attempt ID, worker ID and fencing token. A stale worker cannot complete or overwrite a newer attempt.
@@ -108,10 +108,10 @@ Every transition must be conditional on the current state and fencing token. Mig
 | Attempt ceiling | No more than configured attempts, including under concurrent claims and repeated scheduler scans |
 | Back-off | Formula, cap, jitter bounds, immutable policy snapshot and persisted due time/deadline are validated; claims cannot start early or after expiry |
 | Deadline/timeout | No attempt begins after total deadline; timeout is recorded without leaking exception details |
-| Idempotency | Missing/invalid capability declaration blocks retry; duplicate idempotency key cannot cause a second side effect in the fake provider |
+| Idempotency | Missing/invalid capability declaration or missing test-evidence reference blocks retry; duplicate idempotency key cannot cause a second side effect in the fake provider |
 | Recovery | Expired lease remains held; no retry until prior outcome is reconciled; stale fencing token cannot schedule or complete |
 | Cancellation | Request persists across restart; worker acknowledges at a safe point; claim/cancel race has one deterministic winner |
-| Cancellation safety | Cancelled task or scheduled retry is not re-claimed; too-late and requires-recovery states are distinguishable |
+| Cancellation safety | Cancelled task or scheduled retry is terminalised and not re-claimed; too-late and requires-recovery states are distinguishable |
 | Audit/atomicity | Retry/cancel decisions survive restart; failed transaction leaves no partial terminal state or audit record |
 | API security | New routes require existing API-key dependency; no sensitive exception text or secrets in responses/logs |
 | Regression | All Phase 1 tests remain green; no change to main, production, paid providers or external write integrations |
@@ -128,10 +128,10 @@ The initial policy-only foundation is implemented in `atlas_engine/retry_policy.
 
 Retry scheduling now has durable, fenced storage primitives, but is not enabled for the existing executor:
 
-- SQLite stores a retry schedule only when a trusted internal caller supplies a capability contract with explicit idempotency, declared side effects, verified duplicate suppression and an allowlisted transient error code.
+- SQLite stores a retry schedule only when a trusted internal caller supplies a capability contract with explicit idempotency, declared side effects, verified duplicate suppression, an allowlisted transient error code and a non-empty test-evidence reference.
 - Scheduling atomically finalises the failed attempt, persists its evaluation, returns the task to pending and stores a policy snapshot, idempotency key, next-attempt number, due time and hard deadline.
 - Claims are blocked before due time, after the deadline, after schedule cancellation/expiry, or when the next attempt number does not match. A due claim atomically consumes the schedule and links it to the new fenced attempt.
-- Expired schedules become `expired`; they are not silently requeued. A cancellation request against a pending scheduled retry cancels the schedule so it cannot be claimed.
+- Expired schedules become `expired` and atomically terminalise the pending task with an evaluation; they are not silently requeued. A cancellation request against a pending scheduled retry cancels the schedule and terminalises the task with a cancellation evaluation so it cannot be claimed or left pending.
 - No public endpoint or current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
 
 Cancellation is now a durable, cooperative runtime path for the current synchronous local executor:
