@@ -363,3 +363,192 @@ def test_task_api_does_not_report_failure_when_failure_persistence_raises(tmp_pa
     assert len(attempts) == 1
     assert attempts[0]["state"] == "active"
     assert storage.get_evaluations_for_task(task.id) == []
+
+
+def test_cancellation_schema_is_idempotent_and_survives_reinitialization(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Cancellation schema", "Persist cancel request", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    first = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Stop this task"
+    )
+    assert first is not None
+    storage.init_db()
+    restored = storage.get_task_cancellation(task.id, claim["attempt_id"])
+    assert restored is not None
+    assert restored["cancellation_id"] == first["cancellation_id"]
+    assert restored["state"] == "requested"
+
+
+def test_cancellation_request_requires_live_attempt_and_is_idempotent(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Cancellation request", "Only current worker can be cancelled", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    first = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Requested stop"
+    )
+    second = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Duplicate request"
+    )
+    assert first["cancellation_id"] == second["cancellation_id"]
+    assert second["state"] == "requested"
+    assert storage.request_task_cancellation(
+        task.id, "unknown-attempt", "operator", "Unknown attempt"
+    ) is None
+
+
+def test_cancellation_wins_completion_race_and_acknowledges_atomically(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Cancellation race", "Cancellation must beat task commit", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    cancellation = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Cancel before commit"
+    )
+    assert cancellation["state"] == "requested"
+
+    record = {
+        "id": "evaluation-race",
+        "task_id": task.id,
+        "passed": True,
+        "score": 1.0,
+        "reasons_json": "[]",
+        "missing_requirements_json": "[]",
+        "method": "test",
+        "created_at": storage.now_isoformat(),
+    }
+    assert not storage.complete_task_with_evaluation(
+        task.id, record, "passed", {"value": 1}, attempt=claim
+    )
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "active"
+
+    cancelled_record = {
+        "id": "evaluation-cancelled",
+        "task_id": task.id,
+        "method": "cancelled",
+    }
+    assert storage.acknowledge_task_cancellation(task.id, claim, cancelled_record)
+    assert manager.get_task(task.id).status == "failed"
+    assert manager.get_task(task.id).result == {"error_type": "TaskCancelled"}
+    assert storage.get_task_attempts(task.id)[0]["error_type"] == "TaskCancelled"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "failed"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "cancelled"
+    assert storage.get_task_cancellation(task.id, claim["attempt_id"])["state"] == "acknowledged"
+
+    # Even an accidental status reset cannot revive a cancelled task.
+    storage.update_task(task.id, {"status": "pending", "updated_at": storage.now_isoformat()})
+    assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
+
+
+def test_stale_worker_cannot_acknowledge_cancellation(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Stale cancellation", "Fence cancellation acknowledgements", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    storage.request_task_cancellation(task.id, claim["attempt_id"], "operator", "Stop")
+    stale = {**claim, "fencing_token": claim["fencing_token"] + 1}
+    assert not storage.acknowledge_task_cancellation(
+        task.id, stale,
+        {"id": "evaluation-stale", "task_id": task.id, "method": "cancelled"},
+    )
+    assert storage.get_task_cancellation(task.id, claim["attempt_id"])["state"] == "requested"
+    assert manager.get_task(task.id).status == "running"
+
+
+def test_expired_worker_moves_pending_cancellation_to_recovery_required(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Expired cancellation", "Do not claim cancellation without worker proof", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-lost", 5)
+    assert claim is not None
+    storage.request_task_cancellation(task.id, claim["attempt_id"], "operator", "Stop")
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    assert storage.get_task_cancellation(task.id, claim["attempt_id"])["state"] == "requires_recovery"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "recovery_required"
+    assert manager.get_task(task.id).status == "running"
+
+
+def test_task_api_acknowledges_cancellation_after_local_executor_safe_point(tmp_path, monkeypatch):
+    from atlas_engine.task_manager import TaskAPI
+    from atlas_engine.evaluator import Evaluator
+
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Cooperative cancel", "Cancellation during bounded local work", [])
+
+    class Executor:
+        def execute(self, _payload):
+            attempt = storage.get_task_attempts(task.id)[0]
+            storage.request_task_cancellation(
+                task.id, attempt["attempt_id"], "operator", "Stop after current safe unit"
+            )
+            return {"value": "computed-but-not-committed"}
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+    api = TaskAPI(manager, Executor(), Evaluator(), Memory(), None, None)
+    response = api.run_task(task.id)
+    assert response["status"] == "cancelled"
+    assert storage.get_task_cancellation(task.id)["state"] == "acknowledged"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "failed"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "cancelled"
+
+
+def test_completed_task_cannot_be_cancelled_after_commit(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Too late cancellation", "Completion wins if committed first", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    record = {
+        "id": "evaluation-complete-first",
+        "task_id": task.id,
+        "passed": True,
+        "score": 1.0,
+        "reasons_json": "[]",
+        "missing_requirements_json": "[]",
+        "method": "test",
+        "created_at": storage.now_isoformat(),
+    }
+    assert storage.complete_task_with_evaluation(
+        task.id, record, "passed", {"value": 1}, attempt=claim
+    )
+    assert storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Too late"
+    ) is None
+
+
+def test_cancellation_route_is_authenticated_and_persists_request(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "cancellation-route.db"))
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    storage.init_db()
+    task = app_module.manager.create_task("API cancellation", "Authenticated cancellation", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-api", 30)
+    assert claim is not None
+
+    client = TestClient(app_module.app)
+    payload = {
+        "attempt_id": claim["attempt_id"],
+        "actor": "operator",
+        "reason": "User requested cancellation",
+    }
+    assert client.post(f"/tasks/{task.id}/cancel", json=payload).status_code == 401
+    response = client.post(
+        f"/tasks/{task.id}/cancel",
+        headers={"X-API-Key": "test-secret"},
+        json=payload,
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "requested"
+    assert client.get(
+        f"/tasks/{task.id}/cancellation",
+        headers={"X-API-Key": "test-secret"},
+    ).json()["state"] == "requested"
