@@ -378,8 +378,15 @@ def review_source_document(document_id: str, decision: str, reviewer: str, updat
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "UPDATE source_documents SET state = ?, reviewed_by = ?, updated_at = ? WHERE id = ? AND state = 'pending'",
-            (decision, reviewer, updated_at, document_id),
+            """
+            UPDATE source_documents
+            SET state = ?,
+                trust_level = CASE WHEN ? = 'approved' THEN 'reviewed' ELSE trust_level END,
+                reviewed_by = ?,
+                updated_at = ?
+            WHERE id = ? AND state = 'pending'
+            """,
+            (decision, decision, reviewer, updated_at, document_id),
         )
         conn.commit()
         return cursor.rowcount == 1
