@@ -2,6 +2,7 @@ import hmac
 import json
 from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import FastAPI, Header, HTTPException, status, Depends
@@ -78,7 +79,7 @@ class GenerateVideoRequest(BaseModel):
 @app.get("/professor/sources", include_in_schema=False)
 def professor_sources_ui():
     """Serve the static Source Division operator interface; data remains API-key protected."""
-    return FileResponse("static/professor_sources.html", media_type="text/html")
+    return FileResponse(Path(__file__).resolve().parent / "static" / "professor_sources.html", media_type="text/html")
 
 
 @app.get("/health")
