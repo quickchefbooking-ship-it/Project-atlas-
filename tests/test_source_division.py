@@ -96,3 +96,50 @@ def test_bundled_knowledge_is_copied_into_local_library_and_retrievable(monkeypa
     # Re-importing the same bundle must not create duplicate records.
     assert load_bundled_knowledge() == 2
     assert len(storage.list_source_documents(approved_only=True, limit=100)) == 2
+
+def test_bundled_library_discovery_accepts_only_explicit_curated_frontmatter(tmp_path):
+    from atlas_engine.source_division import _bundled_document_metadata
+
+    curated = tmp_path / "curated.md"
+    curated.write_text(
+        """---
+id: knowledge-test-001
+title: "Test knowledge note"
+division: "engineering"
+source:
+  publisher: "Official Docs"
+  url: "https://example.org/guide"
+  retrieved: "2026-11-13"
+review_status: "curated-reference"
+---
+
+A concise, reviewed engineering note.
+""",
+        encoding="utf-8",
+    )
+    unreviewed = tmp_path / "unreviewed.md"
+    unreviewed.write_text(
+        """---
+id: knowledge-test-002
+title: "Unreviewed note"
+division: "engineering"
+source:
+  publisher: "Unknown"
+  url: "https://example.org/unreviewed"
+review_status: "pending"
+---
+
+Do not import this automatically.
+""",
+        encoding="utf-8",
+    )
+    without_metadata = tmp_path / "plain.md"
+    without_metadata.write_text("# Just a README", encoding="utf-8")
+
+    parsed = _bundled_document_metadata(curated)
+
+    assert parsed["id"] == "knowledge-test-001"
+    assert parsed["publisher"] == "Official Docs"
+    assert parsed["uri"] == "https://example.org/guide"
+    assert _bundled_document_metadata(unreviewed) is None
+    assert _bundled_document_metadata(without_metadata) is None
