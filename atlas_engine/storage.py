@@ -406,6 +406,7 @@ def complete_task_with_evaluation(
         conn.execute("BEGIN IMMEDIATE")
         if attempt is not None:
             lease_now = now_isoformat()
+            attempt_state = "completed" if status == "passed" else "failed"
             lease_cursor = conn.execute(
                 """
                 UPDATE task_attempts

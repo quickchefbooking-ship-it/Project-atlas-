@@ -134,7 +134,7 @@ def test_task_api_completes_lease_and_evaluation_atomically(tmp_path, monkeypatc
     assert response["status"] == "passed"
     attempts = storage.get_task_attempts(task.id)
     assert len(attempts) == 1
-    assert attempts[0]["state"] == "passed"
+    assert attempts[0]["state"] == "completed"
     assert attempts[0]["finished_at"] is not None
     assert len(storage.get_evaluations_for_task(task.id)) == 1
 
