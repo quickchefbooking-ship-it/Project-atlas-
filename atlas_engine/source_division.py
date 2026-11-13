@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -322,7 +323,7 @@ def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
         for term, frequency in frequencies.items():
             df = document_frequency[term]
             inverse_document_frequency = max(
-                0.0, __import__("math").log(1.0 + (document_count - df + 0.5) / (df + 0.5))
+                0.0, math.log(1.0 + (document_count - df + 0.5) / (df + 0.5))
             )
             denominator = frequency + k1 * (1.0 - b + b * length / average_length)
             score += inverse_document_frequency * (frequency * (k1 + 1.0) / denominator)
