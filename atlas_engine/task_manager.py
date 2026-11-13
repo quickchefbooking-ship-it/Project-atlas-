@@ -162,10 +162,15 @@ class TaskAPI:
             phase = "persistence"
             if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result):
                 current = self.manager.get_task(task_id)
+                logger.error(
+                    "Task completion was not committed for task_id=%s current_status=%s",
+                    task_id,
+                    current.status if current is not None else "unavailable",
+                )
                 return {
                     "task_id": task_id,
-                    "status": current.status if current is not None else "unavailable",
-                    "error": "Task completion was not committed because the task is no longer running.",
+                    "status": "outcome_unconfirmed",
+                    "error": "Task completion was not committed. Its final state requires recovery.",
                 }
 
             if not evaluation["passed"]:
@@ -222,8 +227,16 @@ class TaskAPI:
                 )
                 if not committed:
                     current = self.manager.get_task(task_id)
-                    if current is not None and current.status == "running":
-                        self.manager.update_status(task_id, "failed")
+                    logger.error(
+                        "Task failure outcome was not committed for task_id=%s current_status=%s",
+                        task_id,
+                        current.status if current is not None else "unavailable",
+                    )
+                    return {
+                        "task_id": task_id,
+                        "status": "outcome_unconfirmed",
+                        "error": "Task failure could not be persisted with its evaluation. Its final state requires recovery.",
+                    }
             except Exception as persistence_error:
                 logger.error(
                     "Task failure outcome persistence failed for task_id=%s error_type=%s",
