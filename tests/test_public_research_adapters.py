@@ -100,8 +100,8 @@ def test_authenticated_fetch_stages_github_metadata_pending(monkeypatch, tmp_pat
     )
     assert response.status_code == 200
     assert response.json()["status"] == "staged_for_review"
-    assert response.json()["document"]["state"] == "pending"
-    assert response.json()["document"]["trust_level"] == "unverified"
+    assert response.json()["documents"][0]["state"] == "pending"
+    assert response.json()["documents"][0]["trust_level"] == "unverified"
     assert storage.get_source("github-public") is not None
 
 
@@ -122,8 +122,8 @@ def test_huggingface_fetch_stages_dataset_metadata(monkeypatch, tmp_path):
         json={"provider": "huggingface", "identifier": "demo/data", "resource_type": "dataset"},
     )
     assert response.status_code == 200
-    assert response.json()["document"]["source_id"] == "huggingface-public"
-    assert response.json()["document"]["state"] == "pending"
+    assert response.json()["documents"][0]["source_id"] == "huggingface-public"
+    assert response.json()["documents"][0]["state"] == "pending"
 
 
 def test_fetch_rejects_provider_resource_mismatch(monkeypatch, tmp_path):
