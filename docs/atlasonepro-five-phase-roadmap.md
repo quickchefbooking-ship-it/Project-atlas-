@@ -125,12 +125,12 @@ Acceptance gates:
 
 ## Immediate next actions
 
-1. Complete a focused review of the Phase 1/2 combined diff, especially cancellation-versus-completion ordering, expired lease recovery, and the task/evaluation/attempt transaction boundaries.
-2. Keep the current shared API-key limitation explicit: actor labels are not verified identity, and this prototype is not suitable for public multi-user use.
-3. Add a registered, versioned capability registry and immutable per-attempt policy snapshots before any runtime retry scheduling is considered.
-4. Add durable retry-decision and due-time records with restart/concurrency tests, but leave the scheduler and automatic retries disabled until idempotency and reconciliation evidence are independently enforceable.
+1. Complete a focused review of the Phase 1/2 combined diff, especially cancellation-versus-completion ordering, retry due/deadline claims, expired lease recovery, and task/evaluation/attempt transaction boundaries.
+2. Keep the shared API-key limitation explicit: actor labels and capability evidence references are not verified identity or independent proof; this prototype is not suitable for public multi-user use.
+3. Build a trusted, versioned capability registry from application-owned definitions. It must verify test evidence, bind retryable error codes and derive idempotency-key scope; task input must never register or modify capabilities.
+4. Only after registry verification is enforceable, design a disabled-by-default due-work scheduler with explicit operational controls and restart/concurrency tests. Existing due-time claim gates remain manual and do not auto-dispatch work.
 5. Revisit per-attempt timeout semantics only with an executor that can stop safely or prove side-effect reconciliation; do not imply a thread timeout can undo work.
-6. Run both PR and push CI after each meaningful change and record exact branch-head evidence. Do not start Phase 3 until every Phase 2 acceptance gate passes.
+6. Continue persistent-memory/evaluation regression coverage and record exact PR/push CI evidence after each meaningful change. Do not start Phase 3 until every Phase 2 acceptance gate passes.
 
 ## Current project references
 
