@@ -116,6 +116,18 @@ Every transition must be conditional on the current state and fencing token. Mig
 | API security | New routes require existing API-key dependency; no sensitive exception text or secrets in responses/logs |
 | Regression | All Phase 1 tests remain green; no change to main, production, paid providers or external write integrations |
 
+## Prototype implementation status
+
+The initial policy-only foundation is implemented in `atlas_engine/retry_policy.py` and covered by `tests/test_retry_policy.py`:
+
+- `RetryPolicy` enforces server-side ceilings and finite numeric settings.
+- `RetryableExecutionError` accepts only bounded, explicit error-code identifiers.
+- `CapabilityRetryContract` requires actual boolean declarations and freezes the error-code allowlist into a `frozenset`, so a caller cannot mutate an already-validated contract.
+- `evaluate_retry` requires a positive integer attempt number and fails closed for unknown errors, invalid capability objects, cancellation, lease uncertainty and persistence failure.
+- The evaluator computes a bounded delay only; it does not sleep, schedule, claim or execute another attempt.
+
+This is not a runtime retry system. There is no durable retry schedule, cancellation table, worker cancellation checkpoint, capability registry or scheduler yet. The default policy remains one attempt, and the local executor is not opted in.
+
 ## Exit gate
 
 Phase 2 is complete only when all matrix rows have passing automated tests, both GitHub Actions paths are green on the same branch head, and the PR records exact evidence. Passing tests do not authorise merge, deployment or production release.
