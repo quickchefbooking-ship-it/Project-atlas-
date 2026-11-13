@@ -141,3 +141,32 @@ The following are confirmed from the recovery branch source files and must be tr
 - Existing source adapters are bounded and specific (public GitHub/Hugging Face metadata, UK legislation, Crossref and allowlisted public pages); they are not a general web search engine or unrestricted crawler. Benchmark scope must match capabilities actually enabled.
 
 This inspection is source review only; no runtime execution or CI result is claimed by this update.
+
+
+## Engineering progress — 2026-11-13
+
+The following implementation has been added to the isolated feature branch after the baseline review:
+
+- `atlas_engine/model_provider.py`: a provider-neutral request/response contract, strict schemas, response hashing, bounded request/output sizes, and a deterministic fixture provider. The fixture explicitly identifies itself as a mock and performs no inference or network access. No external model adapter is implemented.
+- `atlas_engine/research_plan.py`: versioned plan and step schemas, bounded step/call/time budgets, explicit capability version pinning, and dependency graph validation including cycle rejection.
+- `atlas_engine/research_capabilities.py`: trusted, code-owned definitions for five bounded read-only research capabilities, plus typed argument validation. Definitions align with the existing capability registry rather than duplicating it.
+- `atlas_engine/research_capability_executor.py`: an internal executor for existing bounded public metadata adapters and approved local knowledge retrieval. It requires an immutable scope set, checks the trusted registry, stages external material as pending/unverified, and returns approved local material separately. It is not exposed as an HTTP route and is not yet connected to a model-backed planner.
+- Focused tests have been added for provider contracts, plan validation, capability schemas and scoped execution.
+- The GitHub Actions test workflow now includes the `professor/**` push branch pattern so future work on this isolated branch is eligible for the existing test workflow.
+
+### Verification status
+
+A local isolated run of the initial provider and research-plan contract tests completed with 11 passing tests before the subsequent capability-registry/executor integration and capability-version fixture updates. This is not a full repository test run and does not verify the latest complete branch state.
+
+The GitHub workflow-run lookup returned no run for the latest feature-branch commits. Therefore CI for the current head is **not yet confirmed**. Do not describe the branch as fully tested.
+
+### Remaining integration blockers
+
+- The provider contract currently has only a deterministic mock; there is no real model adapter or live inference.
+- The research plan and capability executor are not yet connected through a persisted orchestration lifecycle.
+- The current capability executor is an internal service and is not yet wired to verified user identity, tenant permissions, or a public API route.
+- Evidence is staged as pending/unverified for external sources. A separate evidence review/synthesis policy is still required; pending external material must not be promoted to reusable knowledge.
+- Research-run, plan, step and evidence-ledger persistence and replay are not yet implemented.
+- Full current-branch CI and the complete existing test suite must pass before the independent research experiment is attempted.
+
+No paid AI provider has been enabled. No production change, merge or deployment has been made.
