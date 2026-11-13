@@ -121,6 +121,7 @@ class TaskAPI:
         task = self.manager.get_task(task_id)
         if task is None:
             return {"task_id": task_id, "status": "unavailable", "error": "Task is unavailable."}
+        phase = "execution"
         try:
             # Retrieve only validated lessons; pass them as context to capable executors.
             # The restricted local arithmetic executor deliberately ignores this context.
