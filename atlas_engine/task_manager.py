@@ -63,7 +63,8 @@ class TaskManager:
         return [self.get_task(row["id"]) for row in rows]
 
     def update_status(self, task_id: str, status: str, score: float | None = None,
-                      result: dict[str, Any] | None = None) -> Task | None:
+                      result: dict[str, Any] | None = None,
+                      increment_attempt: bool = False) -> Task | None:
         task = self.get_task(task_id)
         if task is None:
             return None
@@ -72,6 +73,8 @@ class TaskManager:
             updates["score"] = score
         if result is not None:
             updates["result_json"] = json.dumps(result, sort_keys=True)
+        if increment_attempt:
+            updates["attempts"] = task.attempts + 1
         self.storage_backend.update_task(task_id, updates)
         return self.get_task(task_id)
 
@@ -81,7 +84,7 @@ class TaskAPI:
         self.memory, self.improvement, self.tester = memory, improvement, tester
 
     def health(self):
-        return {"status": "ok", "service": "Project Atlas Learning Engine"}
+        return {"status": "ok", "service": "AtlasOnePro Professor Core"}
 
     def create_task(self, payload: TaskInput):
         return self.manager.create_task(payload.title, payload.description, payload.success_criteria).model_dump()
@@ -93,11 +96,25 @@ class TaskAPI:
         task = self.manager.get_task(task_id)
         if task is None:
             return {"error": "Task not found"}
-        self.manager.update_status(task_id, "running")
+        self.manager.update_status(task_id, "running", increment_attempt=True)
         try:
             result = self.executor.execute({"title": task.title, "description": task.description})
             evaluation = self.evaluator.evaluate(result, task.success_criteria)
             status = "passed" if evaluation["passed"] else "failed"
+
+            # Persist every evaluation so the dashboard and learning loop can audit outcomes.
+            from .storage import save_evaluation
+            save_evaluation({
+                "id": f"evaluation-{os.urandom(12).hex()}",
+                "task_id": task_id,
+                "passed": evaluation["passed"],
+                "score": evaluation["score"],
+                "reasons_json": json.dumps(evaluation["reasons"], sort_keys=True),
+                "missing_requirements_json": json.dumps(evaluation["missing_requirements"], sort_keys=True),
+                "method": evaluation["method"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
             self.manager.update_status(task_id, status, evaluation["score"], result)
             if not evaluation["passed"]:
                 self.memory.save_lesson_for_task(task_id, "failure", "Task failed its success criteria.",
