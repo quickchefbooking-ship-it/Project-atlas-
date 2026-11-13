@@ -1494,6 +1494,119 @@ def review_source_document(document_id: str, decision: str, reviewer: str, updat
         conn.close()
 
 
+
+def get_learning_overview(recent_limit: int = 10) -> Dict[str, Any]:
+    """Return bounded, read-only learning observability derived from persisted records."""
+    if not isinstance(recent_limit, int) or recent_limit < 1 or recent_limit > 50:
+        raise ValueError("Recent limit must be between 1 and 50.")
+    conn = get_connection()
+    try:
+        task_rows = conn.execute(
+            "SELECT status, COUNT(*) AS total FROM tasks GROUP BY status ORDER BY status"
+        ).fetchall()
+        evaluation_rows = conn.execute(
+            "SELECT method, COUNT(*) AS total, SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) AS passed "
+            "FROM evaluations GROUP BY method ORDER BY method"
+        ).fetchall()
+        lesson_rows = conn.execute(
+            "SELECT validated, COUNT(*) AS total FROM lessons GROUP BY validated ORDER BY validated"
+        ).fetchall()
+        recent_lessons = conn.execute(
+            "SELECT id, task_id, lesson_type, summary, source, validated, created_at "
+            "FROM lessons ORDER BY created_at DESC, id DESC LIMIT ?",
+            (recent_limit,),
+        ).fetchall()
+        recent_evaluations = conn.execute(
+            "SELECT id, task_id, passed, score, method, created_at "
+            "FROM evaluations ORDER BY created_at DESC, id DESC LIMIT ?",
+            (recent_limit,),
+        ).fetchall()
+
+        task_counts = {row["status"]: row["total"] for row in task_rows}
+        method_counts = {
+            row["method"]: {
+                "total": row["total"],
+                "passed": row["passed"] or 0,
+                "failed": row["total"] - (row["passed"] or 0),
+            }
+            for row in evaluation_rows
+        }
+        deterministic = method_counts.get("deterministic", {"total": 0, "passed": 0, "failed": 0})
+        lesson_counts = {
+            "unvalidated": 0,
+            "validated": 0,
+        }
+        for row in lesson_rows:
+            lesson_counts["validated" if row["validated"] else "unvalidated"] = row["total"]
+
+        return {
+            "generated_at": now_isoformat(),
+            "window": "all persisted records in the configured local SQLite database",
+            "tasks": {
+                "total": sum(task_counts.values()),
+                "by_status": task_counts,
+            },
+            "evaluations": {
+                "total": sum(item["total"] for item in method_counts.values()),
+                "by_method": method_counts,
+                "deterministic_pass_rate": (
+                    {
+                        "numerator": deterministic["passed"],
+                        "denominator": deterministic["total"],
+                        "value": round(deterministic["passed"] / deterministic["total"], 4),
+                        "method": "deterministic",
+                    }
+                    if deterministic["total"]
+                    else {
+                        "numerator": 0,
+                        "denominator": 0,
+                        "value": None,
+                        "method": "deterministic",
+                        "status": "not_measured",
+                    }
+                ),
+            },
+            "lessons": {
+                "total": sum(lesson_counts.values()),
+                "by_review_state": lesson_counts,
+                "reviewer_identity_verified": False,
+            },
+            "improvement": {
+                "status": "not_measured",
+                "reason": "Lesson-use attribution and comparable baseline/follow-up cohorts are not recorded.",
+            },
+            "recent_lessons": [
+                {
+                    "id": row["id"],
+                    "task_id": row["task_id"],
+                    "lesson_type": row["lesson_type"],
+                    "summary": row["summary"][:240],
+                    "source": row["source"],
+                    "validated": bool(row["validated"]),
+                    "created_at": row["created_at"],
+                }
+                for row in recent_lessons
+            ],
+            "recent_evaluations": [
+                {
+                    "id": row["id"],
+                    "task_id": row["task_id"],
+                    "passed": bool(row["passed"]),
+                    "score": row["score"],
+                    "method": row["method"],
+                    "created_at": row["created_at"],
+                }
+                for row in recent_evaluations
+            ],
+            "limitations": [
+                "Reviewer labels are not verified identity.",
+                "Lesson retrieval use is not attributed to later tasks.",
+                "No comparable before/after evaluation cohort is recorded.",
+            ],
+        }
+    finally:
+        conn.close()
+
 def get_database_status() -> Dict[str, Any]:
     exists = os.path.exists(DB_PATH)
     connection = get_connection()
