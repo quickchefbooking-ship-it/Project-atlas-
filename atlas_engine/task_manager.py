@@ -106,10 +106,21 @@ class TaskAPI:
             relevant_lessons = self.memory.get_relevant_lessons(task.description) if hasattr(
                 self.memory, "get_relevant_lessons"
             ) else []
+            try:
+                from .source_division import retrieve as retrieve_sources
+                source_documents = retrieve_sources(task.description)
+            except Exception as source_error:
+                logger.warning(
+                    "Source Division retrieval unavailable for task_id=%s error_type=%s",
+                    task_id,
+                    type(source_error).__name__,
+                )
+                source_documents = []
             result = self.executor.execute({
                 "title": task.title,
                 "description": task.description,
                 "relevant_lessons": relevant_lessons,
+                "source_documents": source_documents,
             })
             evaluation = self.evaluator.evaluate(result, task.success_criteria)
             status = "passed" if evaluation["passed"] else "failed"
