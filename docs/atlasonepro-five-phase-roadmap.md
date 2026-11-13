@@ -31,36 +31,39 @@ Remaining Phase 1 limitations: local SQLite only; no distributed worker coordina
 
 ## Phase 2 — Bounded retries and cancellation
 
-**Status: policy foundation and cooperative cancellation for the bounded local executor implemented; automatic retries remain disabled.**
+**Status: policy foundation, durable cancellation and retry-schedule primitives implemented; unattended retries remain disabled.**
 
 Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`.
 
 Implemented:
 - Typed retryable/terminal error classes and a pure fail-closed eligibility evaluator.
 - Immutable server-side retry ceilings, finite timing validation, bounded jittered back-off and a frozen capability error-code allowlist.
-- Durable, idempotent cancellation requests per task attempt with `requested`, `acknowledged`, `too_late` and `requires_recovery` states.
+- Durable, idempotent cancellation requests per task attempt, with requested, acknowledged, too_late and requires_recovery states.
 - Authenticated cancellation request/status routes.
 - Fenced cancellation acknowledgement and atomic task/evaluation/attempt persistence.
 - Cooperative cancellation checks before execution, after context retrieval, after the local executor returns and before normal completion.
-- Expired worker cancellation requests move to operator recovery; completed attempts record late cancellation as `too_late`.
-- Failure persistence exceptions return `outcome_unconfirmed` rather than claiming a failed result was durably saved.
-- Tests cover retry-policy validation, cancellation idempotency, cancellation/completion races, stale-worker fencing, restart persistence, expired/late requests and API authentication.
+- Expired worker cancellation requests move to operator recovery; completed attempts record late cancellation as too_late.
+- Durable retry schedules store originating attempt, next attempt number, due/deadline timestamps, capability name/version, idempotency key and immutable policy snapshot.
+- Retry scheduling atomically finalises the failed attempt and evaluation, returns the task to pending and persists the schedule.
+- Claims cannot start before due time, after the deadline, beyond the configured attempt ceiling, or after schedule cancellation/expiry. Due claims consume the schedule and link it to a new fenced attempt atomically.
+- A cancellation request against a pending scheduled retry cancels the schedule so it cannot be claimed.
+- Tests cover retry policy validation, cancellation idempotency/races/fencing, restart persistence, expired/late requests, retry schedule eligibility, due-time gating, attempt ceilings, expiry and scheduled-retry cancellation.
 
 Current limits:
-- No durable retry schedule or due-work scheduler.
-- No registered capability registry or persisted immutable per-attempt retry-policy snapshot.
-- No hard execution timeout for uninterruptible work.
-- The local executor remains single-attempt; no automatic retry is enabled.
+- No registered capability registry or scheduler that automatically discovers and dispatches due work.
+- No per-attempt hard timeout for uninterruptible work.
+- The existing local executor remains single-attempt and is not opted in; retry scheduling is an internal primitive only.
 - Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
+- Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
-At code head `69943ab758155e715baf6d6c4fe96173ce61a04c`, both PR and push workflows passed **171 tests** with one non-blocking Starlette/AnyIO deprecation warning.
+The prior fully green checkpoint at `0516e97a6dba4a70b7c8021ba573e9e9a9ad5896` passed **176 tests** in both PR and push workflows, with one non-blocking Starlette/AnyIO deprecation warning. New retry schedule/migration refinements are under CI on the latest branch head.
 
 Acceptance gates:
-- Tests prove retry limits are enforced under concurrent requests.
+- Tests prove retry limits are enforced under concurrent requests and due-time claims.
 - Cancellation is deterministic at documented safe points and produces a durable audit event.
-- Duplicate execution is prevented by idempotency keys and fencing.
+- Duplicate execution is prevented by idempotency keys and fencing for any future opted-in capability.
 - Non-idempotent or uncertain external actions are never automatically retried.
-- Process restart preserves retry/cancellation state.
+- Process restart preserves retry/cancellation state and immutable schedule snapshots.
 - Every acceptance-matrix row in the Phase 2 design is covered before Phase 3 begins.
 
 ## Phase 3 — Professor capability registry and specialist arms
