@@ -58,7 +58,7 @@ def test_source_documents_and_review_decisions_survive_database_reinitialization
     assert len(approved) == 1
     assert approved[0]["id"] == document["id"]
     assert approved[0]["content_sha256"] == document["content_sha256"]
-    assert approved[0]["trust_level"] == "unverified"
+    assert approved[0]["trust_level"] == "reviewed"
 
 
 def test_rejected_source_document_never_enters_retrieval(monkeypatch, tmp_path):
