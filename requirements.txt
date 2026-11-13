@@ -7,3 +7,4 @@ python-dotenv==1.0.1
 Pillow==10.4.0
 gTTS==2.5.1
 ffmpeg-python==0.2.0
+jsonschema==4.23.0
