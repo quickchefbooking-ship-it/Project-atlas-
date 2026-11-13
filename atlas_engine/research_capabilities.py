@@ -13,9 +13,15 @@ from .capability_registry import CapabilityDefinition, CapabilityRegistry
 from .model_provider import ProposedCapabilityCall
 
 
-class ResearchQueryArguments(BaseModel):
+class CrossrefSearchArguments(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    query: str = Field(min_length=3, max_length=120)
+    query: str = Field(min_length=3, max_length=160)
+    limit: int = Field(default=5, ge=1, le=5)
+
+
+class LegislationSearchArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    query: str = Field(min_length=2, max_length=120)
     limit: int = Field(default=5, ge=1, le=5)
 
 
@@ -47,9 +53,16 @@ def _object_schema(properties: dict[str, Any], required: list[str]) -> dict[str,
 
 def build_research_registry() -> CapabilityRegistry:
     """Create the closed, application-owned research capability catalogue."""
-    query_schema = _object_schema(
+    crossref_schema = _object_schema(
         {
-            "query": {"type": "string", "minLength": 3, "maxLength": 120},
+            "query": {"type": "string", "minLength": 3, "maxLength": 160},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
+        },
+        ["query"],
+    )
+    legislation_schema = _object_schema(
+        {
+            "query": {"type": "string", "minLength": 2, "maxLength": 120},
             "limit": {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
         },
         ["query"],
@@ -84,7 +97,7 @@ def build_research_registry() -> CapabilityRegistry:
     definitions = [
         CapabilityDefinition(
             name="crossref.search", version="1", risk_class="read_only",
-            input_schema=query_schema, output_schema=output_schema,
+            input_schema=crossref_schema, output_schema=output_schema,
             required_scopes=("public.research.read",), timeout_seconds=10,
         ),
         CapabilityDefinition(
@@ -99,7 +112,7 @@ def build_research_registry() -> CapabilityRegistry:
         ),
         CapabilityDefinition(
             name="legislation.search", version="1", risk_class="read_only",
-            input_schema=query_schema, output_schema=output_schema,
+            input_schema=legislation_schema, output_schema=output_schema,
             required_scopes=("public.research.read",), timeout_seconds=10,
         ),
         CapabilityDefinition(
@@ -112,8 +125,8 @@ def build_research_registry() -> CapabilityRegistry:
 
 
 _ARGUMENT_MODELS: dict[str, type[BaseModel]] = {
-    "crossref.search": ResearchQueryArguments,
-    "legislation.search": ResearchQueryArguments,
+    "crossref.search": CrossrefSearchArguments,
+    "legislation.search": LegislationSearchArguments,
     "github.repository_metadata": GitHubRepositoryArguments,
     "huggingface.resource_metadata": HuggingFaceResourceArguments,
     "source.approved_retrieval": ApprovedSourceSearchArguments,
