@@ -31,7 +31,9 @@ Remaining Phase 1 limitations: local SQLite only; no distributed worker coordina
 
 ## Phase 2 — Bounded retries and cancellation
 
-**Status: next.**
+**Status: design contract committed; implementation next.**
+
+Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`. The design preserves default no-retry behaviour, requires capability-level idempotency, treats unknown errors as terminal, persists cooperative cancellation, and forbids replay of uncertain expired leases.
 
 Deliverables:
 - Define retryable versus terminal error classes; do not retry validation, permission or policy failures.
@@ -107,10 +109,11 @@ Acceptance gates:
 ## Immediate next actions
 
 1. Finish Phase 1 review: inspect the current PR diff, verify the task recovery state machine and check that all API routes are authenticated.
-2. Add a Phase 2 design and acceptance-test matrix before changing retry/cancellation behaviour.
-3. Implement bounded retry metadata and cancellation state only after the design is reviewed.
-4. Run the full CI suite after each meaningful change and record the exact commit and workflow run.
-5. Do not start Phase 3 implementation until Phase 2 acceptance gates pass.
+2. Phase 2 design and acceptance-test matrix committed at `docs/phase-2-retry-cancellation-design.md`.
+3. Implement Phase 2 in small additive steps, beginning with typed error classes and a pure fail-closed retry-policy evaluator.
+4. Add durable retry/cancellation state only after the policy contract has tests; keep automatic retry disabled by default.
+5. Run the full CI suite after each meaningful change and record the exact commit and workflow run.
+6. Do not start Phase 3 implementation until Phase 2 acceptance gates pass.
 
 ## Current project references
 
