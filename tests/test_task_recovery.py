@@ -832,6 +832,9 @@ def test_retry_schedule_inspection_route_is_authenticated(tmp_path, monkeypatch)
     assert "idempotency_key" not in response.json()[0]
     assert "policy_json" not in response.json()[0]
     assert "capability_contract_json" not in response.json()[0]
+    assert "idempotency_key" not in response.json()[0]
+    assert "policy_json" not in response.json()[0]
+    assert "capability_contract_json" not in response.json()[0]
 
 
 def test_claim_after_retry_deadline_terminalises_pending_task(tmp_path, monkeypatch):
