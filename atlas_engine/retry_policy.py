@@ -107,6 +107,7 @@ class CapabilityRetryContract:
             and self.idempotent is True
             and self.side_effects_declared is True
             and self.duplicate_suppression_verified is True
+            and bool(self.verification_evidence.strip())
             and self.retryable_error_codes
         )
 
