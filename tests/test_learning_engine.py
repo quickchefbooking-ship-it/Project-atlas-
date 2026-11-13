@@ -105,3 +105,14 @@ def test_private_api_fails_closed_when_key_missing(monkeypatch):
     monkeypatch.delenv("ATLAS_API_KEY", raising=False)
     response = TestClient(service.app).get("/dashboard")
     assert response.status_code == 503
+
+def test_evaluator_treats_missing_or_incompatible_ordered_values_as_failed_criteria():
+    result = Evaluator.evaluate(
+        {},
+        [{"field": "count", "operator": "gt", "expected_value": 3}],
+    )
+
+    assert result["passed"] is False
+    assert result["score"] == 0.0
+    assert result["reasons"] == ["field and expected value are not comparable"]
+    assert result["missing_requirements"] == ["count gt 3"]
