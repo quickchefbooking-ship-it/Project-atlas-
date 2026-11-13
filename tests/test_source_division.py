@@ -91,10 +91,10 @@ def test_bundled_knowledge_is_copied_into_local_library_and_retrievable(monkeypa
     assert load_bundled_knowledge() == 2
     first = retrieve("prompt injection external content")
     assert first
-    assert any("llm-security" in item["uri"] for item in first)
+    assert any("prompt-injection" in item["uri"] for item in first)
 
-    # Re-importing the same bundle must not create duplicate records.
-    assert load_bundled_knowledge() == 2
+    # Re-importing the same bundle must neither duplicate nor rewrite records.
+    assert load_bundled_knowledge() == 0
     assert len(storage.list_source_documents(approved_only=True, limit=100)) == 2
 
 def test_bundled_library_discovery_accepts_only_explicit_curated_frontmatter(tmp_path):
@@ -143,3 +143,42 @@ Do not import this automatically.
     assert parsed["uri"] == "https://example.org/guide"
     assert _bundled_document_metadata(unreviewed) is None
     assert _bundled_document_metadata(without_metadata) is None
+
+
+
+def test_retrieval_does_not_import_bundled_material_as_a_side_effect(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+
+    assert retrieve("prompt injection") == []
+    assert storage.list_source_documents(limit=100) == []
+
+
+def test_duplicate_source_content_returns_the_existing_record(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("research", "Research Library", "academic_index")
+
+    first = ingest_document(
+        "research", "First title", "https://example.org/first",
+        "The same verified content is supplied twice.",
+    )
+    second = ingest_document(
+        "research", "Second title", "https://example.org/second",
+        "The same verified content is supplied twice.",
+    )
+
+    assert second["id"] == first["id"]
+    assert len(storage.list_source_documents(limit=100)) == 1
+
+
+def test_application_startup_imports_curated_bundle(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    import app as service
+
+    _isolated_db(monkeypatch, tmp_path)
+
+    with TestClient(service.app):
+        pass
+
+    documents = storage.list_source_documents(approved_only=True, limit=100)
+    assert len(documents) == 2
+    assert all(item["trust_level"] == "reviewed" for item in documents)
