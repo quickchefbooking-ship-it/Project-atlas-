@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from urllib.parse import urlparse
 
 from . import storage
 
@@ -38,6 +39,8 @@ def _encode_metadata(metadata: dict[str, Any] | None) -> str:
             for nested in value:
                 inspect(nested)
 
+    if metadata is not None and not isinstance(metadata, dict):
+        raise ValueError("Document metadata must be an object.")
     safe_metadata = metadata or {}
     inspect(safe_metadata)
     return json.dumps(safe_metadata, sort_keys=True)
@@ -82,8 +85,10 @@ def ingest_document(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Store bounded source material as unverified and pending review."""
-    if not title.strip() or not uri.strip():
-        raise ValueError("Document title and source URI are required.")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Document title is required.")
+    if not isinstance(uri, str) or not uri.strip():
+        raise ValueError("Document source URI is required.")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Document content is required.")
     if len(content) > MAX_DOCUMENT_CHARS:
@@ -137,10 +142,19 @@ def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
     document_id = _frontmatter_value(frontmatter, "id")
     title = _frontmatter_value(frontmatter, "title")
     division = _frontmatter_value(frontmatter, "division")
-    publisher_match = re.search(r"^  publisher:\s*(.+)$", frontmatter, re.MULTILINE)
+    publisher_match = re.search(r"^\s{2}publisher:\s*(.+)$", frontmatter, re.MULTILINE)
     retrieved = _frontmatter_value(frontmatter, "retrieved")
-    url_match = re.search(r"^\s*(?:-\s*)?url:\s*(https?://\S+)", frontmatter, re.MULTILINE)
+    url_match = re.search(
+        r"^\s*(?:-\s*)?url:\s*[\"']?(https?://[^\"'\s]+)",
+        frontmatter,
+        re.MULTILINE,
+    )
     if not all((document_id, title, division, publisher_match, url_match)):
+        return None
+    parsed_uri = urlparse(url_match.group(1))
+    if parsed_uri.scheme not in {"http", "https"} or not parsed_uri.netloc:
+        return None
+    if len(content) > MAX_DOCUMENT_CHARS:
         return None
     return {
         "id": document_id,
@@ -164,10 +178,11 @@ def load_bundled_knowledge() -> int:
         if item is None:
             continue
         source_id = "bundled-" + re.sub(r"[^a-z0-9]+", "-", item["publisher"].lower()).strip("-")
-        register_source(
-            source_id, item["publisher"], "curated_markdown_library",
-            metadata={"collection": item["division"], "origin": "repository_bundle"},
-        )
+        if storage.get_source(source_id) is None:
+            register_source(
+                source_id, item["publisher"], "curated_markdown_library",
+                metadata={"collection": item["division"], "origin": "repository_bundle"},
+            )
         relative_path = path.relative_to(library_root.parent).as_posix()
         normalized = item["content"]
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
