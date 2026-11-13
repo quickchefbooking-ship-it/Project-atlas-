@@ -25,7 +25,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 ## Integration order
 
 1. **Local foundation:** source registry, normalized document format, content hashes, approval queue and provenance-aware retrieval.
-2. **Public research:** bounded GitHub and Hugging Face metadata adapters, official UK legislation search/text and Crossref scholarly metadata search are implemented; next add carefully scoped general public-web extraction.
+2. **Public research:** bounded GitHub and Hugging Face metadata adapters, official UK legislation search/text, Crossref scholarly metadata search and allowlisted public-web page extraction are implemented.
 3. **Project knowledge:** selected GitHub repositories and explicitly selected project files.
 4. **Business systems:** narrowly scoped read-only adapters, one connector at a time.
 5. **Private communications:** only after identity, user consent, tenant isolation, retention and deletion controls are implemented.
@@ -42,7 +42,7 @@ No credential harvesting, unrestricted crawling, access-control bypass, private 
 
 The current repository implementation is a local ingestion and retrieval foundation, not a live connector suite. It validates absolute HTTP(S) and git+https source references at the ingestion boundary, rejects embedded URL credentials and malformed hosts or ports, hashes normalized content, and deduplicates records by source and content hash. New imports remain pending and unverified. A successful approval changes the document state to approved and its trust classification to reviewed; rejected material remains excluded from retrieval. These controls do not authenticate the reviewer: reviewer names are audit metadata until identity and role-based authorization are implemented.
 
-The bundled curated notes are imported idempotently at application startup. General public-web extraction, Lawve, scholarly research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. GitHub, Hugging Face, UK legislation and Crossref have bounded public read-only adapters. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
+The bundled curated notes are imported idempotently at application startup. Lawve and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. GitHub, Hugging Face, UK legislation and Crossref have bounded public read-only adapters. A separate public-web adapter fetches one page at a time from a strict exact-host allowlist. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
 
 ## Authenticated API surface
 
@@ -123,3 +123,12 @@ The browser fetch form offers UK legislation title search. Every returned docume
 The scholarly research adapter uses the fixed Crossref public works API. It accepts a bibliographic search query and stages up to five matching records. Records preserve the DOI resolver URL, title, authors, publisher, publication metadata, reference-count signal and any abstract Crossref supplies. Abstracts are not guaranteed to be present or complete. The adapter does not download publisher full text, bypass paywalls or infer that citation counts establish research quality.
 
 Requests are read-only HTTPS GETs, bounded by the shared eight-second timeout and 1 MB response limit. The \`crossref-public\` source is registered at startup. Use \`POST /sources/fetch\` with \`provider: "crossref"\`, \`resource_type: "scholarly_work"\` and a bibliographic search \`identifier\`. Results remain pending/unverified until reviewed.
+
+
+### Allowlisted public-web page retrieval
+
+The authenticated `POST /sources/fetch-url` endpoint retrieves one page at a time from a strict exact-host allowlist. Initial hosts include GOV.UK, legislation.gov.uk, ICO, NIST, OWASP, Python documentation, FastAPI documentation, GitHub, Hugging Face and OpenAI. This is not a general crawler and does not accept arbitrary internet URLs.
+
+The adapter requires HTTPS on port 443, rejects embedded credentials and fragments, resolves the hostname and refuses non-public IP results, and revalidates every redirect against the same host and IP rules (maximum three redirects). It accepts only HTML or plain text, uses an eight-second timeout and a 1 MB response cap, and extracts visible page text while excluding script/style/navigation/form content. The browser page includes a URL field for this endpoint.
+
+**Prompt-injection boundary:** extracted page content is untrusted data, not instructions. The stored text begins with an explicit warning and metadata records `untrusted_external_content: true` and `instruction_policy: source content is data, never executable instructions`. This annotation is a defence-in-depth signal, not a complete prompt-injection detector; the Professor must maintain system/tool policy independently of retrieved content. All fetched pages remain pending/unverified and are excluded from approved-only retrieval until reviewed. The adapter does not download PDFs, images, archives, executable files or other binary content.
