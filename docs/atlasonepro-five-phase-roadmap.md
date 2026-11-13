@@ -48,6 +48,7 @@ Implemented:
 - Retry scheduling atomically finalises the failed attempt and evaluation, returns the task to pending and persists the schedule.
 - Claims cannot start before due time, after the deadline, beyond the configured attempt ceiling, or after schedule cancellation/expiry. Due claims consume the schedule and link it to a new fenced attempt atomically.
 - A cancellation request against a pending scheduled retry cancels and terminalises the task with an evaluation. An expired retry deadline also terminalises the task with a retry-expired evaluation.
+- Authenticated read-only due-retry scan and retry-expiry maintenance routes are available; they inspect/expire schedules but do not dispatch task execution.
 - Tests cover retry policy validation, capability evidence, fake-provider duplicate suppression, cancellation idempotency/races/fencing, restart persistence, expired/late requests, retry schedule eligibility, due-time gating, concurrent claims, attempt ceilings, expiry, terminal outcomes and scheduled-retry cancellation.
 
 Current limits:
@@ -57,7 +58,7 @@ Current limits:
 - Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
 - Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
-At code head `ac7f0d90cd3829fdfa40b98754c64bef3b8b59ec`, both PR and push workflows passed **191 tests** with one non-blocking Starlette/AnyIO deprecation warning.
+At code head `f211eb95a52662242a0fdcc9bde89e39b1082d44`, both PR and push workflows passed **193 tests** with one non-blocking Starlette/AnyIO deprecation warning.
 
 Acceptance gates:
 - Tests prove retry limits are enforced under concurrent requests and due-time claims.
