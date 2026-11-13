@@ -92,6 +92,24 @@ def init_db() -> None:
         conn.close()
 
 
+def claim_task(task_id: str) -> bool:
+    """Atomically claim a pending task so concurrent requests cannot run it twice."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'running', attempts = attempts + 1, updated_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (now_isoformat(), task_id),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
 def save_task(task_row: Dict[str, Any]) -> None:
     conn = get_connection()
     try:
