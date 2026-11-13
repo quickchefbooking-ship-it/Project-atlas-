@@ -83,6 +83,10 @@ def init_db() -> None:
         }
         if "reviewed_by" not in source_document_columns:
             conn.execute("ALTER TABLE source_documents ADD COLUMN reviewed_by TEXT")
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_source_documents_source_hash
+            ON source_documents(source_id, content_sha256)
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -303,7 +307,7 @@ def save_source_document(record: Dict[str, Any]) -> Dict[str, Any]:
     conn = get_connection()
     try:
         conn.execute("""
-            INSERT INTO source_documents (
+            INSERT OR IGNORE INTO source_documents (
                 id, source_id, title, uri, content, content_sha256, trust_level,
                 state, metadata_json, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -311,7 +315,11 @@ def save_source_document(record: Dict[str, Any]) -> Dict[str, Any]:
               record["content"], record["content_sha256"], record["trust_level"],
               record["state"], record["metadata_json"], record["created_at"], record["updated_at"]))
         conn.commit()
-        return dict(conn.execute("SELECT * FROM source_documents WHERE id = ?", (record["id"],)).fetchone())
+        row = conn.execute(
+            "SELECT * FROM source_documents WHERE source_id = ? AND content_sha256 = ?",
+            (record["source_id"], record["content_sha256"]),
+        ).fetchone()
+        return dict(row)
     finally:
         conn.close()
 
