@@ -23,6 +23,25 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _encode_metadata(metadata: dict[str, Any] | None) -> str:
+    """Reject credential-like metadata keys before persistence."""
+    forbidden = re.compile(r"(secret|token|password|api[_-]?key|authorization|cookie|credential)", re.I)
+
+    def inspect(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if forbidden.search(str(key)):
+                    raise ValueError("Credential-like metadata fields are not permitted.")
+                inspect(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                inspect(nested)
+
+    safe_metadata = metadata or {}
+    inspect(safe_metadata)
+    return json.dumps(safe_metadata, sort_keys=True)
+
+
 def register_source(
     source_id: str,
     name: str,
@@ -42,7 +61,7 @@ def register_source(
         "source_type": source_type,
         "access_mode": access_mode,
         "enabled": bool(enabled),
-        "metadata_json": json.dumps(metadata or {}, sort_keys=True),
+        "metadata_json": _encode_metadata(metadata),
         "created_at": _now(),
         "updated_at": _now(),
     }
