@@ -741,3 +741,82 @@ def test_retry_schedule_rejects_attempt_count_beyond_policy(tmp_path, monkeypatc
     assert schedule is None
     assert manager.get_task(task.id).status == "running"
     assert storage.get_task_attempts(task.id)[-1]["state"] == "active"
+
+
+def test_due_retry_schedule_can_be_claimed_by_only_one_concurrent_worker(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Concurrent retry claim", "One due schedule, one worker", [])
+    first = storage.claim_task_with_lease(task.id, "worker-first", 30)
+    assert first is not None
+    schedule = _schedule_retry(task.id, first, due_seconds=10)
+    assert schedule is not None
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET due_at = ? WHERE schedule_id = ?",
+            (past, schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        claims = list(pool.map(
+            lambda index: storage.claim_task_with_lease(task.id, f"retry-worker-{index}", 30),
+            range(8),
+        ))
+    successful = [claim for claim in claims if claim is not None]
+    assert len(successful) == 1
+    assert successful[0]["attempt_number"] == 2
+    assert storage.list_task_retry_schedules(task.id)[0]["state"] == "claimed"
+
+
+def test_retry_schedule_requires_evidence_reference(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Evidence reference", "No retry without evidence", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    contract = _verified_retry_contract()
+    contract.pop("verification_evidence")
+    now = datetime.now(timezone.utc)
+    with pytest.raises(ValueError, match="test-evidence reference"):
+        storage.persist_task_retry_schedule(
+            task.id, claim, _retry_evaluation(task.id),
+            capability_contract=contract,
+            policy_snapshot={
+                "max_attempts": 3,
+                "per_attempt_timeout_seconds": 30,
+                "total_deadline_seconds": 90,
+                "base_delay_seconds": 1,
+                "max_delay_seconds": 15,
+            },
+            error_code="temporary_unavailable",
+            idempotency_key="stable-key",
+            due_at=(now + timedelta(seconds=5)).isoformat(),
+            deadline_at=(now + timedelta(seconds=30)).isoformat(),
+        )
+    assert manager.get_task(task.id).status == "running"
+
+
+def test_retry_schedule_inspection_route_is_authenticated(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "retry-schedule-route.db"))
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    storage.init_db()
+    task = app_module.manager.create_task("Retry schedule route", "Inspect schedule metadata", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-route", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim)
+    assert schedule is not None
+
+    client = TestClient(app_module.app)
+    path = f"/tasks/{task.id}/retry-schedules"
+    assert client.get(path).status_code == 401
+    response = client.get(path, headers={"X-API-Key": "test-secret"})
+    assert response.status_code == 200
+    assert response.json()[0]["schedule_id"] == schedule["schedule_id"]
+    assert response.json()[0]["state"] == "scheduled"
