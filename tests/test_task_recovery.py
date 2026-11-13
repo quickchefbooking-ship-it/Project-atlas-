@@ -165,3 +165,39 @@ def test_task_api_execution_failure_completes_lease_with_failure_evaluation(tmp_
     assert attempts[0]["state"] == "failed"
     assert len(storage.get_evaluations_for_task(task.id)) == 1
     assert "private exception detail" not in str(response)
+
+
+
+def test_recovery_routes_are_authenticated_and_never_auto_retry(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "recovery-routes.db"))
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    storage.init_db()
+    task = app_module.manager.create_task("API recovery", "Inspect an expired lease", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-gone", 5)
+    assert claim is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_attempts SET lease_expires_at = ? WHERE attempt_id = ?",
+            (future, claim["attempt_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = TestClient(app_module.app)
+    assert client.get("/tasks/recovery-required").status_code == 401
+    headers = {"X-API-Key": "test-secret"}
+    scan = client.post("/tasks/recovery/scan", headers=headers)
+    assert scan.status_code == 200
+    assert scan.json()["marked_for_recovery"] == 1
+    listed = client.get("/tasks/recovery-required", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["attempt_id"] == claim["attempt_id"]
+    assert app_module.manager.get_task(task.id).status == "running"
+    assert storage.claim_task_with_lease(task.id, "worker-retry", 30) is None

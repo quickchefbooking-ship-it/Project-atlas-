@@ -291,6 +291,26 @@ def search_source_knowledge(q: str, limit: int = 5):
     return retrieve(q, limit=limit)
 
 
+@app.post("/tasks/recovery/scan", dependencies=[Depends(require_api_key)])
+def scan_task_recovery_route():
+    """Mark expired worker leases for operator review; never retry them automatically."""
+    marked = storage.mark_expired_task_attempts()
+    return {"status": "scan_complete", "marked_for_recovery": marked}
+
+
+@app.get("/tasks/recovery-required", dependencies=[Depends(require_api_key)])
+def list_task_recovery_route():
+    """List tasks held for recovery without exposing task results or secrets."""
+    return storage.list_recovery_required_attempts()
+
+
+@app.get("/tasks/{task_id}/attempts", dependencies=[Depends(require_api_key)])
+def list_task_attempts_route(task_id: str):
+    if manager.get_task(task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return storage.get_task_attempts(task_id)
+
+
 @app.get("/tasks", dependencies=[Depends(require_api_key)])
 def list_tasks_route():
     return api.list_tasks()
