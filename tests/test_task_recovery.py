@@ -588,6 +588,7 @@ def _verified_retry_contract():
         "idempotent": True,
         "side_effects_declared": True,
         "duplicate_suppression_verified": True,
+        "verification_evidence": "tests/test_task_recovery.py::test_fake_provider_deduplicates",
         "retryable_error_codes": ["temporary_unavailable"],
     }
 
