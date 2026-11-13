@@ -74,6 +74,8 @@ class Evaluator:
         if operator == "contains":
             if not isinstance(field_value, str):
                 return False, "field is not a string"
+            if not isinstance(expected_value, str):
+                return False, "expected value is not a string"
             return expected_value in field_value, f"expected text {expected_value!r} in {field_value!r}"
         if operator in {"gt", "gte", "lt", "lte"}:
             try:
@@ -103,6 +105,20 @@ class Evaluator:
                 "score": 0.0,
                 "reasons": ["No success criteria supplied."],
                 "missing_requirements": ["Provide measurable success criteria."],
+                "method": "deterministic",
+            }
+
+        subjective = [criterion for criterion in criteria if not criterion.deterministic]
+        if subjective:
+            descriptions = [
+                criterion.description or f"{criterion.field} {criterion.operator}"
+                for criterion in subjective
+            ]
+            return {
+                "passed": False,
+                "score": 0.0,
+                "reasons": ["Subjective criteria require an evaluator that is not implemented."],
+                "missing_requirements": descriptions,
                 "method": "deterministic",
             }
 
