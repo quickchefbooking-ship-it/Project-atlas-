@@ -69,7 +69,7 @@ def test_direct_ingestion_rejects_unsafe_or_credential_bearing_source_uris(monke
         "file:///etc/passwd",
         "javascript:alert(1)",
         "https://user:password@example.org/private",
-        "https://example.org",
+        "https:///missing-host",
         "relative/path",
     ]
     for uri in unsafe_uris:
