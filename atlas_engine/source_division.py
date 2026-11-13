@@ -26,8 +26,16 @@ def _validate_source_uri(uri: str) -> None:
     if not isinstance(uri, str) or not uri.strip():
         raise ValueError("Document source URI is required.")
     parsed = urlparse(uri.strip())
-    if parsed.scheme not in ALLOWED_SOURCE_URI_SCHEMES or not parsed.hostname:
-        raise ValueError("Source URI must be an absolute HTTP(S) or git+https URL.")
+    if (
+        parsed.scheme not in ALLOWED_SOURCE_URI_SCHEMES
+        or not parsed.hostname
+        or any(character.isspace() for character in parsed.hostname)
+    ):
+        raise ValueError("Source URI must be an absolute HTTP(S) or git+https URL with a valid host.")
+    try:
+        parsed.port  # Accessing this property validates the port syntax and range.
+    except ValueError as exc:
+        raise ValueError("Source URI contains an invalid port.") from exc
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("Credentials must not be embedded in source URIs.")
 DOCUMENT_STATES = {"pending", "approved", "rejected"}
