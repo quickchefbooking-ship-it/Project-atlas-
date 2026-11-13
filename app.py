@@ -20,7 +20,7 @@ from atlas_engine import storage
 from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
 from atlas_engine.source_division import load_bundled_knowledge, list_sources, retrieve, register_source
 from atlas_engine.source_adapters import import_json_batch, stage_adapter_results, MAX_BATCH_JSON_CHARS
-from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, PublicSourceError
+from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, PublicSourceError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,8 @@ async def lifespan(app: FastAPI):
         register_source("github-public", "GitHub Public Repositories", "github_public_api", access_mode="read_only", metadata={"endpoint": "api.github.com", "scope": "public repository metadata only"})
     if storage.get_source("huggingface-public") is None:
         register_source("huggingface-public", "Hugging Face Public Resources", "huggingface_public_api", access_mode="read_only", metadata={"endpoint": "huggingface.co/api", "scope": "public model and dataset metadata only"})
+    if storage.get_source("uk-legislation") is None:
+        register_source("uk-legislation", "UK Legislation — The National Archives", "legislation_gov_uk_api", access_mode="read_only", metadata={"endpoint": "www.legislation.gov.uk", "scope": "official public legislation search and XML text"})
     logger.info("Imported %s new curated knowledge documents", imported)
     yield
 
@@ -71,9 +73,9 @@ class SourceImportRequest(BaseModel):
 
 
 class PublicSourceFetchRequest(BaseModel):
-    provider: str = Field(pattern="^(github|huggingface)$")
+    provider: str = Field(pattern="^(github|huggingface|legislation)$")
     identifier: str = Field(min_length=1, max_length=201)
-    resource_type: str = Field(default="model", pattern="^(repository|model|dataset)$")
+    resource_type: str = Field(default="repository", pattern="^(repository|model|dataset|ukpga|uksi|asp|anaw|nia|nisr|ukla)$")
 
 
 class GenerateImageRequest(BaseModel):
@@ -174,12 +176,12 @@ def import_source_documents(payload: SourceImportRequest):
 
 
 class _SingleDocumentAdapter:
-    def __init__(self, source_id: str, document):
+    def __init__(self, source_id: str, documents):
         self.source_id = source_id
-        self.document = document
+        self.documents = documents if isinstance(documents, list) else [documents]
 
     def search(self, query: str, limit: int = 10):
-        return [self.document]
+        return self.documents[:limit]
 
 
 @app.post("/sources/fetch", dependencies=[Depends(require_api_key)])
@@ -190,28 +192,38 @@ def fetch_public_source(payload: PublicSourceFetchRequest):
             if payload.resource_type != "repository":
                 raise HTTPException(status_code=422, detail="GitHub currently supports repository metadata only")
             adapter = _SingleDocumentAdapter("github-public", fetch_github_repository(payload.identifier))
-        else:
+        elif payload.provider == "huggingface":
             if payload.resource_type not in {"model", "dataset"}:
                 raise HTTPException(status_code=422, detail="Hugging Face supports model or dataset metadata")
             adapter = _SingleDocumentAdapter(
                 "huggingface-public",
                 fetch_huggingface_resource(payload.identifier, payload.resource_type),
             )
-        staged = stage_adapter_results(adapter, payload.identifier, limit=1)
+        else:
+            if payload.resource_type not in {"ukpga", "uksi", "asp", "anaw", "nia", "nisr", "ukla"}:
+                raise HTTPException(status_code=422, detail="Choose a supported UK legislation type")
+            adapter = _SingleDocumentAdapter(
+                "uk-legislation",
+                search_uk_legislation(payload.identifier, payload.resource_type, limit=5),
+            )
+        staged = stage_adapter_results(adapter, payload.identifier, limit=5)
         item = staged[0]
         return {
             "status": "staged_for_review",
             "provider": payload.provider,
-            "count": 1,
-            "document": {
-                "id": item["id"],
-                "source_id": item["source_id"],
-                "title": item["title"],
-                "uri": item["uri"],
-                "content_sha256": item["content_sha256"],
-                "state": item["state"],
-                "trust_level": item["trust_level"],
-            },
+            "count": len(staged),
+            "documents": [
+                {
+                    "id": item["id"],
+                    "source_id": item["source_id"],
+                    "title": item["title"],
+                    "uri": item["uri"],
+                    "content_sha256": item["content_sha256"],
+                    "state": item["state"],
+                    "trust_level": item["trust_level"],
+                }
+                for item in staged
+            ],
         }
     except PublicSourceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
