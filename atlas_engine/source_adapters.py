@@ -12,7 +12,7 @@ from typing import Any, Iterable, Protocol
 from urllib.parse import urlparse
 
 from . import storage
-from .source_division import MAX_DOCUMENT_CHARS, ingest_document
+from .source_division import MAX_DOCUMENT_CHARS, _encode_metadata, ingest_document
 
 MAX_BATCH_DOCUMENTS = 100
 MAX_BATCH_JSON_CHARS = 5_000_000
@@ -41,17 +41,22 @@ class SourceAdapter(Protocol):
 def _validate_document(document: SourceDocument) -> None:
     if not isinstance(document, SourceDocument):
         raise TypeError("Adapter results must be SourceDocument instances.")
-    if not document.title.strip() or not document.uri.strip():
-        raise ValueError("Each source document requires a title and URI.")
+    if not isinstance(document.title, str) or not document.title.strip():
+        raise ValueError("Each source document requires a text title.")
+    if not isinstance(document.uri, str) or not document.uri.strip():
+        raise ValueError("Each source document requires a text URI.")
     parsed = urlparse(document.uri)
     if parsed.scheme not in ALLOWED_URI_SCHEMES or not parsed.netloc:
         raise ValueError("Source URI must be an absolute HTTP(S) or git+https URL.")
+    if parsed.username or parsed.password:
+        raise ValueError("Credentials must not be embedded in source URIs.")
     if not isinstance(document.content, str) or not document.content.strip():
         raise ValueError("Source document content must be non-empty text.")
     if len(document.content) > MAX_DOCUMENT_CHARS:
         raise ValueError("Source document exceeds the maximum permitted size.")
     if not isinstance(document.metadata, dict):
         raise ValueError("Source document metadata must be an object.")
+    _encode_metadata(document.metadata)
 
 
 def stage_adapter_results(
@@ -67,12 +72,14 @@ def stage_adapter_results(
         raise ValueError("Adapter must declare a registered source_id.")
     if storage.get_source(source_id) is None:
         raise ValueError("Adapter source is not registered.")
-    results = adapter.search(query, limit=limit)
-    staged: list[dict[str, Any]] = []
-    for index, document in enumerate(results):
+    documents: list[SourceDocument] = []
+    for index, document in enumerate(adapter.search(query, limit=limit)):
         if index >= limit:
             raise ValueError("Adapter returned more documents than the requested limit.")
         _validate_document(document)
+        documents.append(document)
+    staged: list[dict[str, Any]] = []
+    for document in documents:
         staged.append(
             ingest_document(
                 source_id,
@@ -109,7 +116,7 @@ def import_json_batch(source_id: str, payload: str) -> list[dict[str, Any]]:
     if len(documents) > MAX_BATCH_DOCUMENTS:
         raise ValueError(f"Batch may contain at most {MAX_BATCH_DOCUMENTS} documents.")
 
-    staged: list[dict[str, Any]] = []
+    validated: list[SourceDocument] = []
     for document in documents:
         if not isinstance(document, dict):
             raise ValueError("Each document entry must be an object.")
@@ -123,6 +130,10 @@ def import_json_batch(source_id: str, payload: str) -> list[dict[str, Any]]:
             metadata=document.get("metadata", {}),
         )
         _validate_document(item)
+        validated.append(item)
+
+    staged: list[dict[str, Any]] = []
+    for item in validated:
         staged.append(
             ingest_document(
                 source_id, item.title, item.uri, item.content, metadata=item.metadata
