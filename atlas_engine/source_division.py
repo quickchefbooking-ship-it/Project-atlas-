@@ -119,8 +119,8 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
 
 def _frontmatter_value(frontmatter: str, key: str) -> str | None:
     """Read a simple top-level YAML scalar without adding a YAML dependency."""
-    match = re.search(rf"^{re.escape(key)}:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
-    return match.group(1).strip() if match else None
+    match = re.search(rf"^{re.escape(key)}:\s*(.+)$", frontmatter, re.MULTILINE)
+    return match.group(1).strip().strip('"').strip("'") if match else None
 
 
 def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
@@ -137,20 +137,18 @@ def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
     document_id = _frontmatter_value(frontmatter, "id")
     title = _frontmatter_value(frontmatter, "title")
     division = _frontmatter_value(frontmatter, "division")
-    publisher_match = re.search(r"^  publisher:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
-    retrieved_match = re.search(r"^  retrieved:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
-    url_match = re.search(r"^  url:\s*[""']?(https?://[^\s""']+)", frontmatter, re.MULTILINE)
-    if not url_match:
-        url_match = re.search(r"^\s+- url:\s*[""']?(https?://[^\s""']+)", frontmatter, re.MULTILINE)
+    publisher_match = re.search(r"^  publisher:\s*(.+)$", frontmatter, re.MULTILINE)
+    retrieved = _frontmatter_value(frontmatter, "retrieved")
+    url_match = re.search(r"^\s*(?:-\s*)?url:\s*(https?://\S+)", frontmatter, re.MULTILINE)
     if not all((document_id, title, division, publisher_match, url_match)):
         return None
     return {
         "id": document_id,
         "title": title,
         "division": division,
-        "publisher": publisher_match.group(1).strip(),
-        "uri": url_match.group(1).strip(),
-        "retrieved": retrieved_match.group(1).strip() if retrieved_match else "unknown",
+        "publisher": publisher_match.group(1).strip().strip('"').strip("'"),
+        "uri": url_match.group(1).strip().strip('"').strip("'"),
+        "retrieved": retrieved or "unknown",
         "content": content.strip(),
     }
 
