@@ -414,7 +414,7 @@ def complete_task_with_evaluation(
                 WHERE task_id = ? AND attempt_id = ? AND worker_id = ?
                   AND fencing_token = ? AND state = 'active' AND lease_expires_at > ?
                 """,
-                (status, lease_now, task_id, attempt["attempt_id"],
+                (attempt_state, lease_now, task_id, attempt["attempt_id"],
                  attempt["worker_id"], attempt["fencing_token"], lease_now),
             )
             if lease_cursor.rowcount != 1:
