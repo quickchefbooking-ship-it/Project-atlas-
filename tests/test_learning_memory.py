@@ -1,7 +1,7 @@
 import pytest
 
 from atlas_engine import storage
-from atlas_engine.learning_memory import LearningMemory
+from atlas_engine.learning_memory import LearningMemory, MAX_LESSON_EVIDENCE_DEPTH
 
 
 def _isolated_db(monkeypatch, tmp_path):
@@ -76,7 +76,7 @@ def test_lesson_input_validation(monkeypatch, tmp_path, kwargs):
 def test_lesson_evidence_rejects_non_finite_numbers(monkeypatch, tmp_path, value):
     _isolated_db(monkeypatch, tmp_path)
 
-    with pytest.raises(ValueError, match="finite JSON values"):
+    with pytest.raises(ValueError, match="non-finite number"):
         LearningMemory.save_lesson_for_task(
             "task-learning-test",
             "diagnostic",
@@ -192,6 +192,42 @@ def test_lesson_evidence_rejects_payload_over_16_kib(monkeypatch, tmp_path):
         LearningMemory.save_lesson_for_task(
             "task-learning-test", "diagnostic", "Bound stored evidence",
             "test", {"payload": "x" * 16_385},
+        )
+
+    assert storage.list_lessons(limit=10) == []
+
+
+@pytest.mark.parametrize("container_type", ["list", "dict"])
+def test_lesson_evidence_rejects_circular_references(monkeypatch, tmp_path, container_type):
+    _isolated_db(monkeypatch, tmp_path)
+    cycle = []
+    if container_type == "list":
+        cycle.append(cycle)
+    else:
+        cycle.append({"back_reference": cycle})
+
+    with pytest.raises(ValueError, match="circular reference"):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test", "diagnostic", "Reject cyclic evidence",
+            "test", {"cycle": cycle},
+        )
+
+    assert storage.list_lessons(limit=10) == []
+
+
+def test_lesson_evidence_rejects_excessive_nesting(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    evidence = {}
+    current = evidence
+    for _ in range(MAX_LESSON_EVIDENCE_DEPTH + 1):
+        nested = {}
+        current["nested"] = nested
+        current = nested
+
+    with pytest.raises(ValueError, match="maximum nesting depth"):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test", "diagnostic", "Reject deeply nested evidence",
+            "test", evidence,
         )
 
     assert storage.list_lessons(limit=10) == []
