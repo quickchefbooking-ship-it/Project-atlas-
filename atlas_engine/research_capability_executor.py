@@ -98,10 +98,11 @@ class ResearchCapabilityExecutor:
         else:
             raise ValueError("Research capability is not implemented.")
 
+        result_limit = getattr(arguments, "limit", 1)
         staged = stage_adapter_results(
             _StaticResultsAdapter(source_id, documents),
             getattr(arguments, "query", getattr(arguments, "identifier", "")),
-            limit=definition.max_results,
+            limit=result_limit,
         )
         evidence = [
             {
