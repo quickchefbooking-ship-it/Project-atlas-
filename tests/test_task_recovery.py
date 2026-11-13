@@ -577,3 +577,164 @@ def test_expired_lease_cancellation_is_recorded_as_recovery_required(tmp_path, m
     assert cancellation is not None
     assert cancellation["state"] == "requires_recovery"
     assert manager.get_task(task.id).status == "running"
+
+
+def _verified_retry_contract():
+    return {
+        "capability_name": "test.read_only",
+        "version": "1",
+        "idempotent": True,
+        "side_effects_declared": True,
+        "duplicate_suppression_verified": True,
+        "retryable_error_codes": ["temporary_unavailable"],
+    }
+
+
+def _retry_evaluation(task_id, evaluation_id="evaluation-retry"):
+    return {
+        "id": evaluation_id,
+        "task_id": task_id,
+        "passed": False,
+        "score": 0.0,
+        "reasons_json": '["temporary provider outage"]',
+        "missing_requirements_json": '["operation completed"]',
+        "method": "transient_execution_error",
+    }
+
+
+def _schedule_retry(task_id, claim, *, due_seconds=10, deadline_seconds=60, max_attempts=3):
+    now = datetime.now(timezone.utc)
+    return storage.persist_task_retry_schedule(
+        task_id,
+        claim,
+        _retry_evaluation(task_id),
+        capability_contract=_verified_retry_contract(),
+        policy_snapshot={
+            "max_attempts": max_attempts,
+            "per_attempt_timeout_seconds": 30,
+            "total_deadline_seconds": 90,
+            "base_delay_seconds": 1,
+            "max_delay_seconds": 15,
+        },
+        error_code="temporary_unavailable",
+        idempotency_key=f"task:{task_id}:attempt:{claim['attempt_number']}",
+        due_at=(now + timedelta(seconds=due_seconds)).isoformat(),
+        deadline_at=(now + timedelta(seconds=deadline_seconds)).isoformat(),
+    )
+
+
+def test_retry_schedule_is_durable_bounded_and_claimed_only_when_due(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Durable retry", "Retry only after due time", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim)
+    assert schedule is not None
+    assert schedule["state"] == "scheduled"
+    assert manager.get_task(task.id).status == "pending"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "failed"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "transient_execution_error"
+
+    storage.init_db()
+    schedules = storage.list_task_retry_schedules(task.id)
+    assert len(schedules) == 1
+    assert schedules[0]["schedule_id"] == schedule["schedule_id"]
+    assert schedules[0]["state"] == "scheduled"
+    assert storage.claim_task_with_lease(task.id, "too-early", 30) is None
+
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET due_at = ? WHERE schedule_id = ?",
+            (past, schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    retry_claim = storage.claim_task_with_lease(task.id, "worker-b", 30)
+    assert retry_claim is not None
+    assert retry_claim["attempt_number"] == 2
+    stored = storage.list_task_retry_schedules(task.id)[0]
+    assert stored["state"] == "claimed"
+    assert stored["claimed_attempt_id"] == retry_claim["attempt_id"]
+
+
+def test_retry_schedule_requires_verified_capability_and_allowlisted_error(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Retry contract", "Reject unverified retry contract", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    common = dict(
+        task_id=task.id,
+        attempt=claim,
+        evaluation_record=_retry_evaluation(task.id),
+        policy_snapshot={"max_attempts": 3},
+        error_code="temporary_unavailable",
+        idempotency_key="stable-key",
+        due_at=(now + timedelta(seconds=5)).isoformat(),
+        deadline_at=(now + timedelta(seconds=30)).isoformat(),
+    )
+    unsafe = _verified_retry_contract()
+    unsafe["duplicate_suppression_verified"] = False
+    with pytest.raises(ValueError, match="Duplicate suppression"):
+        storage.persist_task_retry_schedule(**common, capability_contract=unsafe)
+    unsafe = _verified_retry_contract()
+    with pytest.raises(ValueError, match="not allowlisted"):
+        storage.persist_task_retry_schedule(
+            **{**common, "error_code": "unknown"}, capability_contract=unsafe
+        )
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_task_attempts(task.id)[0]["state"] == "active"
+
+
+def test_retry_schedule_is_blocked_by_cancellation_and_can_be_cancelled_before_due(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Cancel retry", "Cancellation blocks future retry", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim, due_seconds=20)
+    assert schedule is not None
+
+    cancellation = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Cancel scheduled retry"
+    )
+    assert cancellation is not None
+    assert cancellation["state"] == "cancelled"
+    assert storage.list_task_retry_schedules(task.id)[0]["state"] == "cancelled"
+    assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
+
+
+def test_retry_schedule_expires_at_deadline_and_cannot_be_claimed(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Expire retry", "No retry after deadline", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim, due_seconds=5, deadline_seconds=20)
+    assert schedule is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()
+    assert storage.expire_task_retry_schedules(now=future) == 1
+    assert storage.list_task_retry_schedules(task.id)[0]["state"] == "expired"
+    assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
+
+
+def test_retry_schedule_rejects_attempt_count_beyond_policy(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Retry ceiling", "Do not exceed policy attempts", [])
+    first = storage.claim_task_with_lease(task.id, "worker-a", 5)
+    assert first is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    assert storage.resolve_task_recovery(
+        task.id, first["attempt_id"], "retry", "operator", "Explicit recovery",
+        retry_safe=True, side_effects_reconciled=True,
+    )
+    second = storage.claim_task_with_lease(task.id, "worker-b", 30)
+    assert second is not None and second["attempt_number"] == 2
+    schedule = _schedule_retry(task.id, second, max_attempts=2)
+    assert schedule is None
+    assert manager.get_task(task.id).status == "running"
+    assert storage.get_task_attempts(task.id)[-1]["state"] == "active"
