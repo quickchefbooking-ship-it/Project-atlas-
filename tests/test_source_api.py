@@ -97,3 +97,15 @@ def test_source_document_queue_validates_state_and_limit(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
     assert client.get("/sources/documents?state=unknown", headers=_headers()).status_code == 422
     assert client.get("/sources/documents?limit=101", headers=_headers()).status_code == 422
+
+
+def test_professor_source_interface_is_served_and_manual_source_is_bootstrapped(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    with client:
+        page = client.get("/professor/sources")
+
+    assert page.status_code == 200
+    assert "Source Division" in page.text
+    assert "Stage import for review" in page.text
+    assert "localStorage" not in page.text
+    assert storage.get_source("manual-paste") is not None
