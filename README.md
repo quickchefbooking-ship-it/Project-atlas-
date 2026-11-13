@@ -56,6 +56,10 @@ Media output paths are constrained to ATLAS_MEDIA_OUTPUT_DIR. Path traversal and
 
 See [the Professor orchestration blueprint](docs/professor-orchestration.md) for the verified current boundaries, target octopus/capability model, staged delivery plan and release gates. It is design guidance, not a claim that the future orchestration or integrations are already implemented.
 
+## Professor Source Division interface
+
+Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste` source is registered at application startup. The interface does not approve documents.
+
 ## Useful endpoints
 
 - GET /dashboard
