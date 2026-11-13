@@ -231,31 +231,115 @@ def load_bundled_knowledge() -> int:
     return imported
 
 
-def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Keyword retrieval over approved material only; return provenance with every hit.
+_RETRIEVAL_STOP_WORDS = {
+    "about", "after", "again", "against", "also", "among", "because", "been",
+    "before", "being", "between", "both", "could", "does", "each", "from",
+    "have", "into", "more", "most", "other", "over", "same", "some", "such",
+    "than", "that", "their", "them", "then", "there", "these", "they", "this",
+    "those", "through", "under", "very", "what", "when", "where", "which",
+    "while", "with", "would", "your",
+}
 
-    Bundled references are loaded explicitly by the application bootstrap, not
-    as a side effect of every query. This keeps isolated callers and tests
-    deterministic and prevents unrelated bundled documents from polluting
-    narrow retrieval results.
+
+def _tokens(value: str) -> list[str]:
+    """Normalize searchable text into stable lowercase word tokens."""
+    return [
+        token for token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9_-]{1,}", value.lower())
+        if token not in _RETRIEVAL_STOP_WORDS
+    ]
+
+
+def _make_snippet(content: str, terms: set[str], width: int = 320) -> str:
+    """Return a compact, plain-text excerpt around the earliest matched term."""
+    normalized = re.sub(r"\s+", " ", content).strip()
+    lowered = normalized.lower()
+    positions = [lowered.find(term) for term in terms if lowered.find(term) >= 0]
+    if not positions:
+        return normalized[:width] + ("…" if len(normalized) > width else "")
+    start = max(0, min(positions) - width // 4)
+    end = min(len(normalized), start + width)
+    if start:
+        start = normalized.find(" ", start)
+        start = max(0, start + 1)
+    if end < len(normalized):
+        end = normalized.rfind(" ", start, end)
+        if end <= start:
+            end = min(len(normalized), start + width)
+    excerpt = normalized[start:end].strip()
+    return ("…" if start else "") + excerpt + ("…" if end < len(normalized) else "")
+
+
+def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Rank approved evidence with a lightweight BM25-style lexical scorer.
+
+    The score is a relevance signal, not a truth or authority score. Search
+    excludes pending/rejected material and returns provenance, matched terms,
+    a short excerpt and a stable citation object for every result.
     """
     if not isinstance(query, str) or not query.strip():
         return []
     if not isinstance(limit, int) or limit < 1 or limit > 50:
         raise ValueError("Limit must be between 1 and 50.")
-    terms = {term.lower() for term in re.findall(r"[a-zA-Z0-9_]+", query) if len(term) > 2}
+    query_tokens = _tokens(query)
+    terms = set(query_tokens)
     if not terms:
         return []
+
+    # The store currently exposes a bounded 500-record read; do not imply that
+    # this lexical prototype searches an unbounded library.
     rows = storage.list_source_documents(approved_only=True, limit=500)
-    ranked: list[tuple[int, dict[str, Any]]] = []
+    if not rows:
+        return []
+
+    tokenized: list[tuple[dict[str, Any], list[str], list[str]]] = []
+    document_frequency: dict[str, int] = {term: 0 for term in terms}
+    total_length = 0
     for row in rows:
-        text = f"{row['title']} {row['content']}".lower()
-        score = sum(text.count(term) for term in terms)
-        if score:
-            ranked.append((score, row))
-    ranked.sort(key=lambda item: (item[0], item[1]["updated_at"]), reverse=True)
-    return [
-        {
+        title_tokens = _tokens(row["title"])
+        content_tokens = _tokens(row["content"])
+        all_tokens = title_tokens + content_tokens
+        tokenized.append((row, title_tokens, all_tokens))
+        total_length += len(all_tokens)
+        present = set(all_tokens)
+        for term in terms & present:
+            document_frequency[term] += 1
+
+    document_count = len(tokenized)
+    average_length = max(1.0, total_length / document_count)
+    ranked: list[tuple[float, str, dict[str, Any], set[str]]] = []
+    k1 = 1.2
+    b = 0.75
+    for row, title_tokens, all_tokens in tokenized:
+        frequencies: dict[str, int] = {}
+        for token in all_tokens:
+            if token in terms:
+                frequencies[token] = frequencies.get(token, 0) + 1
+        matched = set(frequencies)
+        if not matched:
+            continue
+        length = max(1, len(all_tokens))
+        score = 0.0
+        for term, frequency in frequencies.items():
+            df = document_frequency[term]
+            inverse_document_frequency = max(
+                0.0, __import__("math").log(1.0 + (document_count - df + 0.5) / (df + 0.5))
+            )
+            denominator = frequency + k1 * (1.0 - b + b * length / average_length)
+            score += inverse_document_frequency * (frequency * (k1 + 1.0) / denominator)
+            if term in title_tokens:
+                score += inverse_document_frequency * 1.5
+        if query_tokens and " ".join(query_tokens) in " ".join(all_tokens):
+            score += 1.0
+        if row["trust_level"] == "authoritative":
+            score *= 1.05
+        elif row["trust_level"] == "reviewed":
+            score *= 1.0
+        ranked.append((score, row["updated_at"], row, matched))
+
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    results: list[dict[str, Any]] = []
+    for score, _updated, row, matched in ranked[:limit]:
+        results.append({
             "id": row["id"],
             "source_id": row["source_id"],
             "title": row["title"],
@@ -263,7 +347,16 @@ def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
             "content": row["content"],
             "trust_level": row["trust_level"],
             "content_sha256": row["content_sha256"],
-            "score": score,
-        }
-        for score, row in ranked[:limit]
-    ]
+            "score": round(score, 6),
+            "matched_terms": sorted(matched),
+            "snippet": _make_snippet(row["content"], matched),
+            "citation": {
+                "document_id": row["id"],
+                "source_id": row["source_id"],
+                "title": row["title"],
+                "url": row["uri"],
+                "content_sha256": row["content_sha256"],
+                "trust_level": row["trust_level"],
+            },
+        })
+    return results
