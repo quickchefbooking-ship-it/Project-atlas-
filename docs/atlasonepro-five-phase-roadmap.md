@@ -38,16 +38,17 @@ Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`.
 Implemented:
 - Typed retryable/terminal error classes and a pure fail-closed eligibility evaluator.
 - Immutable server-side retry ceilings, finite timing validation, bounded jittered back-off and a frozen capability error-code allowlist.
+- Capability contracts require explicit boolean safety declarations and a non-empty test-evidence reference before they are considered retry-safe.
 - Durable, idempotent cancellation requests per task attempt, with requested, acknowledged, too_late and requires_recovery states.
 - Authenticated cancellation request/status routes.
 - Fenced cancellation acknowledgement and atomic task/evaluation/attempt persistence.
 - Cooperative cancellation checks before execution, after context retrieval, after the local executor returns and before normal completion.
 - Expired worker cancellation requests move to operator recovery; completed attempts record late cancellation as too_late.
-- Durable retry schedules store originating attempt, next attempt number, due/deadline timestamps, capability name/version, idempotency key and immutable policy snapshot.
+- Durable retry schedules store originating attempt, next attempt number, due/deadline timestamps, capability name/version, idempotency key, capability evidence and immutable policy snapshot.
 - Retry scheduling atomically finalises the failed attempt and evaluation, returns the task to pending and persists the schedule.
 - Claims cannot start before due time, after the deadline, beyond the configured attempt ceiling, or after schedule cancellation/expiry. Due claims consume the schedule and link it to a new fenced attempt atomically.
-- A cancellation request against a pending scheduled retry cancels the schedule so it cannot be claimed.
-- Tests cover retry policy validation, cancellation idempotency/races/fencing, restart persistence, expired/late requests, retry schedule eligibility, due-time gating, attempt ceilings, expiry and scheduled-retry cancellation.
+- A cancellation request against a pending scheduled retry cancels and terminalises the task with an evaluation. An expired retry deadline also terminalises the task with a retry-expired evaluation.
+- Tests cover retry policy validation, capability evidence, fake-provider duplicate suppression, cancellation idempotency/races/fencing, restart persistence, expired/late requests, retry schedule eligibility, due-time gating, concurrent claims, attempt ceilings, expiry, terminal outcomes and scheduled-retry cancellation.
 
 Current limits:
 - No registered capability registry or scheduler that automatically discovers and dispatches due work.
@@ -56,7 +57,7 @@ Current limits:
 - Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
 - Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
-The prior fully green checkpoint at `0516e97a6dba4a70b7c8021ba573e9e9a9ad5896` passed **176 tests** in both PR and push workflows, with one non-blocking Starlette/AnyIO deprecation warning. New retry schedule/migration refinements are under CI on the latest branch head.
+At code head `3c830a52206db07f643e039f44c97cda5814f0d5`, both PR and push workflows passed **182 tests** with one non-blocking Starlette/AnyIO deprecation warning.
 
 Acceptance gates:
 - Tests prove retry limits are enforced under concurrent requests and due-time claims.
