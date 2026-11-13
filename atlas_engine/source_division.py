@@ -119,16 +119,16 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
 
 def _frontmatter_value(frontmatter: str, key: str) -> str | None:
     """Read a simple top-level YAML scalar without adding a YAML dependency."""
-    match = re.search(rf"^{re.escape(key)}:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
+    match = re.search(rf"^{re.escape(key)}:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
     return match.group(1).strip() if match else None
 
 
 def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
     """Accept only Markdown notes carrying the explicit curated-reference marker."""
     content = path.read_text(encoding="utf-8")
-    if not content.startswith("---\\n"):
+    if not content.startswith("---\n"):
         return None
-    closing = content.find("\\n---", 4)
+    closing = content.find("\n---", 4)
     if closing < 0:
         return None
     frontmatter = content[4:closing]
@@ -137,13 +137,11 @@ def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
     document_id = _frontmatter_value(frontmatter, "id")
     title = _frontmatter_value(frontmatter, "title")
     division = _frontmatter_value(frontmatter, "division")
-    publisher_match = re.search(r"^  publisher:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
-    retrieved_match = re.search(r"^  retrieved:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
-    # The source may expose a single URL or a list of guidance URLs. Preserve
-    # the first canonical source URI for indexing; the note retains all sources.
-    url_match = re.search(r"^  url:\\s*[\\"']?(https?://[^\\s\\"']+)", frontmatter, re.MULTILINE)
+    publisher_match = re.search(r"^  publisher:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
+    retrieved_match = re.search(r"^  retrieved:\s*[""']?([^\n""']+)", frontmatter, re.MULTILINE)
+    url_match = re.search(r"^  url:\s*[""']?(https?://[^\s""']+)", frontmatter, re.MULTILINE)
     if not url_match:
-        url_match = re.search(r"^\\s+- url:\\s*[\\"']?(https?://[^\\s\\"']+)", frontmatter, re.MULTILINE)
+        url_match = re.search(r"^\s+- url:\s*[""']?(https?://[^\s""']+)", frontmatter, re.MULTILINE)
     if not all((document_id, title, division, publisher_match, url_match)):
         return None
     return {
@@ -158,16 +156,10 @@ def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
 
 
 def load_bundled_knowledge() -> int:
-    """Import explicitly curated Markdown notes from every library collection.
-
-    Files without valid frontmatter and the exact curated-reference marker are
-    ignored. New material is therefore not silently promoted merely because it
-    was copied into the repository.
-    """
+    """Import explicitly curated Markdown notes from every library collection."""
     library_root = Path(__file__).resolve().parent.parent / "knowledge_library"
-    candidates = sorted(library_root.rglob("*.md"))
     imported = 0
-    for path in candidates:
+    for path in sorted(library_root.rglob("*.md")):
         if path.name.lower() == "readme.md":
             continue
         item = _bundled_document_metadata(path)
@@ -175,9 +167,7 @@ def load_bundled_knowledge() -> int:
             continue
         source_id = "bundled-" + re.sub(r"[^a-z0-9]+", "-", item["publisher"].lower()).strip("-")
         register_source(
-            source_id,
-            item["publisher"],
-            "curated_markdown_library",
+            source_id, item["publisher"], "curated_markdown_library",
             metadata={"collection": item["division"], "origin": "repository_bundle"},
         )
         relative_path = path.relative_to(library_root.parent).as_posix()
