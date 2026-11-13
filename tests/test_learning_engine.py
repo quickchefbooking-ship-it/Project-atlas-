@@ -225,9 +225,20 @@ def test_validated_memory_is_not_hidden_by_newer_unvalidated_lessons(tmp_path, m
     manager = TaskManager(storage)
     task = manager.create_task("Memory retrieval", "Test trusted memory ranking", [])
 
-    trusted = LearningMemory.save_lesson_for_task(
-        task.id, "validated", "precision memory retrieval", "reviewed", {"trusted": True}, validated=True
-    )
+    # Seed a previously reviewed record at the storage layer. New lesson creation
+    # must never self-certify; that invariant is covered in test_learning_memory.py.
+    import json
+    trusted_id = "lesson-reviewed-fixture"
+    storage.save_lesson({
+        "id": trusted_id,
+        "task_id": task.id,
+        "lesson_type": "validated",
+        "summary": "precision memory retrieval",
+        "source": "reviewed",
+        "evidence_json": json.dumps({"trusted": True}, sort_keys=True),
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
     for index in range(105):
         LearningMemory.save_lesson_for_task(
             task.id, "unverified", f"unverified unrelated note {index}", "observation", {"trusted": False}
@@ -235,7 +246,7 @@ def test_validated_memory_is_not_hidden_by_newer_unvalidated_lessons(tmp_path, m
 
     relevant = LearningMemory.get_relevant_lessons("precision memory retrieval", limit=5)
 
-    assert trusted["id"] in {lesson["id"] for lesson in relevant}
+    assert trusted_id in {lesson["id"] for lesson in relevant}
     assert all(lesson["validated"] in (1, True) for lesson in relevant)
 
 
