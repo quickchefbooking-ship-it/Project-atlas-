@@ -207,7 +207,8 @@ def fetch_public_source(payload: PublicSourceFetchRequest):
                 search_uk_legislation(payload.identifier, payload.resource_type, limit=5),
             )
         staged = stage_adapter_results(adapter, payload.identifier, limit=5)
-        item = staged[0]
+        if not staged:
+            raise HTTPException(status_code=404, detail="No matching public resources were found.")
         return {
             "status": "staged_for_review",
             "provider": payload.provider,
