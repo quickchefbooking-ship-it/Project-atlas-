@@ -18,6 +18,7 @@ def _plan(**overrides):
                 "step_id": "discover",
                 "objective": "Find relevant source records.",
                 "capability_id": "crossref.search",
+                "capability_version": "1",
                 "rationale": "Identify scholarly literature.",
                 "expected_evidence": "Bibliographic records and source URLs.",
             },
@@ -25,6 +26,7 @@ def _plan(**overrides):
                 "step_id": "compare",
                 "objective": "Compare findings and source provenance.",
                 "capability_id": "source.approved_retrieval",
+                "capability_version": "1",
                 "rationale": "Check claims against approved records.",
                 "expected_evidence": "Evidence records with hashes and retrieval dates.",
                 "depends_on": ["discover"],
@@ -39,6 +41,7 @@ def test_research_plan_accepts_bounded_versioned_plan():
     plan = _plan()
     assert plan.schema_version == "1.0"
     assert len(plan.steps) == 2
+    assert plan.steps[0].capability_version == "1"
     assert plan.steps[1].depends_on == ["discover"]
 
 
@@ -50,6 +53,7 @@ def test_research_plan_rejects_unregistered_or_executable_fields():
             "step_id": "run",
             "objective": "Execute code.",
             "capability_id": "shell.exec",
+            "capability_version": "1",
             "rationale": "Run arbitrary code.",
             "expected_evidence": "Process output.",
             "command": "curl example.org",
@@ -71,6 +75,7 @@ def test_research_plan_rejects_duplicate_steps_and_missing_dependencies():
             "step_id": "same",
             "objective": "Find evidence.",
             "capability_id": "crossref.search",
+            "capability_version": "1",
             "rationale": "Search papers.",
             "expected_evidence": "Source records.",
         },
@@ -78,6 +83,7 @@ def test_research_plan_rejects_duplicate_steps_and_missing_dependencies():
             "step_id": "same",
             "objective": "Compare evidence.",
             "capability_id": "source.approved_retrieval",
+            "capability_version": "1",
             "rationale": "Verify records.",
             "expected_evidence": "Citations.",
         },
@@ -90,6 +96,7 @@ def test_research_plan_rejects_duplicate_steps_and_missing_dependencies():
             "step_id": "one",
             "objective": "Find evidence.",
             "capability_id": "crossref.search",
+            "capability_version": "1",
             "rationale": "Search papers.",
             "expected_evidence": "Source records.",
             "depends_on": ["missing"],
@@ -102,6 +109,7 @@ def test_research_plan_rejects_dependency_cycles():
             "step_id": "one",
             "objective": "First step.",
             "capability_id": "crossref.search",
+            "capability_version": "1",
             "rationale": "Discover.",
             "expected_evidence": "Sources.",
             "depends_on": ["two"],
@@ -110,6 +118,7 @@ def test_research_plan_rejects_dependency_cycles():
             "step_id": "two",
             "objective": "Second step.",
             "capability_id": "source.approved_retrieval",
+            "capability_version": "1",
             "rationale": "Verify.",
             "expected_evidence": "Evidence.",
             "depends_on": ["one"],
