@@ -121,12 +121,12 @@ Acceptance gates:
 
 ## Immediate next actions
 
-1. Continue the Phase 1 review against the complete PR diff, especially the recovery state machine, authentication dependencies and atomic task/evaluation persistence. Record unresolved findings before changing those paths.
-2. Phase 2 design and acceptance-test matrix are committed at `docs/phase-2-retry-cancellation-design.md`.
-3. The policy-only foundation is implemented in `atlas_engine/retry_policy.py`: bounded immutable settings, typed errors, a frozen capability error-code allowlist and a pure fail-closed eligibility evaluator. Regression tests live in `tests/test_retry_policy.py`.
-4. Next add additive, restart-safe cancellation-request storage and fenced state transitions. Test cancellation-versus-claim races before adding worker checkpoints.
-5. Only after durable cancellation and retry-decision records are tested, consider a due-work scheduler. Automatic retries remain disabled; the local executor is not opted into retries.
-6. Run both PR and push CI after each meaningful change and record exact branch-head evidence. Do not start Phase 3 implementation until every Phase 2 acceptance gate passes.
+1. Complete a focused review of the Phase 1/2 combined diff, especially cancellation-versus-completion ordering, expired lease recovery, and the task/evaluation/attempt transaction boundaries.
+2. Keep the current shared API-key limitation explicit: actor labels are not verified identity, and this prototype is not suitable for public multi-user use.
+3. Add a registered, versioned capability registry and immutable per-attempt policy snapshots before any runtime retry scheduling is considered.
+4. Add durable retry-decision and due-time records with restart/concurrency tests, but leave the scheduler and automatic retries disabled until idempotency and reconciliation evidence are independently enforceable.
+5. Revisit per-attempt timeout semantics only with an executor that can stop safely or prove side-effect reconciliation; do not imply a thread timeout can undo work.
+6. Run both PR and push CI after each meaningful change and record exact branch-head evidence. Do not start Phase 3 until every Phase 2 acceptance gate passes.
 
 ## Current project references
 
