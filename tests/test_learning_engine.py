@@ -196,3 +196,27 @@ def test_learning_memory_generates_unique_ids_for_rapid_lessons(tmp_path, monkey
     assert first["id"] != second["id"]
     saved = storage.list_lessons(limit=10)
     assert {row["id"] for row in saved} >= {first["id"], second["id"]}
+
+
+def test_validated_memory_is_not_hidden_by_newer_unvalidated_lessons(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.learning_memory import LearningMemory
+    from atlas_engine.task_manager import TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "validated-memory.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Memory retrieval", "Test trusted memory ranking", [])
+
+    trusted = LearningMemory.save_lesson_for_task(
+        task.id, "validated", "precision memory retrieval", "reviewed", {"trusted": True}, validated=True
+    )
+    for index in range(105):
+        LearningMemory.save_lesson_for_task(
+            task.id, "unverified", f"unverified unrelated note {index}", "observation", {"trusted": False}
+        )
+
+    relevant = LearningMemory.get_relevant_lessons("precision memory retrieval", limit=5)
+
+    assert trusted["id"] in {lesson["id"] for lesson in relevant}
+    assert all(lesson["validated"] in (1, True) for lesson in relevant)
