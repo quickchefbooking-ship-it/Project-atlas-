@@ -170,3 +170,24 @@ The GitHub workflow-run lookup returned no run for the latest feature-branch com
 - Full current-branch CI and the complete existing test suite must pass before the independent research experiment is attempted.
 
 No paid AI provider has been enabled. No production change, merge or deployment has been made.
+
+
+## Persisted orchestration implementation — 2026-11-13
+
+A first bounded execution lifecycle has now been added:
+
+- `atlas_engine/research_orchestrator.py` creates additive SQLite tables for research runs and ordered steps, preserving existing task and source tables.
+- The orchestrator accepts only a validated versioned plan and immutable scopes supplied by trusted application code.
+- It validates every capability ID, version and typed argument, and preflights all required scopes before creating a run or executing any capability.
+- Steps are ordered by their dependency graph and run sequentially. The first failure stops further execution; remaining steps are marked skipped.
+- Run and step status transitions, plan JSON, capability versions, arguments, timestamps, sanitised error types and evidence references are persisted.
+- The evidence ledger stores document IDs, source IDs, URIs, trust/review states and content SHA-256 hashes. It deliberately does not duplicate full source bodies; source content remains in Source Division.
+- A `get_run` read path reconstructs the persisted plan and ordered step outcomes for audit/review.
+
+Focused tests cover successful execution and replay, failure stop behaviour, secret/error-message exclusion, invalid capability preflight, and missing-scope preflight. These tests have been authored but have not yet been executed in CI against the current branch head.
+
+### Deliberate limits
+
+This is a deterministic orchestration service, not yet a complete autonomous research agent. A real model must still create the plan and synthesize the evidence. The service currently treats a run as completed when all registered read-only steps completed; it does not assert that the research question was answered correctly. Research quality evaluation, claim-to-source validation, reviewer identity, and controlled lesson promotion remain separate gates.
+
+No HTTP route exposes this internal service yet. This prevents the current shared API key and caller-supplied labels from being mistaken for verified identity or tenant permissions.
