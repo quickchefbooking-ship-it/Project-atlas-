@@ -63,9 +63,9 @@ a{color:#9dc9f8;overflow-wrap:anywhere}.warning{border-left:3px solid #d6a85b;pa
 </div>
 <section class="panel">
 <h2>Fetch public research metadata</h2>
-<p class="muted">Read-only public metadata from GitHub repositories and Hugging Face models or datasets. No private repositories, model weights or credentials are accessed. Every result is staged pending review.</p>
+<p class="muted">Read-only research from GitHub, Hugging Face, official UK legislation and Crossref scholarly metadata. No private repositories, model weights or credentials are accessed. Every result is staged pending review.</p>
 <div class="row">
-<div><label for="provider">Provider</label><select id="provider"><option value="github">GitHub repository</option><option value="huggingface">Hugging Face</option><option value="legislation">UK legislation</option></select></div>
+<div><label for="provider">Provider</label><select id="provider"><option value="github">GitHub repository</option><option value="huggingface">Hugging Face</option><option value="legislation">UK legislation</option><option value="crossref">Crossref scholarly research</option></select></div>
 <div><label for="resourceType">Resource type</label><select id="resourceType"><option value="repository">Repository</option></select></div>
 </div>
 <label for="resourceId">Public resource identifier</label>
@@ -198,11 +198,13 @@ a{color:#9dc9f8;overflow-wrap:anywhere}.warning{border-left:3px solid #d6a85b;pa
       ? [["repository","Repository"]]
       : provider === "huggingface"
         ? [["model","Model"],["dataset","Dataset"]]
-        : [["ukpga","UK Public General Act"],["uksi","UK Statutory Instrument"],["asp","Scottish Act"],["anaw","Welsh Act"],["nia","Northern Ireland Act"],["nisr","Northern Ireland Statutory Rule"],["ukla","UK Local Act"]];
+        : provider === "legislation"
+          ? [["ukpga","UK Public General Act"],["uksi","UK Statutory Instrument"],["asp","Scottish Act"],["anaw","Welsh Act"],["nia","Northern Ireland Act"],["nisr","Northern Ireland Statutory Rule"],["ukla","UK Local Act"]]
+          : [["scholarly_work","Scholarly work"]];
     choices.forEach(([value,label]) => {
       const option = document.createElement("option"); option.value = value; option.textContent = label; type.appendChild(option);
     });
-    el("resourceId").placeholder = provider === "github" ? "e.g. owner/repository" : provider === "huggingface" ? "e.g. organisation/model" : "Search legislation title, e.g. Equality Act";
+    el("resourceId").placeholder = provider === "github" ? "e.g. owner/repository" : provider === "huggingface" ? "e.g. organisation/model" : provider === "legislation" ? "Search legislation title, e.g. Equality Act" : "Search paper title, DOI topic or author";
   });
   el("fetchPublic").addEventListener("click", async () => {
     try {
