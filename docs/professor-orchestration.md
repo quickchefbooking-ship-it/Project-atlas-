@@ -82,7 +82,7 @@ A failed task is evidence of a failure, not proof that the proposed lesson is co
 
 The current evaluator supports deterministic criteria only; criteria marked `deterministic: false` are explicitly rejected as unsupported rather than silently scored as objective. A separate, evidence-backed subjective review path must be designed before those criteria can be used.
 
-Validated lesson retrieval now ranks exact token matches across the full validated lesson corpus, rather than truncating candidates to the 100 most recent records. This remains lexical retrieval, not semantic or embedding-based search; unvalidated records are excluded.
+Validated lesson retrieval now ranks exact token matches across the full validated lesson corpus, rather than truncating candidates to the 100 most recent records. This remains lexical retrieval, not semantic or embedding-based search; unvalidated records are excluded. Lesson evidence is validated before persistence: only finite JSON-compatible values are accepted, circular references and nesting beyond 64 levels are rejected, and serialized evidence is capped at 16 KiB. New lessons remain unvalidated until a separate review decision.
 
 The current SQLite schema is suitable only for the prototype. Before multi-user use, add tenant scoping, provenance and validation history, retention controls, migration tests, backups and an append-only audit trail.
 
