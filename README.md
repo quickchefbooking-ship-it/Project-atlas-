@@ -73,11 +73,28 @@ Open `/professor/sources` in the running AtlasOnePro instance to use the browser
 - POST /tasks
 - POST /tasks/{task_id}/run
 - GET /tasks/{task_id}/evaluations
+- GET /tasks/{task_id}/attempts
+- POST /tasks/recovery/scan
+- GET /tasks/recovery-required
+- POST /tasks/{task_id}/recovery-decision
+- POST /tasks/{task_id}/cancel
+- GET /tasks/{task_id}/cancellation
+- GET /tasks/{task_id}/retry-schedules
 - GET /lessons
 - GET /proposals
 - POST /proposals/{proposal_id}/review
 - POST /media/generate-image
 - POST /media/generate-video
+
+## Recovery, cancellation and retry boundaries
+
+Task attempts use durable SQLite leases and fencing tokens. An expired lease is moved to `recovery_required`; it is never automatically replayed. Recovery decisions require an authenticated operator route and explicit safety/reconciliation attestations.
+
+Cancellation requests are durable and tied to one attempt. The worker checks at safe points around the bounded synchronous local executor; it does not kill work mid-operation. If a request arrives after a retry has been scheduled but before its next attempt is claimed, the schedule is cancelled and the task is terminalised. If the lease has expired, cancellation requires operator recovery.
+
+Retry schedules are persisted with due time, deadline, attempt number, capability metadata, idempotency key and policy snapshot. Claims before the due time or after the deadline are blocked. The current executor does not create retry schedules, there is no unattended retry scheduler, and no automatic retry is enabled. The retry-schedule endpoint is read-only inspection.
+
+Execution failures are persisted with a sanitised evaluation. A secondary `execution_failure` lesson may be recorded as unvalidated, with only the exception class and evaluation ID; unvalidated lessons are excluded from retrieval until reviewed. If the evaluation transaction fails, the API returns `outcome_unconfirmed` and does not claim a durable terminal result.
 
 ## Proposal safety boundary
 
