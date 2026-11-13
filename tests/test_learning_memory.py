@@ -165,3 +165,33 @@ def test_retrieval_uses_exact_tokens_not_substrings(monkeypatch, tmp_path):
     })
 
     assert LearningMemory.get_relevant_lessons("art", limit=5) == []
+
+
+@pytest.mark.parametrize("evidence", [
+    {1: "non-string key"},
+    {"nested": (1, 2)},
+    {"nested": {False, True}},
+    {"nested": object()},
+])
+def test_lesson_evidence_rejects_python_only_values(monkeypatch, tmp_path, evidence):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test", "diagnostic", "Reject Python-only values",
+            "test", evidence,
+        )
+
+    assert storage.list_lessons(limit=10) == []
+
+
+def test_lesson_evidence_rejects_payload_over_16_kib(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError, match="16,384-byte limit"):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test", "diagnostic", "Bound stored evidence",
+            "test", {"payload": "x" * 16_385},
+        )
+
+    assert storage.list_lessons(limit=10) == []
