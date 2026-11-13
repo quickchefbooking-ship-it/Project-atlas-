@@ -88,14 +88,14 @@ def test_bundled_knowledge_is_copied_into_local_library_and_retrievable(monkeypa
 
     _isolated_db(monkeypatch, tmp_path)
 
-    assert load_bundled_knowledge() == 2
+    assert load_bundled_knowledge() == 3
     first = retrieve("prompt injection external content")
     assert first
     assert any("prompt-injection" in item["uri"] for item in first)
 
     # Re-importing the same bundle must neither duplicate nor rewrite records.
     assert load_bundled_knowledge() == 0
-    assert len(storage.list_source_documents(approved_only=True, limit=100)) == 2
+    assert len(storage.list_source_documents(approved_only=True, limit=100)) == 3
 
 def test_bundled_library_discovery_accepts_only_explicit_curated_frontmatter(tmp_path):
     from atlas_engine.source_division import _bundled_document_metadata
@@ -180,7 +180,7 @@ def test_application_startup_imports_curated_bundle(monkeypatch, tmp_path):
         pass
 
     documents = storage.list_source_documents(approved_only=True, limit=100)
-    assert len(documents) == 2
+    assert len(documents) == 3
     assert all(item["trust_level"] == "reviewed" for item in documents)
 
 def test_json_batch_import_stages_pending_documents_and_preserves_provenance(monkeypatch, tmp_path):
@@ -249,3 +249,14 @@ def test_json_batch_import_rejects_bad_envelopes_and_non_web_uris(monkeypatch, t
                 "content": "This must not be imported.",
             }],
         }))
+
+
+def test_huggingface_rag_note_is_imported_and_searchable(monkeypatch, tmp_path):
+    from atlas_engine.source_division import load_bundled_knowledge
+
+    _isolated_db(monkeypatch, tmp_path)
+
+    assert load_bundled_knowledge() == 3
+    results = retrieve("retrieval augmented generation model cards")
+    assert results
+    assert any("huggingface.co/docs" in item["uri"] for item in results)
