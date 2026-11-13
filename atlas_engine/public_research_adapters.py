@@ -205,3 +205,69 @@ def search_uk_legislation(query: str, legislation_type: str = "ukpga", limit: in
             },
         ))
     return documents
+
+
+def search_crossref_works(query: str, limit: int = 5) -> list[SourceDocument]:
+    """Search Crossref's public scholarly metadata API; abstracts only when supplied."""
+    if not isinstance(query, str) or not 3 <= len(query.strip()) <= 160:
+        raise PublicSourceError("Scholarly search must contain 3 to 160 characters.")
+    if not isinstance(limit, int) or limit < 1 or limit > 5:
+        raise PublicSourceError("Scholarly result limit must be between 1 and 5.")
+    params = urlencode({
+        "query.bibliographic": query.strip(),
+        "rows": str(limit),
+        "select": "DOI,title,author,publisher,published-print,published-online,type,URL,abstract,license,is-referenced-by-count,created",
+    })
+    payload = _get_json(f"https://api.crossref.org/works?{params}")
+    message = payload.get("message")
+    items = message.get("items", []) if isinstance(message, dict) else []
+    if not isinstance(items, list):
+        raise PublicSourceError("Crossref returned an unexpected works response.")
+    retrieved = _retrieved_at()
+    documents: list[SourceDocument] = []
+    for item in items[:limit]:
+        if not isinstance(item, dict):
+            continue
+        doi = item.get("DOI")
+        if not isinstance(doi, str) or not re.fullmatch(r"10\.\d{4,9}/\S+", doi):
+            continue
+        title_values = item.get("title")
+        title = " ".join(title_values[0].split()) if isinstance(title_values, list) and title_values and isinstance(title_values[0], str) else ""
+        if not title:
+            title = f"Crossref work {doi}"
+        authors = []
+        for author in item.get("author", [])[:30] if isinstance(item.get("author"), list) else []:
+            if isinstance(author, dict):
+                name = " ".join(part for part in [author.get("given"), author.get("family")] if isinstance(part, str) and part.strip())
+                if name:
+                    authors.append(name)
+        fields = {
+            "doi": doi,
+            "authors": authors,
+            "publisher": item.get("publisher"),
+            "type": item.get("type"),
+            "published_print": item.get("published-print"),
+            "published_online": item.get("published-online"),
+            "citation_count": item.get("is-referenced-by-count"),
+            "created": item.get("created"),
+            "license": item.get("license", []),
+            "abstract": item.get("abstract"),
+            "landing_page": item.get("URL"),
+        }
+        content = "Crossref scholarly metadata\n" + json.dumps(fields, ensure_ascii=False, indent=2, sort_keys=True)
+        documents.append(SourceDocument(
+            title=title,
+            uri=f"https://doi.org/{doi}",
+            content=content,
+            metadata={
+                "provider": "crossref",
+                "resource_type": "scholarly_work",
+                "doi": doi,
+                "publisher": item.get("publisher"),
+                "retrieved_at": retrieved,
+                "record_kind": "bibliographic_metadata",
+                "abstract_included": bool(item.get("abstract")),
+                "full_text_not_fetched": True,
+            },
+        ))
+    return documents
