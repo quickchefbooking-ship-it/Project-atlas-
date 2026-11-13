@@ -188,3 +188,31 @@ def test_retry_evaluator_rejects_invalid_inputs():
         evaluate_retry(**args, attempt_number=1, jitter_fraction=1.1)
     with pytest.raises(ValueError):
         evaluate_retry(**{**args, "elapsed_seconds": -1}, attempt_number=1)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_attempts": True},
+        {"max_attempts": 1.5},
+        {"per_attempt_timeout_seconds": False},
+        {"total_deadline_seconds": float("nan")},
+        {"base_delay_seconds": float("inf")},
+    ],
+)
+def test_retry_policy_rejects_non_integer_or_non_finite_values(kwargs):
+    with pytest.raises(ValueError):
+        RetryPolicy(**kwargs)
+
+
+def test_retry_evaluator_rejects_non_finite_timing_values():
+    args = dict(
+        error=RetryableExecutionError("temporary_unavailable"),
+        attempt_number=1,
+        policy=RetryPolicy(max_attempts=3),
+        capability=_safe_contract(),
+    )
+    with pytest.raises(ValueError):
+        evaluate_retry(**args, elapsed_seconds=float("nan"))
+    with pytest.raises(ValueError):
+        evaluate_retry(**args, elapsed_seconds=0, jitter_fraction=float("inf"))
