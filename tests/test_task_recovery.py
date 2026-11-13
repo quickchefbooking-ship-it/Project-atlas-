@@ -610,7 +610,7 @@ def _schedule_retry(task_id, claim, *, due_seconds=10, deadline_seconds=60, max_
     return storage.persist_task_retry_schedule(
         task_id,
         claim,
-        _retry_evaluation(task_id),
+        _retry_evaluation(task_id, f"evaluation-retry-{task_id}-{claim['attempt_number']}"),
         capability_contract=_verified_retry_contract(),
         policy_snapshot={
             "max_attempts": max_attempts,
