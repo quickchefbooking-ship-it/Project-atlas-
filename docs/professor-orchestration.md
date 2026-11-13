@@ -126,3 +126,29 @@ A phase is not complete because code exists. It is complete only when:
 - documentation matches the behaviour actually shipped.
 
 Until those gates are met, keep changes on the recovery branch and do not merge or deploy.
+
+## 9. Two-way assistant collaboration bridge
+
+The Professor is intended to remain an independently identifiable AI system with its own memory, task history, evaluation process and capability registry. A connection to ChatGPT is a collaboration channel, not a replacement for the Professor's own reasoning or identity.
+
+The future bridge should support messages in both directions:
+
+- Ashley can address the Professor directly through the AtlasOnePro interface.
+- The Professor can send a question, finding, task result or review request to an authorised external assistant.
+- The external assistant can return a response to the same conversation thread.
+- Either side can propose a task for the other, while the Professor remains responsible for validating incoming instructions against its own policies and permissions.
+
+Every message should use a versioned envelope containing a message ID, conversation ID, sender identity, recipient identity, timestamp, message type, content, correlation ID and declared requested capability. The bridge should persist message status and delivery attempts so retries do not create duplicate work.
+
+Security and reliability requirements:
+
+- Authenticate both endpoints and protect transport with TLS; do not treat a display name as identity.
+- Use scoped service credentials held outside prompts, messages, logs and source control.
+- Validate message schemas and enforce size, rate and timeout limits.
+- Treat incoming assistant messages as untrusted suggestions, not privileged instructions.
+- Prevent recursive agent loops with correlation IDs, hop limits, duplicate detection and explicit turn ownership.
+- Require human approval for external side effects such as sending, publishing, purchasing, trading, deleting, permission changes or deployment.
+- Preserve an audit trail of messages, decisions, delegated tasks, evaluations and approvals.
+- Allow either side to disagree, request evidence or decline a task; neither assistant is automatically authoritative.
+
+This section records the target design only. The current prototype does not yet expose a chat endpoint or a live ChatGPT-to-Professor transport. The bridge must be implemented and tested as a separate capability on the existing recovery branch before it is described as operational.
