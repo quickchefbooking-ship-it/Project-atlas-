@@ -249,8 +249,8 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
         schedule = conn.execute(
             """
             SELECT * FROM task_retry_schedules
-            WHERE task_id = ? AND state IN ('scheduled','cancelled','expired')
-            ORDER BY created_at DESC LIMIT 1
+            WHERE task_id = ?
+            ORDER BY created_at DESC, rowid DESC LIMIT 1
             """,
             (task_id,),
         ).fetchone()
