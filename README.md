@@ -36,7 +36,7 @@ Edit .env and replace the example ATLAS_API_KEY with a long random secret. The a
 
 On Windows, activate the virtual environment with .venv\\Scripts\\activate.
 
-For a trusted local-only development session, authentication can be disabled with ATLAS_API_REQUIRE_AUTH=false. Do not use that setting on a network-accessible or public deployment.
+For a trusted local-only development session, authentication can be disabled with ATLAS_API_REQUIRE_AUTH=false. Do not use that setting on a network-accessible or public deployment. When started with `python app.py`, the server binds to `127.0.0.1` while authentication is disabled and uses `0.0.0.0` only when API-key authentication is enabled. If starting Uvicorn directly, keep the explicit loopback host shown above for local-only use.
 
 ## API access
 
