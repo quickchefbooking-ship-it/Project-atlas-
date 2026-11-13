@@ -65,6 +65,10 @@ class TaskManager:
         rows = self.storage_backend.list_tasks(limit)
         return [self.get_task(row["id"]) for row in rows]
 
+    def claim_task(self, task_id: str) -> bool:
+        """Claim a pending task using the storage backend's atomic compare-and-set."""
+        return self.storage_backend.claim_task(task_id)
+
     def update_status(self, task_id: str, status: str, score: float | None = None,
                       result: dict[str, Any] | None = None,
                       increment_attempt: bool = False) -> Task | None:
@@ -99,7 +103,17 @@ class TaskAPI:
         task = self.manager.get_task(task_id)
         if task is None:
             return {"error": "Task not found"}
-        self.manager.update_status(task_id, "running", increment_attempt=True)
+        if not self.manager.claim_task(task_id):
+            current = self.manager.get_task(task_id)
+            return {
+                "task_id": task_id,
+                "status": current.status if current is not None else "unavailable",
+                "error": "Task is already running or is not pending.",
+            }
+        # Reload after the atomic claim so the executor sees the persisted attempt count.
+        task = self.manager.get_task(task_id)
+        if task is None:
+            return {"task_id": task_id, "status": "unavailable", "error": "Task is unavailable."}
         try:
             # Retrieve only validated lessons; pass them as context to capable executors.
             # The restricted local arithmetic executor deliberately ignores this context.
