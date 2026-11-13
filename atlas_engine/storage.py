@@ -656,18 +656,23 @@ def request_task_cancellation(
         if existing is not None:
             conn.commit()
             return dict(existing)
-        active = conn.execute(
-            """
-            SELECT 1 FROM task_attempts
-            WHERE task_id = ? AND attempt_id = ? AND state = 'active'
-              AND lease_expires_at > ?
-            """,
-            (task_id, attempt_id, now),
+        attempt_row = conn.execute(
+            "SELECT state, lease_expires_at FROM task_attempts WHERE task_id = ? AND attempt_id = ?",
+            (task_id, attempt_id),
         ).fetchone()
         task = conn.execute(
             "SELECT status FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
-        if active is None or task is None or task["status"] != "running":
+        if attempt_row is None or task is None:
+            conn.rollback()
+            return None
+        if task["status"] != "running" or attempt_row["state"] in {"completed", "failed", "abandoned"}:
+            cancellation_state = "too_late"
+        elif attempt_row["state"] == "recovery_required" or attempt_row["lease_expires_at"] <= now:
+            cancellation_state = "requires_recovery"
+        elif attempt_row["state"] == "active":
+            cancellation_state = "requested"
+        else:
             conn.rollback()
             return None
         conn.execute(
@@ -675,9 +680,10 @@ def request_task_cancellation(
             INSERT INTO task_cancellations (
                 cancellation_id, task_id, attempt_id, actor, reason,
                 state, requested_at
-            ) VALUES (?, ?, ?, ?, ?, 'requested', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (cancellation_id, task_id, attempt_id, actor.strip(), reason.strip(), now),
+            (cancellation_id, task_id, attempt_id, actor.strip(), reason.strip(),
+             cancellation_state, now),
         )
         row = conn.execute(
             "SELECT * FROM task_cancellations WHERE cancellation_id = ?",
