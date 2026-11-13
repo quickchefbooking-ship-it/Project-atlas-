@@ -36,3 +36,9 @@ Every adapter must document its owner, connection method, credential storage, de
 ## Not in scope for this arm
 
 No credential harvesting, unrestricted crawling, access-control bypass, private account scraping, automatic email sending, social publishing, payments, trading, deletion or permission changes. Source Division supplies evidence to the Professor; it does not perform external actions.
+
+## Prototype implementation notes
+
+The current repository implementation is a local ingestion and retrieval foundation, not a live connector suite. It validates absolute HTTP(S) and git+https source references at the ingestion boundary, rejects embedded URL credentials and malformed hosts or ports, hashes normalized content, and deduplicates records by source and content hash. New imports remain pending and unverified. A successful approval changes the document state to approved and its trust classification to reviewed; rejected material remains excluded from retrieval. These controls do not authenticate the reviewer: reviewer names are audit metadata until identity and role-based authorization are implemented.
+
+The bundled curated notes are imported idempotently at application startup. External web, GitHub, Hugging Face, Lawve, research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
