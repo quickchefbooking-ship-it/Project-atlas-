@@ -89,3 +89,9 @@ def test_principal_is_immutable():
 def test_invalid_scope_request_fails_closed():
     with pytest.raises(AuthorizationDenied, match="Valid capability scopes"):
         authorize_tenant_resource(_principal(), "tenant-a", [None])
+
+
+@pytest.mark.parametrize("required_scopes", ["tasks:read", b"tasks:read"])
+def test_string_scope_input_is_rejected_instead_of_iterated(required_scopes):
+    with pytest.raises(AuthorizationDenied, match="Valid capability scopes"):
+        authorize_tenant_resource(_principal(), "tenant-a", required_scopes)
