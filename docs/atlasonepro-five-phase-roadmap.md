@@ -31,17 +31,29 @@ Remaining Phase 1 limitations: local SQLite only; no distributed worker coordina
 
 ## Phase 2 — Bounded retries and cancellation
 
-**Status: initial policy primitives implemented; durable scheduling and cancellation remain.**
+**Status: policy foundation and cooperative cancellation for the bounded local executor implemented; automatic retries remain disabled.**
 
-Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`. Added `atlas_engine/retry_policy.py` with typed retryable/terminal errors, immutable server-side limits, a pure fail-closed eligibility evaluator and bounded jittered back-off calculation. Added regression coverage for default no-retry, error classification, capability idempotency, max attempts, deadline, jitter and invalid policy values. Both PR and push workflows passed 144 tests on head `a72af1ab2fe5f28aacde341f68c3651e534a7561`. This code does not schedule or execute retries.
+Design and acceptance matrix: `docs/phase-2-retry-cancellation-design.md`.
 
-Deliverables:
-- Define retryable versus terminal error classes; do not retry validation, permission or policy failures.
-- Add configurable attempt ceilings, timeouts and bounded exponential back-off with jitter.
-- Require capability-level idempotency declarations before automatic retry is eligible.
-- Persist retry scheduling, attempt outcomes and cancellation requests.
-- Add cooperative cancellation checkpoints and safe shutdown semantics; never kill a worker mid-write without reconciliation.
-- Ensure an operator can inspect, pause, cancel or resume eligible work.
+Implemented:
+- Typed retryable/terminal error classes and a pure fail-closed eligibility evaluator.
+- Immutable server-side retry ceilings, finite timing validation, bounded jittered back-off and a frozen capability error-code allowlist.
+- Durable, idempotent cancellation requests per task attempt with `requested`, `acknowledged`, `too_late` and `requires_recovery` states.
+- Authenticated cancellation request/status routes.
+- Fenced cancellation acknowledgement and atomic task/evaluation/attempt persistence.
+- Cooperative cancellation checks before execution, after context retrieval, after the local executor returns and before normal completion.
+- Expired worker cancellation requests move to operator recovery; completed attempts record late cancellation as `too_late`.
+- Failure persistence exceptions return `outcome_unconfirmed` rather than claiming a failed result was durably saved.
+- Tests cover retry-policy validation, cancellation idempotency, cancellation/completion races, stale-worker fencing, restart persistence, expired/late requests and API authentication.
+
+Current limits:
+- No durable retry schedule or due-work scheduler.
+- No registered capability registry or persisted immutable per-attempt retry-policy snapshot.
+- No hard execution timeout for uninterruptible work.
+- The local executor remains single-attempt; no automatic retry is enabled.
+- Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
+
+At code head `69943ab758155e715baf6d6c4fe96173ce61a04c`, both PR and push workflows passed **171 tests** with one non-blocking Starlette/AnyIO deprecation warning.
 
 Acceptance gates:
 - Tests prove retry limits are enforced under concurrent requests.
@@ -49,6 +61,7 @@ Acceptance gates:
 - Duplicate execution is prevented by idempotency keys and fencing.
 - Non-idempotent or uncertain external actions are never automatically retried.
 - Process restart preserves retry/cancellation state.
+- Every acceptance-matrix row in the Phase 2 design is covered before Phase 3 begins.
 
 ## Phase 3 — Professor capability registry and specialist arms
 
