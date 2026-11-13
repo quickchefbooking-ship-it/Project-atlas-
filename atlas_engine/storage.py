@@ -72,7 +72,8 @@ def init_db() -> None:
                 uri TEXT NOT NULL, content TEXT NOT NULL, content_sha256 TEXT NOT NULL,
                 trust_level TEXT NOT NULL CHECK(trust_level IN ('unverified','reviewed','authoritative')),
                 state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
-                metadata_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                reviewed_by TEXT, metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                 FOREIGN KEY(source_id) REFERENCES sources(id)
             )
         """)
@@ -339,8 +340,8 @@ def review_source_document(document_id: str, decision: str, reviewer: str, updat
     conn = get_connection()
     try:
         cursor = conn.execute(
-            "UPDATE source_documents SET state = ?, updated_at = ? WHERE id = ? AND state = 'pending'",
-            (decision, updated_at, document_id),
+            "UPDATE source_documents SET state = ?, reviewed_by = ?, updated_at = ? WHERE id = ? AND state = 'pending'",
+            (decision, reviewer, updated_at, document_id),
         )
         conn.commit()
         return cursor.rowcount == 1
