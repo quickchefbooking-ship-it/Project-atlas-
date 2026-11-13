@@ -1,4 +1,4 @@
-"Fail-closed authorization primitives for a future verified request principal.
+"""Fail-closed authorization primitives for a future verified request principal.
 
 This module deliberately does not authenticate tokens or create principals from
 HTTP input. A trusted OIDC integration must construct RequestPrincipal only
