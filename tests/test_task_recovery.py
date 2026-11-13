@@ -829,6 +829,9 @@ def test_retry_schedule_inspection_route_is_authenticated(tmp_path, monkeypatch)
     assert response.status_code == 200
     assert response.json()[0]["schedule_id"] == schedule["schedule_id"]
     assert response.json()[0]["state"] == "scheduled"
+    assert "idempotency_key" not in response.json()[0]
+    assert "policy_json" not in response.json()[0]
+    assert "capability_contract_json" not in response.json()[0]
 
 
 def test_claim_after_retry_deadline_terminalises_pending_task(tmp_path, monkeypatch):
@@ -974,8 +977,8 @@ def test_due_retry_scan_and_expiry_routes_are_authenticated(tmp_path, monkeypatc
     conn = storage.get_connection()
     try:
         conn.execute(
-            "UPDATE task_retry_schedules SET due_at = ?, deadline_at = ? WHERE schedule_id = ?",
-            (past, past, schedule["schedule_id"]),
+            "UPDATE task_retry_schedules SET due_at = ? WHERE schedule_id = ?",
+            (past, schedule["schedule_id"]),
         )
         conn.commit()
     finally:
@@ -987,7 +990,22 @@ def test_due_retry_scan_and_expiry_routes_are_authenticated(tmp_path, monkeypatc
     headers = {"X-API-Key": "test-secret"}
     due = client.get("/tasks/retries/due", headers=headers)
     assert due.status_code == 200
-    assert due.json() == []
+    assert len(due.json()) == 1
+    assert due.json()[0]["schedule_id"] == schedule["schedule_id"]
+    assert "idempotency_key" not in due.json()[0]
+    assert "policy_json" not in due.json()[0]
+    assert "capability_contract_json" not in due.json()[0]
+
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET deadline_at = ? WHERE schedule_id = ?",
+            (past, schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert client.get("/tasks/retries/due", headers=headers).json() == []
     expired = client.post("/tasks/retries/expire", headers=headers)
     assert expired.status_code == 200
     assert expired.json()["expired"] == 1
