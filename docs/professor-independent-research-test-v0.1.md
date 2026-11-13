@@ -126,3 +126,18 @@ The recovery prototype currently has task/evaluation/lesson/proposal persistence
 ## Execution order
 
 W0 → W1 → W2 → W3 → W4 → W5 → W6 → W7. Security controls are built alongside each work package, not deferred until the end. If a prerequisite is missing, stop that capability and report the blocker rather than bypassing it.
+
+
+## Baseline inspection findings — 2026-11-13
+
+The following are confirmed from the recovery branch source files and must be treated as implementation blockers or existing safeguards:
+
+- `LearningMemory.save_lesson_for_task` forces new lessons to remain unvalidated, and retrieval searches only validated lessons. This is a useful foundation to preserve.
+- Source Division stores new documents as pending and retrieval is approval-gated. Source URIs reject unsupported schemes and embedded credentials; document size is bounded. Preserve these controls and extend them rather than bypassing them.
+- The current proposal manager deliberately refuses the `test` transition because no real evidence-backed proposal test runner is implemented. Preserve this fail-closed behaviour.
+- The current API uses a shared API key and caller-supplied reviewer/actor labels. Those labels are not verified identity; do not use them as commercial approval authority.
+- The current local executor is arithmetic-only. Do not describe it as general reasoning or a multi-agent runtime.
+- **Critical sandbox finding:** `atlas_engine/safe_testing.py` runs a generated pytest file using `subprocess.run(["python", "-m", "pytest", ...])` in a temporary directory. A temporary directory is not an OS security sandbox. This mechanism must not be used to execute model-, user-, source-, or proposal-derived code. Before any untrusted code testing is considered, replace it with a genuine isolated execution boundary (e.g. disposable locked-down container/VM with no credentials, no network by default, read-only base filesystem, strict CPU/memory/time/process limits and destruction after use), or keep proposal validation strictly static/deterministic and do not execute proposed code.
+- Existing source adapters are bounded and specific (public GitHub/Hugging Face metadata, UK legislation, Crossref and allowlisted public pages); they are not a general web search engine or unrestricted crawler. Benchmark scope must match capabilities actually enabled.
+
+This inspection is source review only; no runtime execution or CI result is claimed by this update.
