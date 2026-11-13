@@ -235,6 +235,13 @@ def test_task_execution_receives_relevant_validated_memory(tmp_path, monkeypatch
         [{"field": "value", "operator": "==", "expected_value": 5}],
     )
     trusted_lesson = {"id": "lesson-trusted", "summary": "Prior arithmetic lesson", "validated": 1}
+    from atlas_engine.source_division import ingest_document, register_source, review_document
+    register_source("test-research", "Test Research", "test")
+    source_doc = ingest_document(
+        "test-research", "Arithmetic reference", "https://example.org/arithmetic",
+        "Validated reference for applying arithmetic operations.",
+    )
+    review_document(source_doc["id"], "approved", "test-reviewer")
 
     class Memory:
         @staticmethod
@@ -260,3 +267,5 @@ def test_task_execution_receives_relevant_validated_memory(tmp_path, monkeypatch
 
     assert result["status"] == "passed"
     assert executor.payload["relevant_lessons"] == [trusted_lesson]
+    assert len(executor.payload["source_documents"]) == 1
+    assert executor.payload["source_documents"][0]["uri"] == "https://example.org/arithmetic"
