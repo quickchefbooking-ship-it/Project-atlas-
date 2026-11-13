@@ -74,15 +74,26 @@ class Evaluator:
         if operator == "contains":
             if not isinstance(field_value, str):
                 return False, "field is not a string"
+            if not isinstance(expected_value, str):
+                return False, "expected value is not a string"
             return expected_value in field_value, f"expected text {expected_value!r} in {field_value!r}"
-        if operator == "gt":
-            return field_value > expected_value, f"field={field_value} must be > {expected_value}"
-        if operator == "gte":
-            return field_value >= expected_value, f"field={field_value} must be >= {expected_value}"
-        if operator == "lt":
-            return field_value < expected_value, f"field={field_value} must be < {expected_value}"
-        if operator == "lte":
-            return field_value <= expected_value, f"field={field_value} must be <= {expected_value}"
+        if operator in {"gt", "gte", "lt", "lte"}:
+            try:
+                if operator == "gt":
+                    matched = field_value > expected_value
+                    requirement = ">"
+                elif operator == "gte":
+                    matched = field_value >= expected_value
+                    requirement = ">="
+                elif operator == "lt":
+                    matched = field_value < expected_value
+                    requirement = "<"
+                else:
+                    matched = field_value <= expected_value
+                    requirement = "<="
+            except TypeError:
+                return False, "field and expected value are not comparable"
+            return matched, f"field={field_value} must be {requirement} {expected_value}"
         raise ValueError(f"Unsupported operator: {operator}")
 
     @classmethod
@@ -97,14 +108,32 @@ class Evaluator:
                 "method": "deterministic",
             }
 
+        subjective = [criterion for criterion in criteria if not criterion.deterministic]
+        if subjective:
+            descriptions = [
+                criterion.description or f"{criterion.field} {criterion.operator}"
+                for criterion in subjective
+            ]
+            return {
+                "passed": False,
+                "score": 0.0,
+                "reasons": ["Subjective criteria require an evaluator that is not implemented."],
+                "missing_requirements": descriptions,
+                "method": "deterministic",
+            }
+
         result_obj = result if isinstance(result, dict) else {"value": result}
         reasons: list[str] = []
         missing: list[str] = []
         satisfied = 0
 
         for criterion in criteria:
-            field_value = result_obj.get(criterion.field)
-            ok, reason = cls._compare(field_value, criterion.operator, criterion.expected_value)
+            if criterion.field not in result_obj:
+                # A missing field is not evidence that an inequality criterion passed.
+                ok, reason = False, "field is missing"
+            else:
+                field_value = result_obj[criterion.field]
+                ok, reason = cls._compare(field_value, criterion.operator, criterion.expected_value)
             if ok:
                 satisfied += 1
             else:
