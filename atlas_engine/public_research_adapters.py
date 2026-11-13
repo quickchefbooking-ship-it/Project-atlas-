@@ -140,7 +140,7 @@ def _get_xml_text(url: str) -> str:
         raise PublicSourceError("Legislation requests must use the official HTTPS host.")
     request = Request(url, headers={"Accept": "application/atom+xml, application/xml, text/xml", "User-Agent": USER_AGENT})
     try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with _open_without_redirect(request) as response:
             body = response.read(MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
         if exc.code == 404:
