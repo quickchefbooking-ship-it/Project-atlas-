@@ -98,4 +98,8 @@ def test_task_creation_rejects_non_finite_success_criteria(monkeypatch, tmp_path
     )
 
     assert response.status_code == 422
+    error_detail = response.json()["detail"][0]
+    assert error_detail["type"] == "task_criteria_invalid"
+    assert "input" not in error_detail
+    assert "ctx" not in error_detail
     assert storage.list_tasks(limit=10) == []
