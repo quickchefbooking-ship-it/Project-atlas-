@@ -46,25 +46,79 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+MAX_SOURCE_METADATA_BYTES = 16 * 1024
+MAX_SOURCE_METADATA_DEPTH = 32
+_CREDENTIAL_KEY_PATTERN = re.compile(
+    r"(secret|token|password|api[_-]?key|authorization|cookie|credential)", re.I
+)
+
+
+def _validate_metadata_value(
+    value: Any,
+    *,
+    active_containers: set[int],
+    depth: int = 0,
+    path: str = "metadata",
+) -> None:
+    """Accept only bounded, finite JSON values and reject recursive structures."""
+    if depth > MAX_SOURCE_METADATA_DEPTH:
+        raise ValueError("Document metadata exceeds the maximum nesting depth.")
+    if value is None or type(value) in (str, bool, int):
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError("Document metadata must contain only finite numbers.")
+        return
+    if isinstance(value, (dict, list)):
+        container_id = id(value)
+        if container_id in active_containers:
+            raise ValueError("Document metadata cannot contain circular references.")
+        active_containers.add(container_id)
+        try:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    if not isinstance(key, str):
+                        raise ValueError("Document metadata object keys must be strings.")
+                    if _CREDENTIAL_KEY_PATTERN.search(key):
+                        raise ValueError("Credential-like metadata fields are not permitted.")
+                    _validate_metadata_value(
+                        nested,
+                        active_containers=active_containers,
+                        depth=depth + 1,
+                        path=f"{path}.{key}",
+                    )
+            else:
+                for index, nested in enumerate(value):
+                    _validate_metadata_value(
+                        nested,
+                        active_containers=active_containers,
+                        depth=depth + 1,
+                        path=f"{path}[{index}]",
+                    )
+        finally:
+            active_containers.remove(container_id)
+        return
+    raise ValueError("Document metadata contains a value that is not JSON-compatible.")
+
+
 def _encode_metadata(metadata: dict[str, Any] | None) -> str:
-    """Reject credential-like metadata keys before persistence."""
-    forbidden = re.compile(r"(secret|token|password|api[_-]?key|authorization|cookie|credential)", re.I)
-
-    def inspect(value: Any) -> None:
-        if isinstance(value, dict):
-            for key, nested in value.items():
-                if forbidden.search(str(key)):
-                    raise ValueError("Credential-like metadata fields are not permitted.")
-                inspect(nested)
-        elif isinstance(value, list):
-            for nested in value:
-                inspect(nested)
-
+    """Validate and encode small, finite JSON metadata without credential fields."""
     if metadata is not None and not isinstance(metadata, dict):
         raise ValueError("Document metadata must be an object.")
-    safe_metadata = metadata or {}
-    inspect(safe_metadata)
-    return json.dumps(safe_metadata, sort_keys=True)
+    safe_metadata = metadata if metadata is not None else {}
+    _validate_metadata_value(safe_metadata, active_containers=set())
+    try:
+        encoded = json.dumps(
+            safe_metadata, sort_keys=True, allow_nan=False, separators=(",", ":")
+        )
+        size = len(encoded.encode("utf-8"))
+    except (TypeError, ValueError, OverflowError, UnicodeError) as exc:
+        raise ValueError("Document metadata must contain only finite JSON values.") from exc
+    if size > MAX_SOURCE_METADATA_BYTES:
+        raise ValueError(
+            f"Document metadata exceeds the {MAX_SOURCE_METADATA_BYTES:,}-byte limit."
+        )
+    return encoded
 
 
 def register_source(
