@@ -33,7 +33,7 @@ class LearningMemory:
     @staticmethod
     def get_relevant_lessons(task_description: str, limit: int = 5) -> List[Dict[str, Any]]:
         incoming_keywords = LearningMemory._keywords(task_description)
-        lesson_rows = list_lessons(limit=100)
+        lesson_rows = list_lessons(limit=100, validated_only=True)
         scored: list[tuple[float, Dict[str, Any]]] = []
         for row in lesson_rows:
             if row.get("validated") not in (1, True):
