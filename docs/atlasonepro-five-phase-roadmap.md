@@ -52,12 +52,12 @@ Implemented:
 
 Current limits:
 - No registered capability registry or scheduler that automatically discovers and dispatches due work.
-- No per-attempt hard timeout for uninterruptible work.
+- The bounded local executor has a cooperative 30-second monotonic per-attempt deadline and a 128-node AST complexity cap. There is no hard termination mechanism for uninterruptible work or future external capabilities.
 - The existing local executor remains single-attempt and is not opted in; retry scheduling is an internal primitive only.
 - Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
 - Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
-At code head `e140bc0c15dfcf7f3fb98375e913eca908cbbcff`, both PR and push workflows passed **184 tests** with one non-blocking Starlette/AnyIO deprecation warning.
+At code head `ac7f0d90cd3829fdfa40b98754c64bef3b8b59ec`, both PR and push workflows passed **191 tests** with one non-blocking Starlette/AnyIO deprecation warning.
 
 Acceptance gates:
 - Tests prove retry limits are enforced under concurrent requests and due-time claims.
