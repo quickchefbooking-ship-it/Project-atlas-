@@ -54,6 +54,6 @@ python -m pytest -q
 
 ## Security notes
 
-Set `ATLAS_MEDIA_REQUIRE_AUTH=true` and a strong `ATLAS_API_KEY` before exposing media-generation endpoints outside a trusted development environment. Review all API routes and deployment settings before public release.
+Private task, dashboard, proposal and media-generation routes require an API key by default. Set a strong `ATLAS_API_KEY` and keep `ATLAS_API_REQUIRE_AUTH=true` before use. Only `/health` and `/media/health` are public health checks. For isolated local development only, `ATLAS_API_REQUIRE_AUTH=false` may be used; never use that setting on an internet-facing deployment. Review all API routes and deployment settings before public release.
 
 The current local executor only accepts basic arithmetic expressions. Do not treat this prototype as a general-purpose autonomous agent or connect it directly to live financial accounts.
