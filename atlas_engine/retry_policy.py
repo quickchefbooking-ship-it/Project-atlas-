@@ -86,8 +86,8 @@ class CapabilityRetryContract:
         ):
             if type(value) is not bool:
                 raise ValueError(f"{name} must be a boolean")
-        if not isinstance(self.verification_evidence, str) or not self.verification_evidence.strip() or len(self.verification_evidence) > 512:
-            raise ValueError("verification evidence reference is required")
+        if not isinstance(self.verification_evidence, str) or len(self.verification_evidence) > 512:
+            raise ValueError("verification evidence reference must be a string of at most 512 characters")
         if not isinstance(self.retryable_error_codes, (set, frozenset)) or any(
             not isinstance(code, str) or not _ERROR_CODE_PATTERN.fullmatch(code)
             for code in self.retryable_error_codes
