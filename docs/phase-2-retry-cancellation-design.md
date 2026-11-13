@@ -132,7 +132,9 @@ Retry scheduling now has durable, fenced storage primitives, but is not enabled 
 - Scheduling atomically finalises the failed attempt, persists its evaluation, returns the task to pending and stores a policy snapshot, idempotency key, next-attempt number, due time and hard deadline.
 - Claims are blocked before due time, after the deadline, after schedule cancellation/expiry, or when the next attempt number does not match. A due claim atomically consumes the schedule and links it to the new fenced attempt.
 - Expired schedules become `expired` and atomically terminalise the pending task with an evaluation; they are not silently requeued. A cancellation request against a pending scheduled retry cancels the schedule and terminalises the task with a cancellation evaluation so it cannot be claimed or left pending.
-- An authenticated read-only `GET /tasks/{task_id}/retry-schedules` endpoint exposes schedule history; there is no public schedule-creation endpoint and no current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
+- Authenticated read-only `GET /tasks/{task_id}/retry-schedules` and `GET /tasks/retries/due` endpoints expose allowlisted schedule metadata; idempotency keys and internal policy/capability snapshots are omitted from API responses.
+- Authenticated `POST /tasks/retries/expire` performs bounded expiry maintenance and terminalises expired tasks with an evaluation. Due-schedule inspection is read-only and does not claim or execute work.
+- There is no public schedule-creation endpoint and no current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
 
 Cancellation is now a durable, cooperative runtime path for the current synchronous local executor:
 
