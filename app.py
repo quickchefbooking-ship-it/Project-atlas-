@@ -494,6 +494,24 @@ def review_proposal(proposal_id: str, payload: ProposalReviewInput):
     return api.review_proposal(proposal_id, payload)
 
 
+
+@app.get("/learning/overview", dependencies=[Depends(require_api_key)])
+def learning_overview_route(limit: int = 10):
+    """Expose bounded learning observability without lesson evidence or task payloads."""
+    if limit < 1 or limit > 50:
+        raise HTTPException(status_code=422, detail="Limit must be between 1 and 50")
+    return storage.get_learning_overview(recent_limit=limit)
+
+
+@app.get("/professor/learning", include_in_schema=False)
+def professor_learning_ui():
+    """Serve the read-only learning observability operator interface."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "professor_learning.html",
+        media_type="text/html",
+    )
+
+
 @app.get("/dashboard", dependencies=[Depends(require_api_key)])
 def dashboard():
     return api.dashboard()
