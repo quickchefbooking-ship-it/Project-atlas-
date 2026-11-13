@@ -58,11 +58,12 @@ See [the Professor orchestration blueprint](docs/professor-orchestration.md) for
 
 ## Professor Source Division interface
 
-Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste`, `github-public`, `huggingface-public`, `uk-legislation` and `crossref-public` sources are registered at application startup. The page can fetch bounded public GitHub repository metadata, Hugging Face model/dataset metadata, official UK legislation search results and XML text, and Crossref scholarly bibliographic records. Fetches are HTTPS GET-only, size/time limited and staged as pending/unverified; no private resources, model weights, credentials, publisher full text or write actions are accessed. UK legislation and Crossref searches stage no more than five records each. The interface does not approve documents.
+Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste`, `github-public`, `huggingface-public`, `uk-legislation`, `crossref-public` and `public-web` sources are registered at application startup. The page can fetch bounded GitHub repository metadata, Hugging Face model/dataset metadata, official UK legislation search results and XML text, Crossref scholarly bibliographic records, and individual public HTML/plain-text pages from an exact-host allowlist. Public-web retrieval is restricted to approved HTTPS hosts on port 443, revalidates redirects, rejects non-public DNS destinations, uses an eight-second timeout and a 1 MB cap, and excludes script/style/navigation/form content. Retrieved page text is marked untrusted and remains pending/unverified; it must be treated as data, never as instructions. This is not unrestricted crawling. No private resources, model weights, credentials, publisher full text or write actions are accessed. The interface does not approve documents.
 
 ## Useful endpoints
 
 - POST /sources/fetch — fetch and stage GitHub, Hugging Face, UK legislation or Crossref research
+- POST /sources/fetch-url — fetch one allowlisted public web page and stage it as untrusted
 - GET /sources — source catalogue
 - GET /sources/documents — bounded review queue
 - POST /sources/import — stage a JSON batch for review
