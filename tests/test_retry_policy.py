@@ -16,6 +16,7 @@ def _safe_contract():
         idempotent=True,
         side_effects_declared=True,
         duplicate_suppression_verified=True,
+        verification_evidence="tests/test_retry_policy.py::test_fake_provider_deduplicates",
         retryable_error_codes=frozenset({"temporary_unavailable"}),
     )
 
@@ -288,3 +289,36 @@ def test_invalid_capability_object_fails_closed():
     )
     assert not decision.eligible
     assert decision.reason == "capability_not_proven_idempotent"
+
+
+def test_fake_provider_deduplicates_repeated_idempotency_key():
+    class FakeProvider:
+        def __init__(self):
+            self.completed = {}
+            self.side_effect_count = 0
+
+        def execute(self, idempotency_key):
+            if idempotency_key in self.completed:
+                return self.completed[idempotency_key]
+            self.side_effect_count += 1
+            result = {"receipt": "once"}
+            self.completed[idempotency_key] = result
+            return result
+
+    provider = FakeProvider()
+    first = provider.execute("task-1-attempt-1")
+    second = provider.execute("task-1-attempt-1")
+    assert first == second
+    assert provider.side_effect_count == 1
+
+
+def test_retry_contract_requires_verification_evidence():
+    contract = CapabilityRetryContract(
+        capability_name="test.read",
+        version="1",
+        idempotent=True,
+        side_effects_declared=True,
+        duplicate_suppression_verified=True,
+        retryable_error_codes=frozenset({"temporary_unavailable"}),
+    )
+    assert not contract.retry_is_safe
