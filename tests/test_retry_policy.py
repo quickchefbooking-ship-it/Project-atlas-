@@ -227,6 +227,7 @@ def test_capability_allowlist_is_frozen_from_mutable_input():
         idempotent=True,
         side_effects_declared=True,
         duplicate_suppression_verified=True,
+        verification_evidence="tests/test_retry_policy.py::test_fake_provider_deduplicates",
         retryable_error_codes=codes,
     )
     codes.add("permission_denied")
