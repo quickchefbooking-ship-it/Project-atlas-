@@ -155,8 +155,8 @@ def fetch_public_web_page(url: str) -> SourceDocument:
         except Exception as exc:
             raise PublicSourceError("The public page contained malformed HTML.") from exc
         title = " ".join(" ".join(parser.title_parts).split())
-        extracted = re.sub(r"[\\t\\r ]+", " ", "".join(parser.parts))
-        extracted = re.sub(r"\\n\\s*\\n+", "\\n\\n", extracted).strip()
+        extracted = re.sub(r"[\t\r ]+", " ", "".join(parser.parts))
+        extracted = re.sub(r"\n\s*\n+", "\n\n", extracted).strip()
     else:
         extracted = source_text.strip()
         title = ""
