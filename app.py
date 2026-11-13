@@ -37,6 +37,8 @@ class StorageBackend:
     claim_task_with_lease = staticmethod(storage.claim_task_with_lease)
     heartbeat_task_attempt = staticmethod(storage.heartbeat_task_attempt)
     complete_task_with_evaluation = staticmethod(storage.complete_task_with_evaluation)
+    get_task_cancellation = staticmethod(storage.get_task_cancellation)
+    acknowledge_task_cancellation = staticmethod(storage.acknowledge_task_cancellation)
 
 
 manager = TaskManager(StorageBackend())
@@ -97,6 +99,12 @@ class TaskRecoveryDecisionInput(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
     retry_safe: bool = False
     side_effects_reconciled: bool = False
+
+
+class TaskCancellationRequestInput(BaseModel):
+    attempt_id: str = Field(min_length=1, max_length=128)
+    actor: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class GenerateImageRequest(BaseModel):
@@ -317,6 +325,31 @@ def list_task_attempts_route(task_id: str):
     if manager.get_task(task_id) is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return storage.get_task_attempts(task_id)
+
+
+@app.post("/tasks/{task_id}/cancel", dependencies=[Depends(require_api_key)])
+def request_task_cancellation_route(task_id: str, payload: TaskCancellationRequestInput):
+    if manager.get_task(task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        cancellation = storage.request_task_cancellation(
+            task_id, payload.attempt_id, payload.actor, payload.reason
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if cancellation is None:
+        raise HTTPException(status_code=409, detail="The attempt is not currently owned by a live worker.")
+    return {
+        "status": cancellation["state"],
+        "cancellation": cancellation,
+    }
+
+
+@app.get("/tasks/{task_id}/cancellation", dependencies=[Depends(require_api_key)])
+def get_task_cancellation_route(task_id: str):
+    if manager.get_task(task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return storage.get_task_cancellation(task_id)
 
 
 @app.post("/tasks/{task_id}/recovery-decision", dependencies=[Depends(require_api_key)])
