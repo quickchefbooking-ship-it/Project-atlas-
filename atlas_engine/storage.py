@@ -77,6 +77,12 @@ def init_db() -> None:
                 FOREIGN KEY(source_id) REFERENCES sources(id)
             )
         """)
+        # Additive migration for databases created before reviewer attribution existed.
+        source_document_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(source_documents)").fetchall()
+        }
+        if "reviewed_by" not in source_document_columns:
+            conn.execute("ALTER TABLE source_documents ADD COLUMN reviewed_by TEXT")
         conn.commit()
     finally:
         conn.close()
