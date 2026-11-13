@@ -122,9 +122,10 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
     return storage.get_source_document(document_id)
 
 
-def _frontmatter_value(frontmatter: str, key: str) -> str | None:
-    """Read a simple top-level YAML scalar without adding a YAML dependency."""
-    match = re.search(rf"^{re.escape(key)}:\s*(.+)$", frontmatter, re.MULTILINE)
+def _frontmatter_value(frontmatter: str, key: str, allow_indented: bool = False) -> str | None:
+    """Read a simple YAML scalar without adding a YAML dependency."""
+    prefix = r"^\\s*" if allow_indented else r"^"
+    match = re.search(rf"{prefix}{re.escape(key)}:\\s*(.+)$", frontmatter, re.MULTILINE)
     return match.group(1).strip().strip('"').strip("'") if match else None
 
 
@@ -143,7 +144,7 @@ def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
     title = _frontmatter_value(frontmatter, "title")
     division = _frontmatter_value(frontmatter, "division")
     publisher_match = re.search(r"^\s{2}publisher:\s*(.+)$", frontmatter, re.MULTILINE)
-    retrieved = _frontmatter_value(frontmatter, "retrieved")
+    retrieved = _frontmatter_value(frontmatter, "retrieved", allow_indented=True)
     url_match = re.search(
         r"^\s*(?:-\s*)?url:\s*[\"']?(https?://[^\"'\s]+)",
         frontmatter,
