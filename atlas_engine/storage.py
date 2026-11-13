@@ -976,6 +976,29 @@ def expire_task_retry_schedules(now: Optional[str] = None, limit: int = 100) -> 
         conn.close()
 
 
+def list_due_task_retry_schedules(now: Optional[str] = None, limit: int = 50) -> list[Dict[str, Any]]:
+    """Read-only scheduler scan; never claims or executes due work."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("Due retry scan limit must be between 1 and 100.")
+    now_text = _normalise_utc_timestamp(now or now_isoformat(), "now")
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT r.*, t.title AS task_title, t.status AS task_status, t.attempts AS task_attempts
+            FROM task_retry_schedules r
+            JOIN tasks t ON t.id = r.task_id
+            WHERE r.state = 'scheduled' AND r.due_at <= ?
+              AND r.deadline_at > ? AND t.status = 'pending'
+            ORDER BY r.due_at ASC, r.created_at ASC LIMIT ?
+            """,
+            (now_text, now_text, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def list_task_retry_schedules(task_id: str) -> list[Dict[str, Any]]:
     conn = get_connection()
     try:
