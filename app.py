@@ -1,10 +1,11 @@
+import hmac
 import os
-from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import FastAPI, Header, HTTPException, status, Depends
 from pydantic import BaseModel
 
+from atlas_engine.config import API_KEY, API_REQUIRE_AUTH
 from atlas_engine.task_manager import TaskAPI, TaskInput, ProposalReviewInput, TaskManager
 from atlas_engine.executor import LocalTaskExecutor
 from atlas_engine.evaluator import Evaluator
@@ -12,7 +13,7 @@ from atlas_engine.improvement import ImprovementManager
 from atlas_engine.learning_memory import LearningMemory
 from atlas_engine.safe_testing import SafeTester
 from atlas_engine import storage
-from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt, OUTPUT_DIR
+from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
 
 
 class StorageBackend:
@@ -27,32 +28,17 @@ manager = TaskManager(StorageBackend())
 api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), ImprovementManager(), SafeTester())
 app = FastAPI(title="AtlasOnePro — Professor Core")
 
-# Public health checks are intentionally unauthenticated. All operational routes fail closed.
-REQUIRE_AUTH = os.getenv("ATLAS_API_REQUIRE_AUTH", "true").lower() == "true"
-ATLAS_API_KEY = os.getenv("ATLAS_API_KEY")
-
 
 def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
-    if not REQUIRE_AUTH:
+    """Fail closed on data-changing and private routes unless explicitly configured for local dev."""
+    if not API_REQUIRE_AUTH:
         return True
-    if not ATLAS_API_KEY:
+    expected_key = os.getenv("ATLAS_API_KEY") or API_KEY
+    if not expected_key:
         raise HTTPException(status_code=503, detail="API authentication is enabled but ATLAS_API_KEY is not configured")
-    if x_api_key != ATLAS_API_KEY:
+    if not x_api_key or not hmac.compare_digest(x_api_key, expected_key):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key")
     return True
-
-
-def validate_output_path(requested_path: Optional[str]) -> Optional[str]:
-    if requested_path is None:
-        return None
-    candidate = Path(requested_path).expanduser()
-    base = Path(OUTPUT_DIR).resolve()
-    resolved = (base / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-    try:
-        resolved.relative_to(base)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Output path must stay inside the configured media output directory") from exc
-    return str(resolved)
 
 
 class GenerateImageRequest(BaseModel):
@@ -112,7 +98,7 @@ def create_proposal(payload: dict[str, Any]):
     required = {"task_id", "problem", "proposed_change", "expected_benefit", "test_plan"}
     missing = required - payload.keys()
     if missing:
-        raise HTTPException(status_code=422, detail=f"Missing proposal fields: {', '.join(sorted(missing))}")
+        raise HTTPException(status_code=422, detail=f"Missing required fields: {', '.join(sorted(missing))}")
     return api.improvement.create_proposal(
         payload["task_id"], payload["problem"], payload.get("evidence", {}),
         payload["proposed_change"], payload["expected_benefit"], payload["test_plan"],
@@ -143,16 +129,14 @@ def media_health():
 def generate_image(payload: GenerateImageRequest):
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
-    output_path = validate_output_path(payload.output_path)
-    return {"status": "ok", "path": generate_image_from_prompt(payload.prompt, output_path)}
+    return {"status": "ok", "path": generate_image_from_prompt(payload.prompt, payload.output_path)}
 
 
 @app.post("/media/generate-video", dependencies=[Depends(require_api_key)])
 def generate_video(payload: GenerateVideoRequest):
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
-    output_path = validate_output_path(payload.output_path)
-    return {"status": "ok", "path": generate_video_from_prompt(payload.prompt, output_path, payload.narration)}
+    return {"status": "ok", "path": generate_video_from_prompt(payload.prompt, payload.output_path, payload.narration)}
 
 
 if __name__ == "__main__":
