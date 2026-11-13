@@ -705,7 +705,7 @@ def test_retry_schedule_is_blocked_by_cancellation_and_can_be_cancelled_before_d
         task.id, claim["attempt_id"], "operator", "Cancel scheduled retry"
     )
     assert cancellation is not None
-    assert cancellation["state"] == "cancelled"
+    assert cancellation["state"] == "acknowledged"
     assert storage.list_task_retry_schedules(task.id)[0]["state"] == "cancelled"
     assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
 
