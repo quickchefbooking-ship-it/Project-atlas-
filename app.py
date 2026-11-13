@@ -19,7 +19,8 @@ from atlas_engine.safe_testing import SafeTester
 from atlas_engine import storage
 from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
 from atlas_engine.source_division import load_bundled_knowledge, list_sources, retrieve, register_source
-from atlas_engine.source_adapters import import_json_batch, MAX_BATCH_JSON_CHARS
+from atlas_engine.source_adapters import import_json_batch, stage_adapter_results, MAX_BATCH_JSON_CHARS
+from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, PublicSourceError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,10 @@ async def lifespan(app: FastAPI):
     imported = load_bundled_knowledge()
     if storage.get_source("manual-paste") is None:
         register_source("manual-paste", "Manual Research Imports", "manual_paste", access_mode="approval_gated")
+    if storage.get_source("github-public") is None:
+        register_source("github-public", "GitHub Public Repositories", "github_public_api", access_mode="read_only", metadata={"endpoint": "api.github.com", "scope": "public repository metadata only"})
+    if storage.get_source("huggingface-public") is None:
+        register_source("huggingface-public", "Hugging Face Public Resources", "huggingface_public_api", access_mode="read_only", metadata={"endpoint": "huggingface.co/api", "scope": "public model and dataset metadata only"})
     logger.info("Imported %s new curated knowledge documents", imported)
     yield
 
@@ -63,6 +68,12 @@ def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API
 class SourceImportRequest(BaseModel):
     source_id: str = Field(min_length=1, max_length=128)
     payload: dict[str, Any]
+
+
+class PublicSourceFetchRequest(BaseModel):
+    provider: str = Field(pattern="^(github|huggingface)$")
+    identifier: str = Field(min_length=1, max_length=201)
+    resource_type: str = Field(default="model", pattern="^(repository|model|dataset)$")
 
 
 class GenerateImageRequest(BaseModel):
@@ -158,6 +169,52 @@ def import_source_documents(payload: SourceImportRequest):
                 for item in staged
             ],
         }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class _SingleDocumentAdapter:
+    def __init__(self, source_id: str, document):
+        self.source_id = source_id
+        self.document = document
+
+    def search(self, query: str, limit: int = 10):
+        return [self.document]
+
+
+@app.post("/sources/fetch", dependencies=[Depends(require_api_key)])
+def fetch_public_source(payload: PublicSourceFetchRequest):
+    """Fetch bounded public metadata from a fixed provider API and stage it for review."""
+    try:
+        if payload.provider == "github":
+            if payload.resource_type != "repository":
+                raise HTTPException(status_code=422, detail="GitHub currently supports repository metadata only")
+            adapter = _SingleDocumentAdapter("github-public", fetch_github_repository(payload.identifier))
+        else:
+            if payload.resource_type not in {"model", "dataset"}:
+                raise HTTPException(status_code=422, detail="Hugging Face supports model or dataset metadata")
+            adapter = _SingleDocumentAdapter(
+                "huggingface-public",
+                fetch_huggingface_resource(payload.identifier, payload.resource_type),
+            )
+        staged = stage_adapter_results(adapter, payload.identifier, limit=1)
+        item = staged[0]
+        return {
+            "status": "staged_for_review",
+            "provider": payload.provider,
+            "count": 1,
+            "document": {
+                "id": item["id"],
+                "source_id": item["source_id"],
+                "title": item["title"],
+                "uri": item["uri"],
+                "content_sha256": item["content_sha256"],
+                "state": item["state"],
+                "trust_level": item["trust_level"],
+            },
+        }
+    except PublicSourceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
