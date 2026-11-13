@@ -329,3 +329,37 @@ def test_authenticated_recovery_decision_route_records_explicit_retry(tmp_path, 
     assert response.json()["status"] == "recovery_decision_recorded"
     assert response.json()["task"]["status"] == "pending"
     assert response.json()["decisions"][0]["action"] == "retry"
+
+
+def test_task_api_does_not_report_failure_when_failure_persistence_raises(tmp_path, monkeypatch):
+    from atlas_engine.task_manager import TaskAPI
+    from atlas_engine.evaluator import Evaluator
+
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Unconfirmed failure", "Persistence failure must not be hidden", [])
+
+    class BrokenExecutor:
+        @staticmethod
+        def execute(_payload):
+            raise RuntimeError("private execution detail")
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return []
+
+    def fail_to_persist(*_args, **_kwargs):
+        raise OSError("private database detail")
+
+    monkeypatch.setattr(manager, "complete_with_evaluation", fail_to_persist)
+    api = TaskAPI(manager, BrokenExecutor(), Evaluator(), Memory(), None, None)
+    response = api.run_task(task.id)
+
+    assert response["status"] == "outcome_unconfirmed"
+    assert "private database detail" not in str(response)
+    assert "private execution detail" not in str(response)
+    assert manager.get_task(task.id).status == "running"
+    attempts = storage.get_task_attempts(task.id)
+    assert len(attempts) == 1
+    assert attempts[0]["state"] == "active"
+    assert storage.get_evaluations_for_task(task.id) == []
