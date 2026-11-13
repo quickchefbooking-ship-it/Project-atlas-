@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>AtlasOnePro · Professor Learning Monitor</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e9edf5;background:#101722;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#1e3044 0,transparent 42%),#101722}
+header{padding:28px max(20px,calc((100vw - 1120px)/2));border-bottom:1px solid #2a3748;background:#111c2a}
+.eyebrow{color:#9ab8d9;text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;font-weight:700}
+h1{font-size:clamp(1.6rem,4vw,2.25rem);margin:.45rem 0}.sub{color:#aebbd0;max-width:760px;line-height:1.5}
+main{max-width:1120px;margin:24px auto;padding:0 18px 48px}
+.panel{background:#172333;border:1px solid #2a3a4e;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 12px 32px #0002}
+h2{font-size:1.12rem;margin:0 0 12px}h3{font-size:.95rem;margin:0 0 8px}
+label{display:block;font-size:.84rem;color:#b9c7d9;margin:12px 0 6px}
+input{width:100%;border:1px solid #40536b;border-radius:9px;background:#0e1825;color:#f4f7fb;padding:11px 12px;font:inherit}
+input:focus,button:focus-visible{outline:2px solid #8cb8ee;outline-offset:2px}
+button{border:1px solid #6389b7;border-radius:9px;padding:10px 14px;background:#31577f;color:white;font:inherit;font-weight:650;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.row button{flex:0 0 auto}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.metric{background:#101b29;border:1px solid #2d4055;border-radius:12px;padding:16px;min-height:106px}
+.metric .name{font-size:.78rem;color:#aebbd0}.metric .value{font-size:1.8rem;font-weight:750;margin-top:8px;font-variant-numeric:tabular-nums}
+.muted{color:#9eafc4;font-size:.86rem;line-height:1.5}.status{min-height:24px;color:#b7d6f7;margin-top:10px;font-size:.88rem}
+.item{border-top:1px solid #2d3d51;padding:13px 0}.item:first-child{border-top:0}.item strong{display:block;margin-bottom:5px;overflow-wrap:anywhere}.meta{font-size:.8rem;color:#9eafc4;overflow-wrap:anywhere}
+.pill{display:inline-block;border:1px solid #647f9d;border-radius:99px;padding:2px 8px;font-size:.72rem;color:#c9dcf2;margin:5px 5px 0 0}
+.warning{border-left:3px solid #d6a85b;padding:10px 12px;background:#342b1e;color:#f1d7a8;border-radius:5px;font-size:.83rem}
+a{color:#9dc9f8}
+@media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:16px}header{padding:22px 18px}}
+@media(max-width:390px){.grid{grid-template-columns:1fr 1fr}.metric{padding:12px}.metric .value{font-size:1.45rem}}
+</style>
+</head>
+<body>
+<header>
+<div class="eyebrow">AtlasOnePro · Professor</div>
+<h1>Learning Monitor</h1>
+<div class="sub">A read-only view of recorded tasks, evaluations and lesson records. It distinguishes stored experience from reviewed knowledge and measured improvement.</div>
+</header>
+<main>
+<section class="panel">
+<h2>Connect to this Professor instance</h2>
+<div class="row">
+<div><label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="Enter this instance's ATLAS_API_KEY"></div>
+<button id="connect" type="button">Connect &amp; load</button>
+</div>
+<p class="muted">The key stays in this page's memory only. It is not saved in browser storage or included in the URL. Use HTTPS or a trusted local connection.</p>
+<div id="connection" class="status" role="status" aria-live="polite">Not connected.</div>
+</section>
+<section class="panel">
+<h2>Recorded activity</h2>
+<div class="grid" id="metrics">
+<div class="metric"><div class="name">Tasks recorded</div><div class="value">—</div></div>
+<div class="metric"><div class="name">Evaluations</div><div class="value">—</div></div>
+<div class="metric"><div class="name">Unvalidated lessons</div><div class="value">—</div></div>
+<div class="metric"><div class="name">Validated lessons</div><div class="value">—</div></div>
+</div>
+<div id="window" class="muted" style="margin-top:12px">Connect to load persisted records.</div>
+</section>
+<section class="panel">
+<h2>Evaluation evidence</h2>
+<div id="passRate" class="muted">Not measured until evaluation records are available.</div>
+<div id="methods" class="muted" style="margin-top:10px"></div>
+</section>
+<section class="panel">
+<h2>Recent lesson records</h2>
+<p class="muted">A validated flag is a stored application state, not proof of a verified reviewer identity.</p>
+<div id="lessons" class="muted">Connect to load lessons.</div>
+</section>
+<section class="panel">
+<h2>Recent evaluations</h2>
+<div id="evaluations" class="muted">Connect to load evaluations.</div>
+</section>
+<section class="panel">
+<h2>Has Professor demonstrated improvement?</h2>
+<div id="improvement" class="warning">Not measured. Lesson-use attribution and comparable baseline/follow-up evaluation cohorts are not recorded yet.</div>
+<h3 style="margin-top:16px">Current limitations</h3>
+<div id="limitations" class="muted">The monitor will list the current evidence boundaries after connection.</div>
+</section>
+<footer class="muted">Prototype observability interface · Read-only · Shared API-key authentication · Not proof of autonomous or self-improving intelligence.</footer>
+</main>
+<script>
+(() => {
+  let apiKey = "";
+  const el = (id) => document.getElementById(id);
+  const text = (node, value) => { node.textContent = value == null ? "" : String(value); };
+  const addItem = (target, title, meta, extra) => {
+    const item = document.createElement("div"); item.className = "item";
+    const strong = document.createElement("strong"); text(strong, title); item.appendChild(strong);
+    const details = document.createElement("div"); details.className = "meta"; text(details, meta); item.appendChild(details);
+    if (extra) { const note = document.createElement("p"); note.className = "muted"; text(note, extra); item.appendChild(note); }
+    target.appendChild(item);
+  };
+  async function load() {
+    const response = await fetch("/learning/overview?limit=10", {headers: {"X-API-Key": apiKey}});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || ("Request failed (" + response.status + ")"));
+    const counts = [
+      data.tasks.total,
+      data.evaluations.total,
+      data.lessons.by_review_state.unvalidated,
+      data.lessons.by_review_state.validated
+    ];
+    const cards = el("metrics").children;
+    counts.forEach((value, index) => { cards[index].querySelector(".value").textContent = String(value); });
+    text(el("window"), "Coverage: " + data.window + " · Snapshot: " + data.generated_at);
+    const rate = data.evaluations.deterministic_pass_rate;
+    text(el("passRate"), rate.denominator
+      ? "Deterministic pass rate: " + (rate.value * 100).toFixed(1) + "% (" + rate.numerator + " passed / " + rate.denominator + " evaluations). This is an outcome rate, not proof that lessons caused improvement."
+      : "Deterministic pass rate: Not measured (0 deterministic evaluations).");
+    const methods = Object.entries(data.evaluations.by_method || {});
+    text(el("methods"), methods.length ? methods.map(([name, item]) => name + ": " + item.passed + " passed / " + item.total + " total").join(" · ") : "No evaluation methods recorded.");
+    const lessons = el("lessons"); lessons.replaceChildren();
+    data.recent_lessons.forEach(item => addItem(lessons, item.summary, item.lesson_type + " · " + (item.validated ? "validated flag set" : "unvalidated") + " · " + item.created_at, "Task: " + item.task_id + " · Source: " + item.source));
+    if (!data.recent_lessons.length) text(lessons, "No lesson records yet.");
+    const evaluations = el("evaluations"); evaluations.replaceChildren();
+    data.recent_evaluations.forEach(item => addItem(evaluations, (item.passed ? "Passed" : "Not passed") + " · score " + Number(item.score).toFixed(2), item.method + " · " + item.created_at, "Task: " + item.task_id + " · Evaluation: " + item.id));
+    if (!data.recent_evaluations.length) text(evaluations, "No evaluation records yet.");
+    text(el("improvement"), data.improvement.status === "not_measured" ? "Not measured. " + data.improvement.reason : data.improvement.status);
+    text(el("limitations"), data.limitations.join(" "));
+  }
+  el("connect").addEventListener("click", async () => {
+    apiKey = el("apiKey").value.trim();
+    if (!apiKey) { text(el("connection"), "Enter the API key first."); return; }
+    el("connect").disabled = true;
+    try { await load(); text(el("connection"), "Connected. Read-only records loaded."); }
+    catch (error) { apiKey = ""; text(el("connection"), error.message); }
+    finally { el("connect").disabled = false; }
+  });
+})();
+</script>
+</body>
+</html>
