@@ -37,6 +37,30 @@ def test_source_documents_are_not_retrievable_until_approved(monkeypatch, tmp_pa
     assert results[0]["content_sha256"] == document["content_sha256"]
 
 
+def test_source_documents_and_review_decisions_survive_database_reinitialization(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("persistent-research", "Persistent Research", "academic_index")
+    document = ingest_document(
+        "persistent-research",
+        "Durable knowledge record",
+        "https://example.org/durable-record",
+        "A reviewed source should survive application database initialization.",
+        metadata={"publisher": "Example Institute", "retrieved_at": "2026-11-13"},
+    )
+    review_document(document["id"], "approved", "test-reviewer")
+
+    # Simulate a process restart: schema initialization must preserve existing records.
+    storage.init_db()
+
+    sources = storage.list_sources()
+    approved = retrieve("durable knowledge record")
+    assert any(source["id"] == "persistent-research" for source in sources)
+    assert len(approved) == 1
+    assert approved[0]["id"] == document["id"]
+    assert approved[0]["content_sha256"] == document["content_sha256"]
+    assert approved[0]["trust_level"] == "unverified"
+
+
 def test_rejected_source_document_never_enters_retrieval(monkeypatch, tmp_path):
     _isolated_db(monkeypatch, tmp_path)
     register_source("web", "Web Research", "web")
