@@ -893,3 +893,37 @@ def test_retry_schedule_capability_evidence_column_migrates_additively(tmp_path,
         assert "capability_contract_json" in columns
     finally:
         conn.close()
+
+
+def test_execution_failure_persists_only_sanitised_unvalidated_lesson(tmp_path, monkeypatch):
+    import json
+    from atlas_engine.task_manager import TaskAPI
+    from atlas_engine.evaluator import Evaluator
+    from atlas_engine.learning_memory import LearningMemory
+
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Execution failure memory", "Retain safe diagnostic learning", [])
+
+    class BrokenExecutor:
+        @staticmethod
+        def execute(_payload):
+            raise RuntimeError("secret token and private task content")
+
+    api = TaskAPI(manager, BrokenExecutor(), Evaluator(), LearningMemory(), None, None)
+    response = api.run_task(task.id)
+
+    assert response["status"] == "failed"
+    evaluations = storage.get_evaluations_for_task(task.id)
+    assert len(evaluations) == 1
+    lessons = storage.list_lessons(limit=10)
+    assert len(lessons) == 1
+    assert lessons[0]["lesson_type"] == "execution_failure"
+    assert lessons[0]["source"] == "execution-error"
+    assert lessons[0]["validated"] == 0
+    evidence = json.loads(lessons[0]["evidence_json"])
+    assert evidence == {
+        "error_type": "RuntimeError",
+        "evaluation_id": evaluations[0]["id"],
+    }
+    assert "secret token" not in str(lessons)
+    assert "private task content" not in str(lessons)
