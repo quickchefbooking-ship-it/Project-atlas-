@@ -100,7 +100,7 @@ def ingest_document(
         "content_sha256": hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
         "trust_level": "unverified",
         "state": "pending",
-        "metadata_json": json.dumps(metadata or {}, sort_keys=True),
+        "metadata_json": _encode_metadata(metadata),
         "created_at": _now(),
         "updated_at": _now(),
     })
