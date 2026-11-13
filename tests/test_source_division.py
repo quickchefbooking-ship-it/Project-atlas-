@@ -410,3 +410,64 @@ def test_retrieval_returns_empty_when_query_contains_only_stop_words(monkeypatch
     review_document(document["id"], "approved", "reviewer")
 
     assert retrieve("what is this and that") == []
+
+
+
+@pytest.mark.parametrize("metadata", [
+    {1: "non-string key"},
+    {"nested": (1, 2)},
+    {"nested": {False, True}},
+    {"nested": object()},
+    {"nested": float("nan")},
+    {"nested": float("inf")},
+])
+def test_source_metadata_rejects_non_json_values(monkeypatch, tmp_path, metadata):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError):
+        register_source("invalid-metadata", "Invalid metadata", "test", metadata=metadata)
+
+    assert storage.list_sources() == []
+
+
+def test_source_metadata_rejects_circular_references(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    cycle = []
+    cycle.append(cycle)
+
+    with pytest.raises(ValueError, match="circular references"):
+        register_source(
+            "cyclic-metadata", "Cyclic metadata", "test",
+            metadata={"nested": cycle},
+        )
+
+    assert storage.list_sources() == []
+
+
+def test_source_metadata_rejects_excessive_nesting(monkeypatch, tmp_path):
+    from atlas_engine.source_division import MAX_SOURCE_METADATA_DEPTH
+
+    _isolated_db(monkeypatch, tmp_path)
+    metadata = {}
+    current = metadata
+    for _ in range(MAX_SOURCE_METADATA_DEPTH + 1):
+        nested = {}
+        current["nested"] = nested
+        current = nested
+
+    with pytest.raises(ValueError, match="maximum nesting depth"):
+        register_source("deep-metadata", "Deep metadata", "test", metadata=metadata)
+
+    assert storage.list_sources() == []
+
+
+def test_source_metadata_rejects_payload_over_16_kib(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError, match="16,384-byte limit"):
+        register_source(
+            "large-metadata", "Large metadata", "test",
+            metadata={"description": "x" * 16_385},
+        )
+
+    assert storage.list_sources() == []
