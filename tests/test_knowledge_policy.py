@@ -15,9 +15,11 @@ def _isolated_db(monkeypatch, tmp_path):
 
 def _approved(metadata):
     register_source("research", "Research", "research")
+    unique_evidence = json.dumps(metadata, sort_keys=True)
     item = ingest_document(
         "research", "Professor learning evidence", "https://example.org/evidence",
-        "Professor learning evidence supports safe orchestration and memory.",
+        "Professor learning evidence supports safe orchestration and memory. "
+        f"Test metadata: {unique_evidence}",
         metadata=metadata,
     )
     review_document(item["id"], "approved", "reviewer")
