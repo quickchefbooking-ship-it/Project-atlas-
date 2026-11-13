@@ -103,3 +103,31 @@ def test_task_creation_rejects_non_finite_success_criteria(monkeypatch, tmp_path
     assert "input" not in error_detail
     assert "ctx" not in error_detail
     assert storage.list_tasks(limit=10) == []
+
+
+def test_development_entrypoint_binds_loopback_when_authentication_is_disabled(monkeypatch):
+    import uvicorn
+
+    captured = {}
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", False)
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: captured.update(kwargs))
+
+    app_module.run_server()
+
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 8000
+    assert captured["reload"] is False
+
+
+def test_development_entrypoint_preserves_network_binding_when_authentication_is_enabled(monkeypatch):
+    import uvicorn
+
+    captured = {}
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: captured.update(kwargs))
+
+    app_module.run_server()
+
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 8000
+    assert captured["reload"] is False
