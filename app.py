@@ -22,6 +22,7 @@ from atlas_engine.source_division import load_bundled_knowledge, list_sources, r
 from atlas_engine.source_adapters import import_json_batch, stage_adapter_results, MAX_BATCH_JSON_CHARS
 from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, search_crossref_works, PublicSourceError
 import logging
+from atlas_engine.public_web_retrieval import fetch_public_web_page
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,8 @@ async def lifespan(app: FastAPI):
         register_source("uk-legislation", "UK Legislation — The National Archives", "legislation_gov_uk_api", access_mode="read_only", metadata={"endpoint": "www.legislation.gov.uk", "scope": "official public legislation search and XML text"})
     if storage.get_source("crossref-public") is None:
         register_source("crossref-public", "Crossref Scholarly Metadata", "crossref_public_api", access_mode="read_only", metadata={"endpoint": "api.crossref.org", "scope": "public bibliographic metadata and abstracts when supplied"})
+    if storage.get_source("public-web") is None:
+        register_source("public-web", "Allowlisted Public Web Pages", "allowlisted_public_web", access_mode="read_only", metadata={"scope": "approved public HTTPS hosts; HTML/plain text only; pending review"})
     logger.info("Imported %s new curated knowledge documents", imported)
     yield
 
@@ -78,6 +81,10 @@ class PublicSourceFetchRequest(BaseModel):
     provider: str = Field(pattern="^(github|huggingface|legislation|crossref)$")
     identifier: str = Field(min_length=1, max_length=201)
     resource_type: str = Field(default="repository", pattern="^(repository|model|dataset|ukpga|uksi|asp|anaw|nia|nisr|ukla|scholarly_work)$")
+
+
+class PublicWebFetchRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
 
 
 class GenerateImageRequest(BaseModel):
@@ -221,6 +228,35 @@ def fetch_public_source(payload: PublicSourceFetchRequest):
         return {
             "status": "staged_for_review",
             "provider": payload.provider,
+            "count": len(staged),
+            "documents": [
+                {
+                    "id": item["id"],
+                    "source_id": item["source_id"],
+                    "title": item["title"],
+                    "uri": item["uri"],
+                    "content_sha256": item["content_sha256"],
+                    "state": item["state"],
+                    "trust_level": item["trust_level"],
+                }
+                for item in staged
+            ],
+        }
+    except PublicSourceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/sources/fetch-url", dependencies=[Depends(require_api_key)])
+def fetch_public_web_url(payload: PublicWebFetchRequest):
+    """Fetch one allowlisted public web page and stage it as untrusted pending material."""
+    try:
+        adapter = _SingleDocumentAdapter("public-web", fetch_public_web_page(payload.url))
+        staged = stage_adapter_results(adapter, payload.url, limit=1)
+        return {
+            "status": "staged_for_review",
+            "provider": "public_web",
             "count": len(staged),
             "documents": [
                 {
