@@ -146,3 +146,31 @@ def test_task_failure_does_not_expose_exception_details(tmp_path, monkeypatch, c
     assert "RuntimeError" in caplog.text
     assert "private-token-and-path-must-not-leak" not in caplog.text
     assert manager.get_task(task.id).status == "failed"
+
+
+def test_storage_enforces_foreign_key_relationships(tmp_path, monkeypatch):
+    import json
+    import sqlite3
+    from datetime import datetime, timezone
+    from atlas_engine import storage
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "foreign-keys.db"))
+    storage.init_db()
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": "evaluation-without-task",
+        "task_id": "task-does-not-exist",
+        "passed": False,
+        "score": 0.0,
+        "reasons_json": json.dumps(["missing task"]),
+        "missing_requirements_json": json.dumps([]),
+        "method": "test",
+        "created_at": now,
+    }
+
+    try:
+        storage.save_evaluation(record)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError("An evaluation must not reference a task that does not exist")
