@@ -1,8 +1,12 @@
 import ast
+import math
 import operator
 from typing import Any
 
 from .config import USE_PAID_AI
+
+MAX_EXPRESSION_CHARS = 256
+MAX_NUMBER_MAGNITUDE = 1e15
 
 _ALLOWED = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
@@ -11,33 +15,47 @@ _ALLOWED = {
     ast.USub: operator.neg, ast.UAdd: operator.pos,
 }
 
+
+def _checked_number(value: Any) -> int | float:
+    """Keep arithmetic results finite, real and within the executor's numeric budget."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Only real numeric results are permitted")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("Non-finite numeric values are not permitted")
+    if abs(value) > MAX_NUMBER_MAGNITUDE:
+        raise ValueError("Number exceeds the supported range")
+    return value
+
+
 def _safe_math(node):
     if isinstance(node, ast.Expression):
         return _safe_math(node.body)
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
-        return node.value
+        return _checked_number(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED:
         left, right = _safe_math(node.left), _safe_math(node.right)
         if isinstance(node.op, ast.Pow) and abs(right) > 10:
             raise ValueError("Exponent is too large")
         value = _ALLOWED[type(node.op)](left, right)
-        if abs(value) > 1e15:
-            raise ValueError("Result is too large")
-        return value
+        return _checked_number(value)
     if isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED:
-        return _ALLOWED[type(node.op)](_safe_math(node.operand))
+        return _checked_number(_ALLOWED[type(node.op)](_safe_math(node.operand)))
     raise ValueError("Only basic arithmetic is permitted")
+
 
 def safe_execute_local(task: dict[str, Any]) -> dict[str, Any]:
     description = str(task.get("description", "")).strip()
     if not description:
         raise ValueError("Task description is empty")
+    if len(description) > MAX_EXPRESSION_CHARS:
+        raise ValueError("Arithmetic expression exceeds the maximum permitted length")
     try:
         expression = ast.parse(description, mode="eval")
         value = _safe_math(expression)
     except (SyntaxError, ZeroDivisionError, OverflowError) as exc:
         raise ValueError("Task is not a supported arithmetic expression") from exc
     return {"type": "safe_math", "value": value}
+
 
 class LocalTaskExecutor:
     def __init__(self, provider: str | None = None):
