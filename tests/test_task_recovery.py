@@ -707,7 +707,12 @@ def test_retry_schedule_is_blocked_by_cancellation_and_can_be_cancelled_before_d
     )
     assert cancellation is not None
     assert cancellation["state"] == "acknowledged"
+    assert cancellation["acknowledged_at"] is not None
     assert storage.list_task_retry_schedules(task.id)[0]["state"] == "cancelled"
+    cancelled_task = manager.get_task(task.id)
+    assert cancelled_task.status == "failed"
+    assert cancelled_task.result["cancelled_before_retry"] is True
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "cancelled"
     assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
 
 
@@ -721,6 +726,10 @@ def test_retry_schedule_expires_at_deadline_and_cannot_be_claimed(tmp_path, monk
     future = (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()
     assert storage.expire_task_retry_schedules(now=future) == 1
     assert storage.list_task_retry_schedules(task.id)[0]["state"] == "expired"
+    expired_task = manager.get_task(task.id)
+    assert expired_task.status == "failed"
+    assert expired_task.result["error_type"] == "RetryDeadlineExpired"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "retry_expired"
     assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
 
 
@@ -820,3 +829,28 @@ def test_retry_schedule_inspection_route_is_authenticated(tmp_path, monkeypatch)
     assert response.status_code == 200
     assert response.json()[0]["schedule_id"] == schedule["schedule_id"]
     assert response.json()[0]["state"] == "scheduled"
+
+
+def test_claim_after_retry_deadline_terminalises_pending_task(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Claim after deadline", "Expired retry must not strand a pending task", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-a", 30)
+    assert claim is not None
+    schedule = _schedule_retry(task.id, claim, due_seconds=5, deadline_seconds=20)
+    assert schedule is not None
+
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_retry_schedules SET deadline_at = ? WHERE schedule_id = ?",
+            (expired, schedule["schedule_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert storage.claim_task_with_lease(task.id, "worker-b", 30) is None
+    assert storage.list_task_retry_schedules(task.id)[0]["state"] == "expired"
+    assert manager.get_task(task.id).status == "failed"
+    assert storage.get_evaluations_for_task(task.id)[0]["method"] == "retry_expired"
