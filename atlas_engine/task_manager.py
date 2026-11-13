@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from .retry_policy import RetryPolicy
 
@@ -51,17 +52,28 @@ class TaskInput(BaseModel):
     @field_validator("title")
     @classmethod
     def validate_title(cls, value: str) -> str:
-        return _validate_task_text(value, "title", MAX_TASK_TITLE_CHARS)
+        try:
+            return _validate_task_text(value, "title", MAX_TASK_TITLE_CHARS)
+        except ValueError as exc:
+            raise PydanticCustomError("task_title_invalid", str(exc)) from exc
 
     @field_validator("description")
     @classmethod
     def validate_description(cls, value: str) -> str:
-        return _validate_task_text(value, "description", MAX_TASK_DESCRIPTION_CHARS)
+        try:
+            return _validate_task_text(value, "description", MAX_TASK_DESCRIPTION_CHARS)
+        except ValueError as exc:
+            raise PydanticCustomError("task_description_invalid", str(exc)) from exc
 
     @field_validator("success_criteria")
     @classmethod
     def validate_success_criteria(cls, value: Any) -> Any:
-        _serialize_task_criteria(value)
+        try:
+            _serialize_task_criteria(value)
+        except ValueError as exc:
+            # PydanticCustomError keeps the original exception object out of
+            # FastAPI's JSON validation response context.
+            raise PydanticCustomError("task_criteria_invalid", str(exc)) from exc
         return value
 
 class ProposalReviewInput(BaseModel):
