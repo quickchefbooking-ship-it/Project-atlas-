@@ -84,7 +84,7 @@ def init_db() -> None:
         if "reviewed_by" not in source_document_columns:
             conn.execute("ALTER TABLE source_documents ADD COLUMN reviewed_by TEXT")
         conn.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_source_documents_source_hash
+            CREATE INDEX IF NOT EXISTS idx_source_documents_source_hash_lookup
             ON source_documents(source_id, content_sha256)
         """)
         conn.commit()
@@ -306,8 +306,20 @@ def list_sources() -> list[Dict[str, Any]]:
 def save_source_document(record: Dict[str, Any]) -> Dict[str, Any]:
     conn = get_connection()
     try:
+        # Serialize the check-and-insert so concurrent imports cannot create
+        # duplicate source/content pairs. A non-unique index keeps old databases
+        # with pre-existing duplicates migratable without deleting user data.
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT * FROM source_documents WHERE source_id = ? AND content_sha256 = ? "
+            "ORDER BY created_at, id LIMIT 1",
+            (record["source_id"], record["content_sha256"]),
+        ).fetchone()
+        if existing is not None:
+            conn.commit()
+            return dict(existing)
         conn.execute("""
-            INSERT OR IGNORE INTO source_documents (
+            INSERT INTO source_documents (
                 id, source_id, title, uri, content, content_sha256, trust_level,
                 state, metadata_json, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -316,8 +328,7 @@ def save_source_document(record: Dict[str, Any]) -> Dict[str, Any]:
               record["state"], record["metadata_json"], record["created_at"], record["updated_at"]))
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM source_documents WHERE source_id = ? AND content_sha256 = ?",
-            (record["source_id"], record["content_sha256"]),
+            "SELECT * FROM source_documents WHERE id = ?", (record["id"],)
         ).fetchone()
         return dict(row)
     finally:
@@ -328,6 +339,19 @@ def get_source_document(document_id: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     try:
         row = conn.execute("SELECT * FROM source_documents WHERE id = ?", (document_id,)).fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        conn.close()
+
+
+def get_source_document_by_hash(source_id: str, content_sha256: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM source_documents WHERE source_id = ? AND content_sha256 = ? "
+            "ORDER BY created_at, id LIMIT 1",
+            (source_id, content_sha256),
+        ).fetchone()
         return dict(row) if row is not None else None
     finally:
         conn.close()
