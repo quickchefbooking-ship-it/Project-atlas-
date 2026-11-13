@@ -517,9 +517,11 @@ def test_completed_task_cannot_be_cancelled_after_commit(tmp_path, monkeypatch):
     assert storage.complete_task_with_evaluation(
         task.id, record, "passed", {"value": 1}, attempt=claim
     )
-    assert storage.request_task_cancellation(
+    late = storage.request_task_cancellation(
         task.id, claim["attempt_id"], "operator", "Too late"
-    ) is None
+    )
+    assert late is not None
+    assert late["state"] == "too_late"
 
 
 def test_cancellation_route_is_authenticated_and_persists_request(tmp_path, monkeypatch):
@@ -552,3 +554,26 @@ def test_cancellation_route_is_authenticated_and_persists_request(tmp_path, monk
         f"/tasks/{task.id}/cancellation",
         headers={"X-API-Key": "test-secret"},
     ).json()["state"] == "requested"
+
+
+def test_expired_lease_cancellation_is_recorded_as_recovery_required(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Late cancellation", "Expired lease cannot be cancelled by a dead worker", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-gone", 5)
+    assert claim is not None
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    conn = storage.get_connection()
+    try:
+        conn.execute(
+            "UPDATE task_attempts SET lease_expires_at = ? WHERE attempt_id = ?",
+            (expired, claim["attempt_id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    cancellation = storage.request_task_cancellation(
+        task.id, claim["attempt_id"], "operator", "Cancel but worker is gone"
+    )
+    assert cancellation is not None
+    assert cancellation["state"] == "requires_recovery"
+    assert manager.get_task(task.id).status == "running"
