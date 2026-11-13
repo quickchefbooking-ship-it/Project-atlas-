@@ -304,6 +304,14 @@ def mark_expired_task_attempts(now: Optional[str] = None, limit: int = 100) -> i
                 "WHERE attempt_id = ? AND state = 'active' AND lease_expires_at <= ?",
                 [(attempt_id, now_text) for attempt_id in ids],
             )
+            conn.executemany(
+                """
+                UPDATE task_cancellations
+                SET state = 'requires_recovery'
+                WHERE attempt_id = ? AND state = 'requested'
+                """,
+                [(attempt_id,) for attempt_id in ids],
+            )
         conn.commit()
         return len(ids)
     except Exception:
