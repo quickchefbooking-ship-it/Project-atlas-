@@ -700,6 +700,227 @@ def complete_task_with_evaluation(
         conn.close()
 
 
+def _normalise_utc_timestamp(value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp.") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field_name} must include a timezone.")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def persist_task_retry_schedule(
+    task_id: str,
+    attempt: Dict[str, Any],
+    evaluation_record: Dict[str, Any],
+    *,
+    capability_contract: Dict[str, Any],
+    policy_snapshot: Dict[str, Any],
+    error_code: str,
+    idempotency_key: str,
+    due_at: str,
+    deadline_at: str,
+) -> Optional[Dict[str, Any]]:
+    """Atomically finish an attempt and persist a bounded, capability-verified retry.
+
+    This is an internal engine primitive, not an API endpoint. Existing executors
+    do not call it; a trusted capability registry must be introduced before any
+    unattended retry can be enabled.
+    """
+    if not isinstance(capability_contract, dict):
+        raise ValueError("A trusted capability contract is required.")
+    name = capability_contract.get("capability_name")
+    version = capability_contract.get("version")
+    allowed_codes = capability_contract.get("retryable_error_codes")
+    if not isinstance(name, str) or not name.strip() or not isinstance(version, str) or not version.strip():
+        raise ValueError("Capability name and version are required.")
+    if capability_contract.get("idempotent") is not True:
+        raise ValueError("Capability must declare idempotency.")
+    if capability_contract.get("side_effects_declared") is not True:
+        raise ValueError("Capability side effects must be declared.")
+    if capability_contract.get("duplicate_suppression_verified") is not True:
+        raise ValueError("Duplicate suppression must be verified.")
+    if not isinstance(allowed_codes, (list, tuple, set, frozenset)) or error_code not in allowed_codes:
+        raise ValueError("The transient error code is not allowlisted by the capability.")
+    if not isinstance(error_code, str) or not error_code.strip():
+        raise ValueError("A non-empty retryable error code is required.")
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 256:
+        raise ValueError("A stable idempotency key of at most 256 characters is required.")
+    if not isinstance(policy_snapshot, dict):
+        raise ValueError("An immutable retry policy snapshot is required.")
+    max_attempts = policy_snapshot.get("max_attempts")
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or not 2 <= max_attempts <= 3:
+        raise ValueError("Retry policy must permit between 2 and 3 total attempts.")
+    due_text = _normalise_utc_timestamp(due_at, "due_at")
+    deadline_text = _normalise_utc_timestamp(deadline_at, "deadline_at")
+    now = datetime.now(timezone.utc)
+    due_dt = datetime.fromisoformat(due_text)
+    deadline_dt = datetime.fromisoformat(deadline_text)
+    if due_dt <= now or deadline_dt <= due_dt:
+        raise ValueError("Retry due time must be in the future and before its deadline.")
+    if deadline_dt > now + timedelta(seconds=90):
+        raise ValueError("Retry deadline cannot exceed the 90-second task ceiling.")
+    if evaluation_record.get("task_id") != task_id or evaluation_record.get("passed") is not False:
+        raise ValueError("Retry scheduling requires a failed evaluation for this task.")
+    required_eval = {"id", "score", "reasons_json", "missing_requirements_json", "method"}
+    if not required_eval.issubset(evaluation_record):
+        raise ValueError("Retry evaluation record is incomplete.")
+
+    now_text = now.isoformat()
+    schedule_id = f"retry-{os.urandom(12).hex()}"
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute(
+            """
+            SELECT a.*, t.status AS task_status
+            FROM task_attempts a JOIN tasks t ON t.id = a.task_id
+            WHERE a.task_id = ? AND a.attempt_id = ? AND a.worker_id = ?
+              AND a.fencing_token = ? AND a.state = 'active'
+              AND a.lease_expires_at > ?
+            """,
+            (task_id, attempt["attempt_id"], attempt["worker_id"],
+             attempt["fencing_token"], now_text),
+        ).fetchone()
+        if current is None or current["task_status"] != "running":
+            conn.rollback()
+            return None
+        cancellation = conn.execute(
+            """
+            SELECT 1 FROM task_cancellations
+            WHERE task_id = ? AND attempt_id = ? AND state = 'requested'
+            """,
+            (task_id, attempt["attempt_id"]),
+        ).fetchone()
+        if cancellation is not None:
+            conn.rollback()
+            return None
+        outstanding = conn.execute(
+            "SELECT 1 FROM task_retry_schedules WHERE task_id = ? AND state = 'scheduled' LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        if outstanding is not None:
+            conn.rollback()
+            return None
+        next_attempt_number = int(current["attempt_number"]) + 1
+        if next_attempt_number > max_attempts:
+            conn.rollback()
+            return None
+
+        attempt_cursor = conn.execute(
+            """
+            UPDATE task_attempts
+            SET state = 'failed', finished_at = ?, error_type = ?
+            WHERE task_id = ? AND attempt_id = ? AND worker_id = ?
+              AND fencing_token = ? AND state = 'active' AND lease_expires_at > ?
+            """,
+            (now_text, f"RetryScheduled:{error_code}", task_id,
+             attempt["attempt_id"], attempt["worker_id"], attempt["fencing_token"], now_text),
+        )
+        if attempt_cursor.rowcount != 1:
+            conn.rollback()
+            return None
+        task_cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'pending', score = 0.0, result_json = ?, updated_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (json.dumps({"retry_scheduled": True, "error_code": error_code}, sort_keys=True),
+             now_text, task_id),
+        )
+        if task_cursor.rowcount != 1:
+            conn.rollback()
+            return None
+        conn.execute(
+            """
+            INSERT INTO evaluations (
+                id, task_id, passed, score, reasons_json,
+                missing_requirements_json, method, created_at
+            ) VALUES (?, ?, 0, ?, ?, ?, ?, ?)
+            """,
+            (
+                evaluation_record["id"], task_id, evaluation_record["score"],
+                evaluation_record["reasons_json"], evaluation_record["missing_requirements_json"],
+                evaluation_record["method"], now_text,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO task_retry_schedules (
+                schedule_id, task_id, originating_attempt_id, next_attempt_number,
+                due_at, deadline_at, capability_name, capability_version,
+                idempotency_key, error_code, policy_json, state, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
+            """,
+            (
+                schedule_id, task_id, attempt["attempt_id"], next_attempt_number,
+                due_text, deadline_text, name.strip(), version.strip(),
+                idempotency_key.strip(), error_code, json.dumps(policy_snapshot, sort_keys=True),
+                now_text,
+            ),
+        )
+        conn.commit()
+        return {
+            "schedule_id": schedule_id,
+            "task_id": task_id,
+            "originating_attempt_id": attempt["attempt_id"],
+            "next_attempt_number": next_attempt_number,
+            "due_at": due_text,
+            "deadline_at": deadline_text,
+            "state": "scheduled",
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def expire_task_retry_schedules(now: Optional[str] = None, limit: int = 100) -> int:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+        raise ValueError("Retry schedule expiry limit must be between 1 and 500.")
+    now_text = _normalise_utc_timestamp(now or now_isoformat(), "now")
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT schedule_id FROM task_retry_schedules
+            WHERE state = 'scheduled' AND deadline_at <= ?
+            ORDER BY deadline_at ASC LIMIT ?
+            """,
+            (now_text, limit),
+        ).fetchall()
+        if rows:
+            conn.executemany(
+                "UPDATE task_retry_schedules SET state = 'expired' WHERE schedule_id = ? AND state = 'scheduled'",
+                [(row["schedule_id"],) for row in rows],
+            )
+        conn.commit()
+        return len(rows)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def list_task_retry_schedules(task_id: str) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM task_retry_schedules WHERE task_id = ? ORDER BY created_at ASC",
+            (task_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def request_task_cancellation(
     task_id: str, attempt_id: str, actor: str, reason: str,
 ) -> Optional[Dict[str, Any]]:
