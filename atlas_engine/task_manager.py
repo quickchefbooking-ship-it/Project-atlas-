@@ -204,6 +204,9 @@ class TaskAPI:
                     type(source_error).__name__,
                 )
                 source_documents = []
+            cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
+            if cancellation is not None and cancellation["state"] == "requested":
+                return self._finish_cancelled(task_id, lease, cancellation)
             # The local executor is deterministic and bounded. Cancellation is
             # cooperative: a request received during this synchronous call is
             # acknowledged immediately after it returns, before evaluation/commit.
