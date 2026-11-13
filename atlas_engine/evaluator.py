@@ -75,14 +75,23 @@ class Evaluator:
             if not isinstance(field_value, str):
                 return False, "field is not a string"
             return expected_value in field_value, f"expected text {expected_value!r} in {field_value!r}"
-        if operator == "gt":
-            return field_value > expected_value, f"field={field_value} must be > {expected_value}"
-        if operator == "gte":
-            return field_value >= expected_value, f"field={field_value} must be >= {expected_value}"
-        if operator == "lt":
-            return field_value < expected_value, f"field={field_value} must be < {expected_value}"
-        if operator == "lte":
-            return field_value <= expected_value, f"field={field_value} must be <= {expected_value}"
+        if operator in {"gt", "gte", "lt", "lte"}:
+            try:
+                if operator == "gt":
+                    matched = field_value > expected_value
+                    requirement = ">"
+                elif operator == "gte":
+                    matched = field_value >= expected_value
+                    requirement = ">="
+                elif operator == "lt":
+                    matched = field_value < expected_value
+                    requirement = "<"
+                else:
+                    matched = field_value <= expected_value
+                    requirement = "<="
+            except TypeError:
+                return False, "field and expected value are not comparable"
+            return matched, f"field={field_value} must be {requirement} {expected_value}"
         raise ValueError(f"Unsupported operator: {operator}")
 
     @classmethod
