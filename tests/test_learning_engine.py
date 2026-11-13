@@ -40,3 +40,44 @@ def test_evaluator_fails_non_matching_criteria():
     )
     assert result["passed"] is False
     assert result["score"] == 0.0
+
+
+
+def test_task_run_persists_evaluation_and_increments_attempts(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "test-atlas.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Check arithmetic",
+        "Return the computed value",
+        [{"field": "value", "operator": "==", "expected_value": 2}],
+    )
+
+    class Executor:
+        @staticmethod
+        def execute(_payload):
+            return {"value": 2}
+
+    class Memory:
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            raise AssertionError("A passing task should not create a failure lesson")
+
+    class Improvement:
+        @staticmethod
+        def list_proposals():
+            return []
+
+    api = TaskAPI(manager, Executor(), Evaluator(), Memory(), Improvement(), None)
+    result = api.run_task(task.id)
+
+    assert result["status"] == "passed"
+    updated = manager.get_task(task.id)
+    assert updated.attempts == 1
+    evaluations = storage.get_evaluations_for_task(task.id)
+    assert len(evaluations) == 1
+    assert evaluations[0]["passed"] == 1
+    assert evaluations[0]["score"] == 1.0
