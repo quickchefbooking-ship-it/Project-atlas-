@@ -1,4 +1,5 @@
 import hmac
+from contextlib import asynccontextmanager
 import os
 from typing import Optional, Any
 
@@ -30,14 +31,15 @@ class StorageBackend:
 
 manager = TaskManager(StorageBackend())
 api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), ImprovementManager(), SafeTester())
-app = FastAPI(title="AtlasOnePro — Professor Core")
-
-
-@app.on_event("startup")
-def bootstrap_knowledge_library():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Import repository-owned curated references into the persistent local store."""
     imported = load_bundled_knowledge()
     logger.info("Imported %s new curated knowledge documents", imported)
+    yield
+
+
+app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 
 
 def require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
