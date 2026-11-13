@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -114,3 +115,92 @@ def fetch_huggingface_resource(identifier: str, resource_type: str = "model") ->
         content=content,
         metadata={"provider": "huggingface", "resource_type": resource_type, "identifier": identifier, "retrieved_at": retrieved, "record_kind": "public_metadata"},
     )
+
+
+LEGISLATION_TYPES = {"ukpga", "uksi", "asp", "anaw", "nia", "nisr", "ukla"}
+ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
+
+def _get_xml_text(url: str) -> str:
+    """GET XML/text from the fixed official legislation host with strict bounds."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "www.legislation.gov.uk":
+        raise PublicSourceError("Legislation requests must use the official HTTPS host.")
+    request = Request(url, headers={"Accept": "application/atom+xml, application/xml, text/xml", "User-Agent": USER_AGENT})
+    try:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            body = response.read(MAX_RESPONSE_BYTES + 1)
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise PublicSourceError("The legislation resource was not found.") from exc
+        if exc.code == 429:
+            raise PublicSourceError("The legislation service rate limit was reached.") from exc
+        raise PublicSourceError(f"Legislation service returned HTTP {exc.code}.") from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise PublicSourceError("The official legislation service could not be reached.") from exc
+    if len(body) > MAX_RESPONSE_BYTES:
+        raise PublicSourceError("Legislation response exceeded the 1 MB safety limit.")
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PublicSourceError("Legislation service returned non-UTF-8 content.") from exc
+
+
+def search_uk_legislation(query: str, legislation_type: str = "ukpga", limit: int = 5) -> list[SourceDocument]:
+    """Search official legislation.gov.uk Atom feeds and stage current XML text."""
+    if not isinstance(query, str) or not 2 <= len(query.strip()) <= 120:
+        raise PublicSourceError("Legislation search must contain 2 to 120 characters.")
+    if legislation_type not in LEGISLATION_TYPES:
+        raise PublicSourceError("Unsupported UK legislation type.")
+    if not isinstance(limit, int) or limit < 1 or limit > 5:
+        raise PublicSourceError("Legislation result limit must be between 1 and 5.")
+
+    params = urlencode({"type": legislation_type, "title": query.strip(), "results-count": str(limit), "sort": "modified"})
+    feed_url = f"https://www.legislation.gov.uk/search/data.feed?{params}"
+    feed_text = _get_xml_text(feed_url)
+    try:
+        root = ET.fromstring(feed_text)
+    except ET.ParseError as exc:
+        raise PublicSourceError("Official legislation search returned invalid Atom XML.") from exc
+
+    entries = root.findall("atom:entry", ATOM_NS)
+    retrieved = _retrieved_at()
+    documents: list[SourceDocument] = []
+    for entry in entries[:limit]:
+        title_node = entry.find("atom:title", ATOM_NS)
+        title = " ".join("".join(title_node.itertext()).split()) if title_node is not None else ""
+        links = entry.findall("atom:link", ATOM_NS)
+        href = next((item.get("href") for item in links if item.get("href") and item.get("rel", "alternate") == "alternate"), None)
+        if not title or not href:
+            continue
+        parsed = urlparse(href)
+        if parsed.scheme != "https" or parsed.hostname != "www.legislation.gov.uk":
+            continue
+        canonical_uri = f"https://www.legislation.gov.uk{parsed.path.rstrip('/')}"
+        xml_url = canonical_uri + "/data.xml"
+        xml_text = _get_xml_text(xml_url)
+        try:
+            legal_root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            continue
+        body_text = " ".join(" ".join(legal_root.itertext()).split())
+        if not body_text:
+            continue
+        content = f"Official UK legislation text and metadata\nTitle: {title}\nSource: {canonical_uri}\n\n{body_text}"
+        if len(content) > 900_000:
+            content = content[:900_000] + "\n[Truncated at the adapter safety limit.]"
+        documents.append(SourceDocument(
+            title=title,
+            uri=canonical_uri,
+            content=content,
+            metadata={
+                "provider": "legislation.gov.uk",
+                "publisher": "The National Archives",
+                "resource_type": legislation_type,
+                "retrieved_at": retrieved,
+                "record_kind": "official_legislation_text",
+                "content_format": "XML extracted text",
+                "licence": "Open Government Licence",
+            },
+        ))
+    return documents
