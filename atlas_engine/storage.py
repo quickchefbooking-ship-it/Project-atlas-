@@ -84,7 +84,7 @@ def init_db() -> None:
                 attempt_id TEXT NOT NULL UNIQUE,
                 actor TEXT NOT NULL,
                 reason TEXT NOT NULL,
-                state TEXT NOT NULL CHECK(state IN ('requested','acknowledged','too_late','requires_recovery')),
+                state TEXT NOT NULL CHECK(state IN ('requested','acknowledged','cancelled','too_late','requires_recovery')),
                 requested_at TEXT NOT NULL,
                 acknowledged_at TEXT,
                 FOREIGN KEY(task_id) REFERENCES tasks(id),
@@ -94,6 +94,36 @@ def init_db() -> None:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_task_cancellations_task_state
             ON task_cancellations(task_id, state, requested_at DESC)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS task_retry_schedules (
+                schedule_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                originating_attempt_id TEXT NOT NULL UNIQUE,
+                next_attempt_number INTEGER NOT NULL,
+                due_at TEXT NOT NULL,
+                deadline_at TEXT NOT NULL,
+                capability_name TEXT NOT NULL,
+                capability_version TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                error_code TEXT NOT NULL,
+                policy_json TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('scheduled','claimed','cancelled','expired')),
+                created_at TEXT NOT NULL,
+                claimed_at TEXT,
+                claimed_attempt_id TEXT,
+                FOREIGN KEY(task_id) REFERENCES tasks(id),
+                FOREIGN KEY(originating_attempt_id) REFERENCES task_attempts(attempt_id),
+                FOREIGN KEY(claimed_attempt_id) REFERENCES task_attempts(attempt_id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_retry_schedules_due
+            ON task_retry_schedules(state, due_at, deadline_at)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_retry_schedules_task
+            ON task_retry_schedules(task_id, created_at DESC)
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS evaluations (
@@ -216,6 +246,28 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
         if active is not None:
             conn.rollback()
             return None
+        schedule = conn.execute(
+            """
+            SELECT * FROM task_retry_schedules
+            WHERE task_id = ? AND state IN ('scheduled','cancelled','expired')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
+        if schedule is not None:
+            if schedule["state"] != "scheduled":
+                conn.rollback()
+                return None
+            if schedule["deadline_at"] <= claimed_at:
+                conn.execute(
+                    "UPDATE task_retry_schedules SET state = 'expired' WHERE schedule_id = ? AND state = 'scheduled'",
+                    (schedule["schedule_id"],),
+                )
+                conn.commit()
+                return None
+            if schedule["due_at"] > claimed_at or int(schedule["next_attempt_number"]) != int(task["attempts"]) + 1:
+                conn.rollback()
+                return None
         attempt_number = int(task["attempts"]) + 1
         fencing_token = conn.execute(
             "SELECT COALESCE(MAX(fencing_token), 0) + 1 FROM task_attempts WHERE task_id = ?",
@@ -239,6 +291,18 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
             (attempt_id, task_id, attempt_number, fencing_token, worker_id,
              claimed_at, claimed_at, expires_at),
         )
+        if schedule is not None:
+            scheduled = conn.execute(
+                """
+                UPDATE task_retry_schedules
+                SET state = 'claimed', claimed_at = ?, claimed_attempt_id = ?
+                WHERE schedule_id = ? AND state = 'scheduled' AND due_at <= ? AND deadline_at > ?
+                """,
+                (claimed_at, attempt_id, schedule["schedule_id"], claimed_at, claimed_at),
+            )
+            if scheduled.rowcount != 1:
+                conn.rollback()
+                return None
         conn.commit()
         return {
             "attempt_id": attempt_id, "task_id": task_id,
@@ -666,7 +730,23 @@ def request_task_cancellation(
         if attempt_row is None or task is None:
             conn.rollback()
             return None
-        if task["status"] != "running" or attempt_row["state"] in {"completed", "failed", "abandoned"}:
+        if task["status"] == "pending" and attempt_row["state"] == "failed":
+            scheduled_retry = conn.execute(
+                """
+                SELECT schedule_id FROM task_retry_schedules
+                WHERE task_id = ? AND originating_attempt_id = ? AND state = 'scheduled'
+                """,
+                (task_id, attempt_id),
+            ).fetchone()
+            if scheduled_retry is not None:
+                conn.execute(
+                    "UPDATE task_retry_schedules SET state = 'cancelled' WHERE schedule_id = ? AND state = 'scheduled'",
+                    (scheduled_retry["schedule_id"],),
+                )
+                cancellation_state = "cancelled"
+            else:
+                cancellation_state = "too_late"
+        elif task["status"] != "running" or attempt_row["state"] in {"completed", "failed", "abandoned"}:
             cancellation_state = "too_late"
         elif attempt_row["state"] == "recovery_required" or attempt_row["lease_expires_at"] <= now:
             cancellation_state = "requires_recovery"
