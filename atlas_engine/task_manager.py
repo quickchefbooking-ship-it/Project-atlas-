@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 class TaskInput(BaseModel):
     title: str
@@ -122,7 +125,18 @@ class TaskAPI:
             return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
         except Exception as exc:
             self.manager.update_status(task_id, "failed")
-            return {"task_id": task_id, "status": "failed", "error": str(exc)}
+            # Keep exception messages out of API responses and logs: they can contain
+            # credentials, file paths or private task data. Record only the error type.
+            logger.error(
+                "Task execution failed for task_id=%s error_type=%s",
+                task_id,
+                type(exc).__name__,
+            )
+            return {
+                "task_id": task_id,
+                "status": "failed",
+                "error": "Task execution failed. Check the server diagnostics using the task ID.",
+            }
 
     def get_evaluations(self, task_id: str):
         from .storage import get_evaluations_for_task
