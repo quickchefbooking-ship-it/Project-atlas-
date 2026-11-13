@@ -215,3 +215,66 @@ def test_legislation_fetch_returns_not_found_for_empty_results(monkeypatch, tmp_
         json={"provider": "legislation", "identifier": "No such Act", "resource_type": "ukpga"},
     )
     assert response.status_code == 404
+
+
+
+def test_crossref_adapter_normalizes_bibliographic_metadata(monkeypatch):
+    seen = []
+    def fake_get_json(url):
+        seen.append(url)
+        return {
+            "message": {
+                "items": [{
+                    "DOI": "10.1234/example.2026",
+                    "title": ["A study of safe AI systems"],
+                    "author": [{"given": "Ada", "family": "Lovelace"}],
+                    "publisher": "Example Academic Press",
+                    "type": "journal-article",
+                    "is-referenced-by-count": 12,
+                    "abstract": "<jats:p>Abstract text supplied by the publisher.</jats:p>",
+                    "URL": "https://publisher.example/article",
+                }]
+            }
+        }
+    monkeypatch.setattr("atlas_engine.public_research_adapters._get_json", fake_get_json)
+    from atlas_engine.public_research_adapters import search_crossref_works
+    documents = search_crossref_works("safe AI systems", limit=3)
+    assert len(documents) == 1
+    assert documents[0].title == "A study of safe AI systems"
+    assert documents[0].uri == "https://doi.org/10.1234/example.2026"
+    assert "Ada Lovelace" in documents[0].content
+    assert documents[0].metadata["provider"] == "crossref"
+    assert documents[0].metadata["full_text_not_fetched"] is True
+    assert "rows=3" in seen[0]
+
+
+@pytest.mark.parametrize("query", ["AI", "x" * 161])
+def test_crossref_rejects_invalid_search_query(query):
+    from atlas_engine.public_research_adapters import search_crossref_works
+    with pytest.raises(PublicSourceError):
+        search_crossref_works(query)
+
+
+def test_authenticated_crossref_search_stages_pending_records(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    with client:
+        pass
+    docs = [
+        SourceDocument(
+            title="A study of safe AI systems",
+            uri="https://doi.org/10.1234/example.2026",
+            content="Crossref metadata for a scholarly work.",
+            metadata={"provider": "crossref", "resource_type": "scholarly_work"},
+        )
+    ]
+    monkeypatch.setattr(app_module, "search_crossref_works", lambda query, limit=5: docs)
+    response = client.post(
+        "/sources/fetch",
+        headers=_headers(),
+        json={"provider": "crossref", "identifier": "safe AI systems", "resource_type": "scholarly_work"},
+    )
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert response.json()["documents"][0]["state"] == "pending"
+    assert response.json()["documents"][0]["source_id"] == "crossref-public"
+    assert storage.get_source("crossref-public") is not None
