@@ -59,15 +59,9 @@ def ingest_document(
     title: str,
     uri: str,
     content: str,
-    trust_level: str = "unverified",
-    state: str = "pending",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Store bounded source material with provenance; new records default to pending."""
-    if trust_level not in TRUST_LEVELS:
-        raise ValueError("Unsupported trust level.")
-    if state not in DOCUMENT_STATES:
-        raise ValueError("Unsupported document state.")
+    """Store bounded source material as unverified and pending review."""
     if not title.strip() or not uri.strip():
         raise ValueError("Document title and source URI are required.")
     if not isinstance(content, str) or not content.strip():
@@ -84,8 +78,8 @@ def ingest_document(
         "uri": uri.strip(),
         "content": normalized,
         "content_sha256": hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
-        "trust_level": trust_level,
-        "state": state,
+        "trust_level": "unverified",
+        "state": "pending",
         "metadata_json": json.dumps(metadata or {}, sort_keys=True),
         "created_at": _now(),
         "updated_at": _now(),
