@@ -75,3 +75,10 @@ Example import body:
 ```
 
 The source ID must already exist in the catalogue. The payload is capped by the import adapter's document, batch and character limits and is validated as a complete batch before any writes occur. Duplicate source/content pairs return the existing record. The API deliberately has no document-approval route yet: the current reviewer field is audit metadata, not authenticated user identity or role-based authorization. Human review must therefore remain an explicitly controlled operator action until real identity and reviewer permissions are implemented. Do not expose a caller-supplied reviewer name as an approval credential.
+
+
+## Browser operator interface
+
+Open `/professor/sources` on the running service. The page provides the source catalogue, state-filtered document queue, JSON paste/import and approved-only search. It uses the authenticated API rather than direct database access. The API key is entered by the operator and held only in JavaScript memory for the current page session; it is not written to local or session storage. The static page itself contains no secret and the data endpoints remain protected by `X-API-Key`.
+
+At startup the service idempotently registers `manual-paste` as an approval-gated source if it does not already exist. This is a staging source, not an external connector. The browser UI intentionally has no approval control until reviewer identity and role-based authorization are implemented.
