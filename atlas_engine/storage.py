@@ -357,18 +357,29 @@ def get_source_document_by_hash(source_id: str, content_sha256: str) -> Optional
         conn.close()
 
 
-def list_source_documents(approved_only: bool = False, limit: int = 100) -> list[Dict[str, Any]]:
+def list_source_documents(
+    approved_only: bool = False, limit: int = 100, state: Optional[str] = None
+) -> list[Dict[str, Any]]:
+    """List bounded source records, optionally filtered to one review state."""
+    if state is not None and state not in {"pending", "approved", "rejected"}:
+        raise ValueError("Unsupported source document state.")
+    if not isinstance(limit, int) or limit < 1 or limit > 500:
+        raise ValueError("Limit must be between 1 and 500.")
     conn = get_connection()
     try:
+        clauses = []
+        params: list[Any] = []
         if approved_only:
-            rows = conn.execute(
-                "SELECT * FROM source_documents WHERE state = 'approved' ORDER BY updated_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM source_documents ORDER BY updated_at DESC LIMIT ?", (limit,)
-            ).fetchall()
+            clauses.append("state = 'approved'")
+        if state is not None:
+            clauses.append("state = ?")
+            params.append(state)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM source_documents{where} ORDER BY updated_at DESC LIMIT ?",
+            params,
+        ).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()
