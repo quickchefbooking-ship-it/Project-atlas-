@@ -75,3 +75,59 @@ def test_lesson_input_validation(monkeypatch, tmp_path, kwargs):
 def test_relevant_lesson_limit_is_bounded():
     with pytest.raises(ValueError, match="between 1 and 50"):
         LearningMemory.get_relevant_lessons("orchestration", limit=51)
+
+
+
+def test_retrieval_finds_older_validated_lessons_beyond_recent_hundred(monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    _isolated_db(monkeypatch, tmp_path)
+    old_id = "lesson-older-relevant"
+    storage.save_lesson({
+        "id": old_id,
+        "task_id": "task-learning-test",
+        "lesson_type": "reviewed",
+        "summary": "quasar memory recovery guidance",
+        "source": "human-reviewed",
+        "evidence_json": "{}",
+        "validated": True,
+        "created_at": "2020-01-01T00:00:00+00:00",
+    })
+
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for index in range(105):
+        storage.save_lesson({
+            "id": f"lesson-new-unrelated-{index:03d}",
+            "task_id": "task-learning-test",
+            "lesson_type": "reviewed",
+            "summary": f"unrelated routine note {index}",
+            "source": "human-reviewed",
+            "evidence_json": "{}",
+            "validated": True,
+            "created_at": (base + timedelta(seconds=index)).isoformat(),
+        })
+
+    recent_only = storage.list_lessons(limit=100, validated_only=True)
+    assert old_id not in {row["id"] for row in recent_only}
+
+    relevant = LearningMemory.get_relevant_lessons("quasar memory recovery", limit=5)
+
+    assert relevant
+    assert relevant[0]["id"] == old_id
+    assert all(row["validated"] in (1, True) for row in relevant)
+
+
+def test_retrieval_uses_exact_tokens_not_substrings(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-word-boundary",
+        "task_id": "task-learning-test",
+        "lesson_type": "reviewed",
+        "summary": "cartography and artifacts",
+        "source": "human-reviewed",
+        "evidence_json": "{}",
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    assert LearningMemory.get_relevant_lessons("art", limit=5) == []
