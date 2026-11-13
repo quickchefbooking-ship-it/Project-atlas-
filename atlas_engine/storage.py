@@ -78,6 +78,24 @@ def init_db() -> None:
             ON task_recovery_decisions(task_id, created_at DESC)
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS task_cancellations (
+                cancellation_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                attempt_id TEXT NOT NULL UNIQUE,
+                actor TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('requested','acknowledged','too_late','requires_recovery')),
+                requested_at TEXT NOT NULL,
+                acknowledged_at TEXT,
+                FOREIGN KEY(task_id) REFERENCES tasks(id),
+                FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_cancellations_task_state
+            ON task_cancellations(task_id, state, requested_at DESC)
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS evaluations (
                 id TEXT PRIMARY KEY, task_id TEXT NOT NULL, passed INTEGER NOT NULL,
                 score REAL NOT NULL, reasons_json TEXT NOT NULL,
@@ -182,6 +200,13 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
             "SELECT attempts, status FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if task is None or task["status"] != "pending":
+            conn.rollback()
+            return None
+        cancelled = conn.execute(
+            "SELECT 1 FROM task_cancellations WHERE task_id = ? AND state = 'acknowledged' LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        if cancelled is not None:
             conn.rollback()
             return None
         active = conn.execute(
@@ -542,6 +567,13 @@ def complete_task_with_evaluation(
         conn.execute("BEGIN IMMEDIATE")
         if attempt is not None:
             lease_now = now_isoformat()
+            cancellation = conn.execute(
+                "SELECT state FROM task_cancellations WHERE task_id = ? AND attempt_id = ?",
+                (task_id, attempt["attempt_id"]),
+            ).fetchone()
+            if cancellation is not None and cancellation["state"] == "requested":
+                conn.rollback()
+                return False
             attempt_state = "completed" if status == "passed" else "failed"
             lease_cursor = conn.execute(
                 """
@@ -587,6 +619,160 @@ def complete_task_with_evaluation(
                 record["missing_requirements_json"], record["method"], record["created_at"],
             ),
         )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def request_task_cancellation(
+    task_id: str, attempt_id: str, actor: str, reason: str,
+) -> Optional[Dict[str, Any]]:
+    """Persist an idempotent cancellation request for the currently leased attempt."""
+    if not isinstance(actor, str) or not actor.strip() or len(actor.strip()) > 128:
+        raise ValueError("Cancellation actor must contain 1 to 128 characters.")
+    if not isinstance(reason, str) or not reason.strip() or len(reason.strip()) > 500:
+        raise ValueError("Cancellation reason must contain 1 to 500 characters.")
+    now = now_isoformat()
+    cancellation_id = f"cancel-{os.urandom(12).hex()}"
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT * FROM task_cancellations WHERE task_id = ? AND attempt_id = ?",
+            (task_id, attempt_id),
+        ).fetchone()
+        if existing is not None:
+            conn.commit()
+            return dict(existing)
+        active = conn.execute(
+            """
+            SELECT 1 FROM task_attempts
+            WHERE task_id = ? AND attempt_id = ? AND state = 'active'
+              AND lease_expires_at > ?
+            """,
+            (task_id, attempt_id, now),
+        ).fetchone()
+        task = conn.execute(
+            "SELECT status FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if active is None or task is None or task["status"] != "running":
+            conn.rollback()
+            return None
+        conn.execute(
+            """
+            INSERT INTO task_cancellations (
+                cancellation_id, task_id, attempt_id, actor, reason,
+                state, requested_at
+            ) VALUES (?, ?, ?, ?, ?, 'requested', ?)
+            """,
+            (cancellation_id, task_id, attempt_id, actor.strip(), reason.strip(), now),
+        )
+        row = conn.execute(
+            "SELECT * FROM task_cancellations WHERE cancellation_id = ?",
+            (cancellation_id,),
+        ).fetchone()
+        conn.commit()
+        return dict(row)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_task_cancellation(
+    task_id: str, attempt_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        if attempt_id is None:
+            row = conn.execute(
+                "SELECT * FROM task_cancellations WHERE task_id = ? ORDER BY requested_at DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM task_cancellations WHERE task_id = ? AND attempt_id = ?",
+                (task_id, attempt_id),
+            ).fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        conn.close()
+
+
+def acknowledge_task_cancellation(
+    task_id: str, attempt: Dict[str, Any], record: Dict[str, Any],
+) -> bool:
+    """Atomically acknowledge cancellation and persist task/evaluation/attempt outcome."""
+    if record.get("task_id") != task_id or record.get("method") != "cancelled":
+        raise ValueError("Cancellation evaluation record is invalid.")
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        now = now_isoformat()
+        cancellation = conn.execute(
+            """
+            SELECT * FROM task_cancellations
+            WHERE task_id = ? AND attempt_id = ? AND state = 'requested'
+            """,
+            (task_id, attempt["attempt_id"]),
+        ).fetchone()
+        if cancellation is None:
+            conn.rollback()
+            return False
+        lease_cursor = conn.execute(
+            """
+            UPDATE task_attempts
+            SET state = 'failed', finished_at = ?, error_type = 'TaskCancelled'
+            WHERE task_id = ? AND attempt_id = ? AND worker_id = ?
+              AND fencing_token = ? AND state = 'active' AND lease_expires_at > ?
+            """,
+            (now, task_id, attempt["attempt_id"], attempt["worker_id"],
+             attempt["fencing_token"], now),
+        )
+        if lease_cursor.rowcount != 1:
+            conn.rollback()
+            return False
+        task_cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'failed', score = 0.0, result_json = ?, updated_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (json.dumps({"error_type": "TaskCancelled"}, sort_keys=True), now, task_id),
+        )
+        if task_cursor.rowcount != 1:
+            conn.rollback()
+            return False
+        conn.execute(
+            """
+            INSERT INTO evaluations (
+                id, task_id, passed, score, reasons_json,
+                missing_requirements_json, method, created_at
+            ) VALUES (?, ?, 0, 0.0, ?, ?, 'cancelled', ?)
+            """,
+            (
+                record["id"], task_id,
+                json.dumps(["Cancellation request acknowledged at a cooperative safe point."]),
+                json.dumps(["Task execution was cancelled before its outcome was committed."]),
+                now,
+            ),
+        )
+        cancel_cursor = conn.execute(
+            """
+            UPDATE task_cancellations
+            SET state = 'acknowledged', acknowledged_at = ?
+            WHERE cancellation_id = ? AND state = 'requested'
+            """,
+            (now, cancellation["cancellation_id"]),
+        )
+        if cancel_cursor.rowcount != 1:
+            conn.rollback()
+            return False
         conn.commit()
         return True
     except Exception:
