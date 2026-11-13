@@ -402,6 +402,7 @@ def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
             "content": row["content"],
             "trust_level": row["trust_level"],
             "content_sha256": row["content_sha256"],
+            "metadata_json": row["metadata_json"],
             "score": round(score, 6),
             "matched_terms": sorted(matched),
             "snippet": _make_snippet(row["content"], matched),
