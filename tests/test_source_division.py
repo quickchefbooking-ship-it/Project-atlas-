@@ -61,6 +61,24 @@ def test_source_registration_and_ingestion_validate_inputs(monkeypatch, tmp_path
         ingest_document("docs", "Title", "https://example.org", "x" * 1_000_001)
 
 
+def test_direct_ingestion_rejects_unsafe_or_credential_bearing_source_uris(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("research", "Research Library", "academic_index")
+
+    unsafe_uris = [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "https://user:password@example.org/private",
+        "https://example.org",
+        "relative/path",
+    ]
+    for uri in unsafe_uris:
+        with pytest.raises(ValueError):
+            ingest_document("research", "Unsafe source", uri, "Do not store this.")
+
+    assert storage.list_source_documents(limit=100) == []
+
+
 def test_source_catalog_is_persistent_and_does_not_expose_credentials(monkeypatch, tmp_path):
     _isolated_db(monkeypatch, tmp_path)
     register_source(
