@@ -84,7 +84,7 @@ Prefer additive SQLite migrations, preserving all Phase 1 tables and APIs:
 
 - extend attempt records with immutable policy/capability version, classified error code, scheduled retry time, start/deadline/finish times and cancellation observation;
 - add a task cancellation request/audit table with unique request identity and state transitions;
-- add a retry decision/schedule audit record, linked to the originating attempt and the next attempt;
+- add a durable retry schedule containing the originating attempt, next attempt number, due/deadline timestamps, capability name/version, idempotency key and immutable policy snapshot;
 - add indexes for due scheduled work and unresolved cancellation requests.
 
 Every transition must be conditional on the current state and fencing token. Migration must be idempotent and restart-safe. Do not delete historical attempt or decision records.
@@ -106,12 +106,12 @@ Every transition must be conditional on the current state and fencing token. Mig
 | Classification | Retryable only for explicitly declared exception types; validation, auth, permission, policy, unknown and persistence errors never retry |
 | Default compatibility | Existing local executor and legacy tasks execute at most once |
 | Attempt ceiling | No more than configured attempts, including under concurrent claims and repeated scheduler scans |
-| Back-off | Formula, cap, jitter bounds and persisted due time are deterministic under injected clock/random sources |
+| Back-off | Formula, cap, jitter bounds, immutable policy snapshot and persisted due time/deadline are validated; claims cannot start early or after expiry |
 | Deadline/timeout | No attempt begins after total deadline; timeout is recorded without leaking exception details |
 | Idempotency | Missing/invalid capability declaration blocks retry; duplicate idempotency key cannot cause a second side effect in the fake provider |
 | Recovery | Expired lease remains held; no retry until prior outcome is reconciled; stale fencing token cannot schedule or complete |
 | Cancellation | Request persists across restart; worker acknowledges at a safe point; claim/cancel race has one deterministic winner |
-| Cancellation safety | Cancelled task is not re-claimed; too-late and requires-recovery states are distinguishable |
+| Cancellation safety | Cancelled task or scheduled retry is not re-claimed; too-late and requires-recovery states are distinguishable |
 | Audit/atomicity | Retry/cancel decisions survive restart; failed transaction leaves no partial terminal state or audit record |
 | API security | New routes require existing API-key dependency; no sensitive exception text or secrets in responses/logs |
 | Regression | All Phase 1 tests remain green; no change to main, production, paid providers or external write integrations |
@@ -126,6 +126,14 @@ The initial policy-only foundation is implemented in `atlas_engine/retry_policy.
 - `evaluate_retry` requires a positive integer attempt number and fails closed for unknown errors, invalid capability objects, cancellation, lease uncertainty and persistence failure.
 - The evaluator computes a bounded delay only; it does not sleep, schedule, claim or execute another attempt.
 
+Retry scheduling now has durable, fenced storage primitives, but is not enabled for the existing executor:
+
+- SQLite stores a retry schedule only when a trusted internal caller supplies a capability contract with explicit idempotency, declared side effects, verified duplicate suppression and an allowlisted transient error code.
+- Scheduling atomically finalises the failed attempt, persists its evaluation, returns the task to pending and stores a policy snapshot, idempotency key, next-attempt number, due time and hard deadline.
+- Claims are blocked before due time, after the deadline, after schedule cancellation/expiry, or when the next attempt number does not match. A due claim atomically consumes the schedule and links it to the new fenced attempt.
+- Expired schedules become `expired`; they are not silently requeued. A cancellation request against a pending scheduled retry cancels the schedule so it cannot be claimed.
+- No public endpoint or current executor invokes retry scheduling. There is no unattended scheduler or registered capability registry, so default behaviour remains one attempt.
+
 Cancellation is now a durable, cooperative runtime path for the current synchronous local executor:
 
 - SQLite stores one idempotent cancellation request per task attempt, with `requested`, `acknowledged`, `too_late` and `requires_recovery` states.
@@ -135,7 +143,7 @@ Cancellation is now a durable, cooperative runtime path for the current synchron
 - Expired worker leases move pending cancellation requests to `requires_recovery`; a late request against a completed/terminal attempt is recorded as `too_late`.
 - The API reports `cancelled`; the current task schema records its terminal task status as `failed` with `TaskCancelled`, and the evaluation method as `cancelled`. This preserves the existing task status constraint without a destructive schema migration.
 
-This is not yet a runtime retry system. There is no durable retry schedule, registered capability registry, due-work scheduler or per-attempt hard timeout. The default retry policy remains one attempt, and the local executor is not opted in. The current cancellation checkpoints are appropriate only for the bounded synchronous local executor; future long-running or external capabilities need their own safe-point contract.
+This is not yet an unattended runtime retry system. Durable schedule persistence and due-time claim gates exist, but there is no registered capability registry, scheduler that discovers and dispatches due work, or per-attempt hard timeout. The default retry policy remains one attempt, and the local executor is not opted in. The current cancellation checkpoints are appropriate only for the bounded synchronous local executor; future long-running or external capabilities need their own safe-point and side-effect reconciliation contracts.
 
 ## Exit gate
 
