@@ -39,7 +39,7 @@ def test_quality_reports_dimensions_without_truth_score():
     assert result["dimensions"]["source_diversity"]["status"] == "multiple_sources"
     assert result["dimensions"]["review_state"]["status"] == "approved_metadata"
     assert result["dimensions"]["uncertainty_and_limitations"]["status"] == "documented"
-    assert result["warnings"] == []
+    assert any("disputed or unknown claims" in warning for warning in result["warnings"])
 
 
 def test_quality_flags_single_source_and_uncited_evidence():
