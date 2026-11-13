@@ -13,7 +13,7 @@ source:
   url: "https://www.nhs.uk/nhs-services/mental-health-services/"
   retrieved: "2026-11-13"
   source_type: "official-public-information"
-review_status: "curated-reference"
+review_status: "pending-clinical-review"
 ---
 
 # UK adult mental-health information and support pathways
