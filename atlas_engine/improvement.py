@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -8,7 +9,7 @@ from .storage import get_proposal, list_proposals, save_proposal, update_proposa
 class ImprovementManager:
     @staticmethod
     def create_proposal(task_id: str, problem: str, evidence: Dict[str, Any], proposed_change: str, expected_benefit: str, test_plan: str, created_by: str = "human") -> Dict[str, Any]:
-        proposal_id = f"proposal-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        proposal_id = f"proposal-{uuid.uuid4().hex}"
         proposal = {
             "id": proposal_id,
             "task_id": task_id,
@@ -27,17 +28,28 @@ class ImprovementManager:
 
     @staticmethod
     def review_proposal(proposal_id: str, action: str, approved_by: str) -> Dict[str, Any]:
-        if not approved_by or approved_by.lower() in {"system", "ai", "auto", ""}:
-            raise PermissionError("Only a human approver may approve or reject a proposal.")
-        if action not in {"approve", "reject", "test"}:
-            raise ValueError("Action must be approve, reject or test")
+        approver = approved_by.strip() if isinstance(approved_by, str) else ""
+        if not approver or approver.lower() in {"system", "ai", "auto"}:
+            raise PermissionError(
+                "An explicit approver label is required. The label is audit metadata, not verified identity."
+            )
 
-        status = "approved" if action == "approve" else "rejected" if action == "reject" else "tested"
-        update_proposal_status(proposal_id, status, approved_by)
+        if action == "test":
+            raise NotImplementedError(
+                "Proposal testing is not implemented. A proposal cannot be marked tested without verified test evidence."
+            )
+        if action not in {"approve", "reject"}:
+            raise ValueError("Action must be approve or reject")
+
         proposal = get_proposal(proposal_id)
         if proposal is None:
             raise ValueError(f"Proposal {proposal_id} not found")
-        return proposal
+        if proposal.get("status") != "pending":
+            raise ValueError("Only pending proposals can be reviewed")
+
+        status = "approved" if action == "approve" else "rejected"
+        update_proposal_status(proposal_id, status, approver)
+        return get_proposal(proposal_id)
 
     @staticmethod
     def check_production_gate(proposal_id: str) -> Dict[str, Any]:
@@ -46,7 +58,10 @@ class ImprovementManager:
             raise ValueError(f"Proposal {proposal_id} not found")
         if proposal["status"] != "approved":
             return {"allowed": False, "reason": "Production changes require explicit human approval."}
-        return {"allowed": True, "reason": "Approved for production change review"}
+        return {
+            "allowed": True,
+            "reason": "Approved for controlled change review only; this does not authorize deployment.",
+        }
 
     @staticmethod
     def list_proposals(limit: int = 20) -> List[Dict[str, Any]]:
