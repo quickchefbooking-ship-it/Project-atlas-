@@ -82,3 +82,17 @@ def test_source_metadata_rejects_credential_like_fields(monkeypatch, tmp_path):
             "unsafe-metadata", "Unsafe metadata", "test",
             metadata={"nested": {"api_key": "must-not-be-stored"}},
         )
+
+def test_bundled_knowledge_is_copied_into_local_library_and_retrievable(monkeypatch, tmp_path):
+    from atlas_engine.source_division import load_bundled_knowledge
+
+    _isolated_db(monkeypatch, tmp_path)
+
+    assert load_bundled_knowledge() == 2
+    first = retrieve("prompt injection external content")
+    assert first
+    assert any("llm-security" in item["uri"] for item in first)
+
+    # Re-importing the same bundle must not create duplicate records.
+    assert load_bundled_knowledge() == 2
+    assert len(storage.list_source_documents(approved_only=True, limit=100)) == 2
