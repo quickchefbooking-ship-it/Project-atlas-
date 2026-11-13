@@ -6,16 +6,63 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .retry_policy import RetryPolicy
 
 logger = logging.getLogger(__name__)
 
+MAX_TASK_TITLE_CHARS = 200
+MAX_TASK_DESCRIPTION_CHARS = 10_000
+MAX_TASK_CRITERIA_ITEMS = 100
+MAX_TASK_CRITERIA_BYTES = 16_384
+
+
+def _validate_task_text(value: str, field_name: str, max_chars: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Task {field_name} must not be blank.")
+    if len(value) > max_chars:
+        raise ValueError(f"Task {field_name} must not exceed {max_chars} characters.")
+    return value
+
+
+def _serialize_task_criteria(value: Any) -> str:
+    if not isinstance(value, (list, dict)):
+        raise ValueError("Task success criteria must be a JSON object or array.")
+    if isinstance(value, list) and len(value) > MAX_TASK_CRITERIA_ITEMS:
+        raise ValueError(f"Task success criteria must not contain more than {MAX_TASK_CRITERIA_ITEMS} items.")
+    nested_criteria = value.get("criteria") if isinstance(value, dict) else None
+    if isinstance(nested_criteria, list) and len(nested_criteria) > MAX_TASK_CRITERIA_ITEMS:
+        raise ValueError(f"Task success criteria must not contain more than {MAX_TASK_CRITERIA_ITEMS} items.")
+    try:
+        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise ValueError("Task success criteria must be finite, valid JSON within the supported structure.") from exc
+    if len(encoded.encode("utf-8")) > MAX_TASK_CRITERIA_BYTES:
+        raise ValueError(f"Task success criteria must not exceed {MAX_TASK_CRITERIA_BYTES} UTF-8 bytes.")
+    return encoded
+
+
 class TaskInput(BaseModel):
-    title: str
-    description: str
+    title: str = Field(min_length=1, max_length=MAX_TASK_TITLE_CHARS)
+    description: str = Field(min_length=1, max_length=MAX_TASK_DESCRIPTION_CHARS)
     success_criteria: list[dict[str, Any]] | list[str] | dict[str, Any] = Field(default_factory=list)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        return _validate_task_text(value, "title", MAX_TASK_TITLE_CHARS)
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: str) -> str:
+        return _validate_task_text(value, "description", MAX_TASK_DESCRIPTION_CHARS)
+
+    @field_validator("success_criteria")
+    @classmethod
+    def validate_success_criteria(cls, value: Any) -> Any:
+        _serialize_task_criteria(value)
+        return value
 
 class ProposalReviewInput(BaseModel):
     action: str
@@ -38,14 +85,15 @@ class TaskManager:
         self.storage_backend = storage_backend
 
     def create_task(self, title: str, description: str, success_criteria: Any) -> Task:
-        if not title.strip() or not description.strip():
-            raise ValueError("Task title and description are required.")
-        now = self.storage_backend.now_isoformat()
+        title = _validate_task_text(title, "title", MAX_TASK_TITLE_CHARS)
+        description = _validate_task_text(description, "description", MAX_TASK_DESCRIPTION_CHARS)
         criteria = success_criteria if success_criteria is not None else []
+        criteria_json = _serialize_task_criteria(criteria)
+        now = self.storage_backend.now_isoformat()
         task_id = f"task-{os.urandom(12).hex()}"
         row = {
             "id": task_id, "title": title, "description": description,
-            "success_criteria_json": json.dumps(criteria), "status": "pending",
+            "success_criteria_json": criteria_json, "status": "pending",
             "attempts": 0, "score": 0.0, "result_json": None,
             "created_at": now, "updated_at": now,
         }
