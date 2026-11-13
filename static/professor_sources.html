@@ -173,11 +173,27 @@ a{color:#9dc9f8;overflow-wrap:anywhere}.warning{border-left:3px solid #d6a85b;pa
     data.forEach(hit => {
       const item = document.createElement("div"); item.className = "item";
       addText(item, "strong", hit.title);
-      addText(item, "div", hit.source_id + " · " + hit.trust_level + " · relevance " + hit.score, "meta");
+      addText(item, "div", hit.source_id + " · " + hit.trust_level + " · lexical relevance " + hit.score, "meta");
       const link = document.createElement("a"); link.href = hit.uri; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = hit.uri;
       item.appendChild(link);
-      addText(item, "p", hit.content);
+      if (Array.isArray(hit.matched_terms) && hit.matched_terms.length) {
+        addText(item, "div", "Matched terms: " + hit.matched_terms.join(", "), "meta");
+      }
+      if (hit.snippet) addText(item, "p", hit.snippet);
+      const details = document.createElement("details");
+      const summary = document.createElement("summary"); summary.textContent = "View stored source text"; details.appendChild(summary);
+      addText(details, "p", hit.content);
+      item.appendChild(details);
       addText(item, "div", "SHA-256: " + hit.content_sha256, "meta");
+      const citation = hit.citation || {document_id:hit.id, source_id:hit.source_id, title:hit.title, url:hit.uri, content_sha256:hit.content_sha256, trust_level:hit.trust_level};
+      const copy = document.createElement("button"); copy.type = "button"; copy.className = "secondary"; copy.textContent = "Copy source citation";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(citation, null, 2));
+          copy.textContent = "Citation copied";
+        } catch (_) { copy.textContent = "Copy unavailable — select source details"; }
+      });
+      item.appendChild(copy);
       target.appendChild(item);
     });
     if (!data.length) showEmpty(target, "No approved knowledge matched that search.");
