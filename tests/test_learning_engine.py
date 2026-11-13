@@ -174,3 +174,25 @@ def test_storage_enforces_foreign_key_relationships(tmp_path, monkeypatch):
         pass
     else:
         raise AssertionError("An evaluation must not reference a task that does not exist")
+
+
+def test_learning_memory_generates_unique_ids_for_rapid_lessons(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.learning_memory import LearningMemory
+    from atlas_engine.task_manager import TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "lesson-ids.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Memory identity", "Check unique lesson identifiers", [])
+
+    first = LearningMemory.save_lesson_for_task(
+        task.id, "observation", "First observation", "test", {"step": 1}
+    )
+    second = LearningMemory.save_lesson_for_task(
+        task.id, "observation", "Second observation", "test", {"step": 2}
+    )
+
+    assert first["id"] != second["id"]
+    saved = storage.list_lessons(limit=10)
+    assert {row["id"] for row in saved} >= {first["id"], second["id"]}
