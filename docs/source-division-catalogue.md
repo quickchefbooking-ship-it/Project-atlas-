@@ -12,6 +12,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 | Scholarly research | Consensus, SciSpace, Firecrawl research index | Papers, abstracts, citations and open-access full text | Read-only |
 | Developer knowledge | GitHub public repository metadata | Repository identity, description, language, topics, license and activity metadata | Read-only public API |
 | Models and datasets | Hugging Face public model and dataset metadata | Resource identity, tags, pipeline/library metadata, license and usage signals | Read-only public API |
+| Legal research | National Archives legislation.gov.uk API | Official UK legislation search, XML text, canonical citations and update metadata | Read-only public API |
 | Internal files | ChatGPT Files / Library and explicitly selected project documents | User-approved documents, plans and internal reference material | Read-only; explicit selection |
 | Email and communications | Gmail and other separately authorised messaging integrations | Search and summarise approved messages; draft responses | Read-only / draft-only |
 | Commerce and operations | Shopify and marketplace integrations | Product, order and operational reference data | Read-only |
