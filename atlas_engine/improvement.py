@@ -48,8 +48,12 @@ class ImprovementManager:
             raise ValueError("Only pending proposals can be reviewed")
 
         status = "approved" if action == "approve" else "rejected"
-        update_proposal_status(proposal_id, status, approver)
-        return get_proposal(proposal_id)
+        if not update_proposal_status(proposal_id, status, approver):
+            raise ValueError("Proposal was reviewed concurrently or is no longer pending")
+        reviewed = get_proposal(proposal_id)
+        if reviewed is None:
+            raise ValueError(f"Proposal {proposal_id} not found after review")
+        return reviewed
 
     @staticmethod
     def check_production_gate(proposal_id: str) -> Dict[str, Any]:
