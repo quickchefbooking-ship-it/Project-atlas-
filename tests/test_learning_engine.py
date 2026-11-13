@@ -24,6 +24,26 @@ def test_executor_rejects_unsupported_code():
     raise AssertionError("Unsupported expressions must be rejected")
 
 
+
+@pytest.mark.parametrize("expression", [
+    "1000000000000001",
+    "1e309",
+    "(-1) ** 0.5",
+])
+def test_executor_rejects_out_of_range_non_finite_and_complex_results(expression):
+    import pytest
+
+    with pytest.raises(ValueError):
+        safe_execute_local({"description": expression})
+
+
+def test_executor_rejects_oversized_arithmetic_expression():
+    import pytest
+
+    with pytest.raises(ValueError, match="maximum permitted length"):
+        safe_execute_local({"description": "1" + " " * 256 + "+ 1"})
+
+
 def test_evaluator_passes_matching_criteria():
     result = Evaluator.evaluate(
         {"value": 22},
