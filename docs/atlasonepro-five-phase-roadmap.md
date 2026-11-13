@@ -108,12 +108,12 @@ Acceptance gates:
 
 ## Immediate next actions
 
-1. Finish Phase 1 review: inspect the current PR diff, verify the task recovery state machine and check that all API routes are authenticated.
-2. Phase 2 design and acceptance-test matrix committed at `docs/phase-2-retry-cancellation-design.md`.
-3. Implement Phase 2 in small additive steps, beginning with typed error classes and a pure fail-closed retry-policy evaluator.
-4. Add durable retry/cancellation state only after the policy contract has tests; keep automatic retry disabled by default.
-5. Run the full CI suite after each meaningful change and record the exact commit and workflow run.
-6. Do not start Phase 3 implementation until Phase 2 acceptance gates pass.
+1. Continue the Phase 1 review against the complete PR diff, especially the recovery state machine, authentication dependencies and atomic task/evaluation persistence. Record unresolved findings before changing those paths.
+2. Phase 2 design and acceptance-test matrix are committed at `docs/phase-2-retry-cancellation-design.md`.
+3. The policy-only foundation is implemented in `atlas_engine/retry_policy.py`: bounded immutable settings, typed errors, a frozen capability error-code allowlist and a pure fail-closed eligibility evaluator. Regression tests live in `tests/test_retry_policy.py`.
+4. Next add additive, restart-safe cancellation-request storage and fenced state transitions. Test cancellation-versus-claim races before adding worker checkpoints.
+5. Only after durable cancellation and retry-decision records are tested, consider a due-work scheduler. Automatic retries remain disabled; the local executor is not opted into retries.
+6. Run both PR and push CI after each meaningful change and record exact branch-head evidence. Do not start Phase 3 implementation until every Phase 2 acceptance gate passes.
 
 ## Current project references
 
