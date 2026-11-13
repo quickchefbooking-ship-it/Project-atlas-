@@ -20,7 +20,7 @@ from atlas_engine import storage
 from atlas_media.generate import generate_image_from_prompt, generate_video_from_prompt
 from atlas_engine.source_division import load_bundled_knowledge, list_sources, retrieve, register_source
 from atlas_engine.source_adapters import import_json_batch, stage_adapter_results, MAX_BATCH_JSON_CHARS
-from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, PublicSourceError
+from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, search_crossref_works, PublicSourceError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,8 @@ async def lifespan(app: FastAPI):
         register_source("huggingface-public", "Hugging Face Public Resources", "huggingface_public_api", access_mode="read_only", metadata={"endpoint": "huggingface.co/api", "scope": "public model and dataset metadata only"})
     if storage.get_source("uk-legislation") is None:
         register_source("uk-legislation", "UK Legislation — The National Archives", "legislation_gov_uk_api", access_mode="read_only", metadata={"endpoint": "www.legislation.gov.uk", "scope": "official public legislation search and XML text"})
+    if storage.get_source("crossref-public") is None:
+        register_source("crossref-public", "Crossref Scholarly Metadata", "crossref_public_api", access_mode="read_only", metadata={"endpoint": "api.crossref.org", "scope": "public bibliographic metadata and abstracts when supplied"})
     logger.info("Imported %s new curated knowledge documents", imported)
     yield
 
@@ -73,9 +75,9 @@ class SourceImportRequest(BaseModel):
 
 
 class PublicSourceFetchRequest(BaseModel):
-    provider: str = Field(pattern="^(github|huggingface|legislation)$")
+    provider: str = Field(pattern="^(github|huggingface|legislation|crossref)$")
     identifier: str = Field(min_length=1, max_length=201)
-    resource_type: str = Field(default="repository", pattern="^(repository|model|dataset|ukpga|uksi|asp|anaw|nia|nisr|ukla)$")
+    resource_type: str = Field(default="repository", pattern="^(repository|model|dataset|ukpga|uksi|asp|anaw|nia|nisr|ukla|scholarly_work)$")
 
 
 class GenerateImageRequest(BaseModel):
@@ -199,12 +201,19 @@ def fetch_public_source(payload: PublicSourceFetchRequest):
                 "huggingface-public",
                 fetch_huggingface_resource(payload.identifier, payload.resource_type),
             )
-        else:
+        elif payload.provider == "legislation":
             if payload.resource_type not in {"ukpga", "uksi", "asp", "anaw", "nia", "nisr", "ukla"}:
                 raise HTTPException(status_code=422, detail="Choose a supported UK legislation type")
             adapter = _SingleDocumentAdapter(
                 "uk-legislation",
                 search_uk_legislation(payload.identifier, payload.resource_type, limit=5),
+            )
+        else:
+            if payload.resource_type != "scholarly_work":
+                raise HTTPException(status_code=422, detail="Crossref supports scholarly_work searches")
+            adapter = _SingleDocumentAdapter(
+                "crossref-public",
+                search_crossref_works(payload.identifier, limit=5),
             )
         staged = stage_adapter_results(adapter, payload.identifier, limit=5)
         if not staged:
