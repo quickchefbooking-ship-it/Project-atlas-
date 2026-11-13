@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import uuid4
 
-from .storage import list_lessons, save_lesson
+from .storage import save_lesson, search_validated_lessons
 
 
 class LearningMemory:
@@ -57,19 +57,10 @@ class LearningMemory:
             return []
         if not isinstance(limit, int) or limit < 1 or limit > 50:
             raise ValueError("Lesson retrieval limit must be between 1 and 50.")
-        incoming_keywords = LearningMemory._keywords(task_description)
-        lesson_rows = list_lessons(limit=100, validated_only=True)
-        scored: list[tuple[float, Dict[str, Any]]] = []
-        for row in lesson_rows:
-            if row.get("validated") not in (1, True):
-                continue
-            lesson_text = f"{row.get('summary', '')} {row.get('source', '')}"
-            lesson_keywords = LearningMemory._keywords(lesson_text)
-            overlap = len(incoming_keywords & lesson_keywords)
-            if overlap:
-                scored.append((float(overlap), row))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [row for _, row in scored[:limit]]
+        incoming_keywords = sorted(LearningMemory._keywords(task_description))[:64]
+        # Rank across the full validated corpus rather than only the 100 newest
+        # records, so older useful lessons remain discoverable as memory grows.
+        return search_validated_lessons(incoming_keywords, limit=limit)
 
     @staticmethod
     def get_recent_task_history(limit: int = 20) -> List[Dict[str, Any]]:
