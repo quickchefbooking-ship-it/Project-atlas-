@@ -87,6 +87,8 @@ def test_report_cannot_forge_evidence_metadata(monkeypatch, tmp_path, field, val
     run = _run(orchestrator)
     data = _report().model_dump()
     data["evidence"][0][field] = value
+    if field == "review_state":
+        data["claims"][0]["status"] = "provisional"
     with pytest.raises(ValueError, match="does not match the run ledger"):
         save_research_report(run["run_id"], ResearchReport.model_validate(data))
 
