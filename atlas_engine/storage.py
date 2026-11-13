@@ -1497,7 +1497,7 @@ def review_source_document(document_id: str, decision: str, reviewer: str, updat
 
 def get_learning_overview(recent_limit: int = 10) -> Dict[str, Any]:
     """Return bounded, read-only learning observability derived from persisted records."""
-    if not isinstance(recent_limit, int) or recent_limit < 1 or recent_limit > 50:
+    if isinstance(recent_limit, bool) or not isinstance(recent_limit, int) or recent_limit < 1 or recent_limit > 50:
         raise ValueError("Recent limit must be between 1 and 50.")
     conn = get_connection()
     try:
