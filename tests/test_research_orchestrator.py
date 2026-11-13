@@ -143,3 +143,19 @@ def test_orchestrator_rejects_mutable_scopes_and_unvalidated_plan(monkeypatch, t
         orchestrator.run(_plan(), granted_scopes={"knowledge.approved.read"})
     with pytest.raises(TypeError, match="validated ResearchPlan"):
         orchestrator.run(_plan().model_dump(), granted_scopes=frozenset({"knowledge.approved.read"}))
+
+
+def test_orchestrator_preflights_scopes_before_persisting_a_run(monkeypatch, tmp_path):
+    _setup_db(monkeypatch, tmp_path)
+    executor = FakeExecutor()
+    orchestrator = ProfessorResearchOrchestrator(executor)
+
+    with pytest.raises(PermissionError, match="required research capability scope"):
+        orchestrator.run(_plan(), granted_scopes=frozenset())
+
+    assert executor.calls == []
+    conn = storage.get_connection()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM professor_research_runs").fetchone()[0] == 0
+    finally:
+        conn.close()
