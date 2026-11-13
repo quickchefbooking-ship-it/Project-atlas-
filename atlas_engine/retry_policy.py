@@ -7,6 +7,7 @@ registered with a verified idempotency contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import FrozenSet
 
 
@@ -33,6 +34,12 @@ class RetryPolicy:
     max_delay_seconds: float = 15.0
 
     def __post_init__(self) -> None:
+        for name, value in (("max_attempts", self.max_attempts), ("per_attempt_timeout_seconds", self.per_attempt_timeout_seconds), ("total_deadline_seconds", self.total_deadline_seconds)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+        for name, value in (("base_delay_seconds", self.base_delay_seconds), ("max_delay_seconds", self.max_delay_seconds)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite number")
         if not 1 <= self.max_attempts <= 3:
             raise ValueError("max_attempts must be between 1 and 3")
         if not 1 <= self.per_attempt_timeout_seconds <= 30:
@@ -57,6 +64,16 @@ class CapabilityRetryContract:
     side_effects_declared: bool = False
     duplicate_suppression_verified: bool = False
     retryable_error_codes: FrozenSet[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.capability_name, str) or not self.capability_name.strip():
+            raise ValueError("capability_name is required")
+        if not isinstance(self.version, str) or not self.version.strip():
+            raise ValueError("capability version is required")
+        if not isinstance(self.retryable_error_codes, (set, frozenset)) or any(
+            not isinstance(code, str) or not code.strip() for code in self.retryable_error_codes
+        ):
+            raise ValueError("retryable error codes must be non-empty strings")
 
     @property
     def retry_is_safe(self) -> bool:
@@ -96,9 +113,9 @@ def evaluate_retry(
     """
     if attempt_number < 1:
         raise ValueError("attempt_number must be at least 1")
-    if elapsed_seconds < 0:
-        raise ValueError("elapsed_seconds cannot be negative")
-    if not 0 <= jitter_fraction <= 1:
+    if isinstance(elapsed_seconds, bool) or not isinstance(elapsed_seconds, (int, float)) or not math.isfinite(elapsed_seconds) or elapsed_seconds < 0:
+        raise ValueError("elapsed_seconds must be a finite non-negative number")
+    if isinstance(jitter_fraction, bool) or not isinstance(jitter_fraction, (int, float)) or not math.isfinite(jitter_fraction) or not 0 <= jitter_fraction <= 1:
         raise ValueError("jitter_fraction must be between 0 and 1")
 
     if persistence_failed:
