@@ -8,6 +8,7 @@ This folder is the initial wellbeing collection inside the existing Professor Le
 - `uk-adult-support-pathways.md` — limited curated public-information note for England adult signposting. Recheck before release.
 - `../../docs/wellbeing-division-clinical-safety-spec-v0.1.md` — clinical research, product safety and governance specification.
 - `../../docs/wellbeing-division-safety-benchmark-v0.1.md` — held-out evaluation specification.
+- `../../docs/wellbeing-division-conversational-voice-spec-v0.1.md` — natural conversation principles, selectable voice catalogue, accessibility, privacy and voice-specific safety gates. Design only; not implemented.
 
 ## Collection rules
 
