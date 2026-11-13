@@ -53,7 +53,7 @@ class ProposedCapabilityCall(BaseModel):
 
 
 class ProviderResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     provider_id: str = Field(min_length=1, max_length=64)
     model_id: str = Field(min_length=1, max_length=128)
