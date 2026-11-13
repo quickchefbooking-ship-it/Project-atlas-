@@ -348,3 +348,65 @@ def test_adapter_rejects_credentials_embedded_in_source_url(monkeypatch, tmp_pat
         stage_adapter_results(UnsafeAdapter(), "credentials", limit=1)
 
     assert storage.list_source_documents(limit=100) == []
+
+
+def test_retrieval_ranks_title_matches_and_returns_citable_provenance(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("general", "General Research", "research")
+    register_source("specialist", "Specialist Research", "research")
+
+    broad = ingest_document(
+        "general", "General engineering notes", "https://example.org/general",
+        "This note mentions vector databases once. It discusses general software architecture, "
+        "testing, reliability, deployment, monitoring, and operational design.",
+    )
+    focused = ingest_document(
+        "specialist", "Vector databases and retrieval systems",
+        "https://example.org/vector-databases",
+        "Vector databases support semantic retrieval and evidence-grounded search.",
+    )
+    review_document(broad["id"], "approved", "reviewer")
+    review_document(focused["id"], "approved", "reviewer")
+
+    results = retrieve("vector databases retrieval")
+
+    assert results[0]["id"] == focused["id"]
+    assert results[0]["matched_terms"] == ["databases", "retrieval", "vector"]
+    assert results[0]["citation"]["document_id"] == focused["id"]
+    assert results[0]["citation"]["url"] == "https://example.org/vector-databases"
+    assert results[0]["citation"]["content_sha256"] == focused["content_sha256"]
+    assert results[0]["snippet"]
+    assert isinstance(results[0]["score"], float)
+
+
+def test_retrieval_excludes_unapproved_records_and_ignores_common_stop_words(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("research", "Research", "research")
+    pending = ingest_document(
+        "research", "Private pending record", "https://example.org/pending",
+        "vector retrieval evidence",
+    )
+    approved = ingest_document(
+        "research", "Approved evidence", "https://example.org/approved",
+        "A reviewed note about vector retrieval evidence.",
+    )
+    review_document(approved["id"], "approved", "reviewer")
+
+    results = retrieve("what is the vector retrieval evidence")
+
+    assert len(results) == 1
+    assert results[0]["id"] == approved["id"]
+    assert "what" not in results[0]["matched_terms"]
+    assert pending["id"] != results[0]["id"]
+
+
+def test_retrieval_returns_empty_when_query_contains_only_stop_words(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    register_source("research", "Research", "research")
+    document = ingest_document(
+        "research", "Evidence note", "https://example.org/evidence",
+        "The evidence supports a careful review.",
+    )
+    review_document(document["id"], "approved", "reviewer")
+
+    assert retrieve("what is this and that") == []
