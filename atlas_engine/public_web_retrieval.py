@@ -34,12 +34,16 @@ def _validate_public_url(value: str) -> str:
     if not isinstance(value, str) or len(value) > 2048:
         raise PublicSourceError("Enter a public HTTPS page URL (maximum 2,048 characters).")
     parsed = urlparse(value.strip())
-    host = (parsed.hostname or "").lower().rstrip(".")
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise PublicSourceError("The URL contains an invalid port.") from exc
     if (
         parsed.scheme != "https" or host not in ALLOWED_WEB_HOSTS
         or parsed.username is not None or parsed.password is not None
-        or parsed.port not in (None, 443) or not parsed.path.startswith("/")
-        or parsed.fragment
+        or port not in (None, 443) or not parsed.path.startswith("/")
+        or parsed.fragment or (parsed.hostname or "").endswith(".")
     ):
         raise PublicSourceError("Web retrieval is limited to approved HTTPS hosts on port 443, without embedded credentials.")
     try:
