@@ -9,7 +9,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 | Resource family | Available resource/tool candidates | Intended use | Initial access |
 | --- | --- | --- | --- |
 | Public web and pages | Official public APIs and later bounded web extraction | Discover and extract public information with canonical URLs | Read-only |
-| Scholarly research | Consensus, SciSpace, Firecrawl research index | Papers, abstracts, citations and open-access full text | Read-only |
+| Scholarly research | Crossref public works API | Bibliographic metadata, DOI, publisher, authors, citation counts and abstracts when supplied | Read-only public API |
 | Developer knowledge | GitHub public repository metadata | Repository identity, description, language, topics, license and activity metadata | Read-only public API |
 | Models and datasets | Hugging Face public model and dataset metadata | Resource identity, tags, pipeline/library metadata, license and usage signals | Read-only public API |
 | Legal research | National Archives legislation.gov.uk API | Official UK legislation search, XML text, canonical citations and update metadata | Read-only public API |
@@ -25,7 +25,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 ## Integration order
 
 1. **Local foundation:** source registry, normalized document format, content hashes, approval queue and provenance-aware retrieval.
-2. **Public research:** bounded GitHub and Hugging Face metadata adapters and an official UK legislation search/text adapter are implemented; next add carefully scoped general public-web extraction and scholarly metadata.
+2. **Public research:** bounded GitHub and Hugging Face metadata adapters, official UK legislation search/text and Crossref scholarly metadata search are implemented; next add carefully scoped general public-web extraction.
 3. **Project knowledge:** selected GitHub repositories and explicitly selected project files.
 4. **Business systems:** narrowly scoped read-only adapters, one connector at a time.
 5. **Private communications:** only after identity, user consent, tenant isolation, retention and deletion controls are implemented.
@@ -42,7 +42,7 @@ No credential harvesting, unrestricted crawling, access-control bypass, private 
 
 The current repository implementation is a local ingestion and retrieval foundation, not a live connector suite. It validates absolute HTTP(S) and git+https source references at the ingestion boundary, rejects embedded URL credentials and malformed hosts or ports, hashes normalized content, and deduplicates records by source and content hash. New imports remain pending and unverified. A successful approval changes the document state to approved and its trust classification to reviewed; rejected material remains excluded from retrieval. These controls do not authenticate the reviewer: reviewer names are audit metadata until identity and role-based authorization are implemented.
 
-The bundled curated notes are imported idempotently at application startup. General public-web extraction, Lawve, scholarly research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. GitHub, Hugging Face and UK legislation have bounded public read-only adapters. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
+The bundled curated notes are imported idempotently at application startup. General public-web extraction, Lawve, scholarly research and business-system adapters still need to be implemented and tested inside the AtlasOnePro runtime. GitHub, Hugging Face, UK legislation and Crossref have bounded public read-only adapters. Do not label any of those services as connected merely because they are available in the ChatGPT workspace.
 
 ## Authenticated API surface
 
@@ -116,3 +116,10 @@ The first legal-research adapter uses the National Archives' public \`legislatio
 Supported type codes are \`ukpga\`, \`uksi\`, \`asp\`, \`anaw\`, \`nia\`, \`nisr\` and \`ukla\`. The official API supports Atom search feeds and XML representations of legislation; its public data is available for reuse under the Open Government Licence. The legislation dataset is not complete for every historical item, so absence from search is not proof that a law does not exist. Always verify current force, amendments, commencement, territorial extent and point-in-time version against the official legislation page before legal reliance.
 
 The browser fetch form offers UK legislation title search. Every returned document is staged as pending/unverified and carries its official URL, publisher, retrieval timestamp, format and content hash. The API route is \`POST /sources/fetch\` with \`provider: "legislation"\`, a supported \`resource_type\` type code and a title \`identifier\`.
+
+
+### Crossref scholarly metadata adapter
+
+The scholarly research adapter uses the fixed Crossref public works API. It accepts a bibliographic search query and stages up to five matching records. Records preserve the DOI resolver URL, title, authors, publisher, publication metadata, reference-count signal and any abstract Crossref supplies. Abstracts are not guaranteed to be present or complete. The adapter does not download publisher full text, bypass paywalls or infer that citation counts establish research quality.
+
+Requests are read-only HTTPS GETs, bounded by the shared eight-second timeout and 1 MB response limit. The \`crossref-public\` source is registered at startup. Use \`POST /sources/fetch\` with \`provider: "crossref"\`, \`resource_type: "scholarly_work"\` and a bibliographic search \`identifier\`. Results remain pending/unverified until reviewed.
