@@ -10,8 +10,8 @@ This is a discovery and integration backlog for the Professor's Source Division.
 | --- | --- | --- | --- |
 | Public web and pages | Firecrawl search, scrape, map and crawl; official websites | Discover and extract public information with canonical URLs | Read-only |
 | Scholarly research | Consensus, SciSpace, Firecrawl research index | Papers, abstracts, citations and open-access full text | Read-only |
-| Developer knowledge | GitHub repositories, issues, pull requests and official docs; Firecrawl developer search | Source code, architecture, release notes and technical guidance | Read-only |
-| Models and datasets | Hugging Face models, datasets, Spaces and documentation | Model cards, dataset descriptions, licenses and API docs | Read-only |
+| Developer knowledge | GitHub public repository metadata; later repository files/issues/official docs | Repository identity, description, language, topics, license and activity metadata | Read-only public API |
+| Models and datasets | Hugging Face public model and dataset metadata | Resource identity, tags, pipeline/library metadata, license and usage signals | Read-only public API |
 | Internal files | ChatGPT Files / Library and explicitly selected project documents | User-approved documents, plans and internal reference material | Read-only; explicit selection |
 | Email and communications | Gmail and other separately authorised messaging integrations | Search and summarise approved messages; draft responses | Read-only / draft-only |
 | Commerce and operations | Shopify and marketplace integrations | Product, order and operational reference data | Read-only |
@@ -24,7 +24,7 @@ This is a discovery and integration backlog for the Professor's Source Division.
 ## Integration order
 
 1. **Local foundation:** source registry, normalized document format, content hashes, approval queue and provenance-aware retrieval.
-2. **Public research:** web extraction, scholarly metadata and official technical documentation.
+2. **Public research:** bounded GitHub and Hugging Face metadata adapters are now implemented; next add official legal and public-web source adapters, then scholarly metadata and document extraction.
 3. **Project knowledge:** selected GitHub repositories and explicitly selected project files.
 4. **Business systems:** narrowly scoped read-only adapters, one connector at a time.
 5. **Private communications:** only after identity, user consent, tenant isolation, retention and deletion controls are implemented.
@@ -82,3 +82,27 @@ The source ID must already exist in the catalogue. The payload is capped by the 
 Open `/professor/sources` on the running service. The page provides the source catalogue, state-filtered document queue, JSON paste/import and approved-only search. It uses the authenticated API rather than direct database access. The API key is entered by the operator and held only in JavaScript memory for the current page session; it is not written to local or session storage. The static page itself contains no secret and the data endpoints remain protected by `X-API-Key`.
 
 At startup the service idempotently registers `manual-paste` as an approval-gated source if it does not already exist. This is a staging source, not an external connector. The browser UI intentionally has no approval control until reviewer identity and role-based authorization are implemented.
+
+
+## First live public metadata adapters
+
+Two read-only adapters are now implemented in \`atlas_engine/public_research_adapters.py\`:
+
+- **GitHub:** public repository metadata through the fixed \`api.github.com/repos/{owner}/{repo}\` endpoint.
+- **Hugging Face:** public model or dataset metadata through the fixed \`huggingface.co/api/models/{id}\` and \`/api/datasets/{id}\` endpoints.
+
+The authenticated \`POST /sources/fetch\` route accepts a provider, resource type and provider-native identifier. It does not accept a URL. The adapter constructs the provider endpoint itself, uses HTTPS GET only, applies an eight-second timeout and a 1 MB response cap, and records a retrieval timestamp. No tokens, private repositories, model weights, arbitrary hosts or write operations are used.
+
+Each fetched record is normalized, SHA-256 hashed and staged as \`pending\` / \`unverified\`. It is not searchable until a separate authorized review process approves it. The browser operator page exposes the same fetch operation. The source catalogue records these as public metadata adapters; it does not imply access to the ChatGPT workspace's connected GitHub or Hugging Face accounts.
+
+Request example:
+
+\`\`\`json
+{
+  "provider": "huggingface",
+  "resource_type": "dataset",
+  "identifier": "organisation/dataset-name"
+}
+\`\`\`
+
+For GitHub, use \`provider: "github"\`, \`resource_type: "repository"\` and an \`owner/repository\` identifier.
