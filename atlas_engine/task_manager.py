@@ -139,9 +139,10 @@ class TaskAPI:
             evaluation = self.evaluator.evaluate(result, task.success_criteria)
             status = "passed" if evaluation["passed"] else "failed"
 
-            # Persist every evaluation so the dashboard and learning loop can audit outcomes.
-            from .storage import save_evaluation
-            save_evaluation({
+            # Commit the terminal task state and its evaluation together. A partial
+            # write must never leave a terminal task without its audit record.
+            from .storage import complete_task_with_evaluation
+            evaluation_record = {
                 "id": f"evaluation-{os.urandom(12).hex()}",
                 "task_id": task_id,
                 "passed": evaluation["passed"],
@@ -150,12 +151,33 @@ class TaskAPI:
                 "missing_requirements_json": json.dumps(evaluation["missing_requirements"], sort_keys=True),
                 "method": evaluation["method"],
                 "created_at": datetime.now(timezone.utc).isoformat(),
-            })
+            }
+            if not complete_task_with_evaluation(task_id, evaluation_record, status, result):
+                current = self.manager.get_task(task_id)
+                return {
+                    "task_id": task_id,
+                    "status": current.status if current is not None else "unavailable",
+                    "error": "Task completion was not committed because the task is no longer running.",
+                }
 
-            self.manager.update_status(task_id, status, evaluation["score"], result)
             if not evaluation["passed"]:
-                self.memory.save_lesson_for_task(task_id, "failure", "Task failed its success criteria.",
-                                                  "deterministic-evaluation", {"evaluation": evaluation}, validated=False)
+                try:
+                    self.memory.save_lesson_for_task(
+                        task_id,
+                        "failure",
+                        "Task failed its success criteria.",
+                        "deterministic-evaluation",
+                        {"evaluation": evaluation},
+                        validated=False,
+                    )
+                except Exception as lesson_error:
+                    # Learning-record failure must not rewrite an already committed
+                    # task outcome or hide its persisted evaluation from the caller.
+                    logger.warning(
+                        "Failure lesson persistence unavailable for task_id=%s error_type=%s",
+                        task_id,
+                        type(lesson_error).__name__,
+                    )
             return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
         except Exception as exc:
             self.manager.update_status(task_id, "failed")
