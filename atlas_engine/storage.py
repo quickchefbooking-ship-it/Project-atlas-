@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 import os
 from datetime import datetime, timezone, timedelta
@@ -107,6 +108,7 @@ def init_db() -> None:
                 capability_version TEXT NOT NULL,
                 idempotency_key TEXT NOT NULL,
                 error_code TEXT NOT NULL,
+                capability_contract_json TEXT NOT NULL DEFAULT '{}',
                 policy_json TEXT NOT NULL,
                 state TEXT NOT NULL CHECK(state IN ('scheduled','claimed','cancelled','expired')),
                 created_at TEXT NOT NULL,
@@ -117,6 +119,13 @@ def init_db() -> None:
                 FOREIGN KEY(claimed_attempt_id) REFERENCES task_attempts(attempt_id)
             )
         """)
+        retry_schedule_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(task_retry_schedules)").fetchall()
+        }
+        if "capability_contract_json" not in retry_schedule_columns:
+            conn.execute(
+                "ALTER TABLE task_retry_schedules ADD COLUMN capability_contract_json TEXT NOT NULL DEFAULT '{}'"
+            )
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_task_retry_schedules_due
             ON task_retry_schedules(state, due_at, deadline_at)
@@ -743,17 +752,33 @@ def persist_task_retry_schedule(
         raise ValueError("Capability side effects must be declared.")
     if capability_contract.get("duplicate_suppression_verified") is not True:
         raise ValueError("Duplicate suppression must be verified.")
-    if not isinstance(allowed_codes, (list, tuple, set, frozenset)) or error_code not in allowed_codes:
-        raise ValueError("The transient error code is not allowlisted by the capability.")
     if not isinstance(error_code, str) or not error_code.strip():
         raise ValueError("A non-empty retryable error code is required.")
+    if not isinstance(allowed_codes, (list, tuple, set, frozenset)) or error_code not in allowed_codes:
+        raise ValueError("The transient error code is not allowlisted by the capability.")
+    verification_evidence = capability_contract.get("verification_evidence")
+    if not isinstance(verification_evidence, str) or not verification_evidence.strip() or len(verification_evidence) > 512:
+        raise ValueError("A verifiable capability test-evidence reference is required.")
     if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 256:
         raise ValueError("A stable idempotency key of at most 256 characters is required.")
     if not isinstance(policy_snapshot, dict):
         raise ValueError("An immutable retry policy snapshot is required.")
     max_attempts = policy_snapshot.get("max_attempts")
+    attempt_timeout = policy_snapshot.get("per_attempt_timeout_seconds")
+    total_deadline = policy_snapshot.get("total_deadline_seconds")
+    base_delay = policy_snapshot.get("base_delay_seconds")
+    max_delay = policy_snapshot.get("max_delay_seconds")
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or not 2 <= max_attempts <= 3:
         raise ValueError("Retry policy must permit between 2 and 3 total attempts.")
+    if isinstance(attempt_timeout, bool) or not isinstance(attempt_timeout, int) or not 1 <= attempt_timeout <= 30:
+        raise ValueError("Per-attempt timeout must be between 1 and 30 seconds.")
+    if isinstance(total_deadline, bool) or not isinstance(total_deadline, int) or not 1 <= total_deadline <= 90:
+        raise ValueError("Total retry deadline must be between 1 and 90 seconds.")
+    for field_name, value in (("base_delay_seconds", base_delay), ("max_delay_seconds", max_delay)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 < value <= 15:
+            raise ValueError(f"{field_name} must be finite, greater than 0 and at most 15 seconds.")
+    if base_delay > max_delay:
+        raise ValueError("Base retry delay cannot exceed maximum retry delay.")
     due_text = _normalise_utc_timestamp(due_at, "due_at")
     deadline_text = _normalise_utc_timestamp(deadline_at, "deadline_at")
     now = datetime.now(timezone.utc)
@@ -761,8 +786,8 @@ def persist_task_retry_schedule(
     deadline_dt = datetime.fromisoformat(deadline_text)
     if due_dt <= now or deadline_dt <= due_dt:
         raise ValueError("Retry due time must be in the future and before its deadline.")
-    if deadline_dt > now + timedelta(seconds=90):
-        raise ValueError("Retry deadline cannot exceed the 90-second task ceiling.")
+    if deadline_dt > now + timedelta(seconds=total_deadline):
+        raise ValueError("Retry deadline cannot exceed the policy's total task deadline.")
     if evaluation_record.get("task_id") != task_id or evaluation_record.get("passed") is not False:
         raise ValueError("Retry scheduling requires a failed evaluation for this task.")
     required_eval = {"id", "score", "reasons_json", "missing_requirements_json", "method"}
@@ -853,14 +878,15 @@ def persist_task_retry_schedule(
             INSERT INTO task_retry_schedules (
                 schedule_id, task_id, originating_attempt_id, next_attempt_number,
                 due_at, deadline_at, capability_name, capability_version,
-                idempotency_key, error_code, policy_json, state, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
+                idempotency_key, error_code, capability_contract_json, policy_json, state, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
             """,
             (
                 schedule_id, task_id, attempt["attempt_id"], next_attempt_number,
                 due_text, deadline_text, name.strip(), version.strip(),
-                idempotency_key.strip(), error_code, json.dumps(policy_snapshot, sort_keys=True),
-                now_text,
+                idempotency_key.strip(), error_code,
+                json.dumps(capability_contract, sort_keys=True),
+                json.dumps(policy_snapshot, sort_keys=True), now_text,
             ),
         )
         conn.commit()
