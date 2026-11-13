@@ -854,3 +854,42 @@ def test_claim_after_retry_deadline_terminalises_pending_task(tmp_path, monkeypa
     assert storage.list_task_retry_schedules(task.id)[0]["state"] == "expired"
     assert manager.get_task(task.id).status == "failed"
     assert storage.get_evaluations_for_task(task.id)[0]["method"] == "retry_expired"
+
+
+def test_retry_schedule_capability_evidence_column_migrates_additively(tmp_path, monkeypatch):
+    _manager(tmp_path, monkeypatch)
+    conn = storage.get_connection()
+    try:
+        conn.execute("DROP TABLE task_retry_schedules")
+        conn.execute("""
+            CREATE TABLE task_retry_schedules (
+                schedule_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                originating_attempt_id TEXT NOT NULL UNIQUE,
+                next_attempt_number INTEGER NOT NULL,
+                due_at TEXT NOT NULL,
+                deadline_at TEXT NOT NULL,
+                capability_name TEXT NOT NULL,
+                capability_version TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                error_code TEXT NOT NULL,
+                policy_json TEXT NOT NULL,
+                state TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                claimed_at TEXT,
+                claimed_attempt_id TEXT
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+    storage.init_db()
+    conn = storage.get_connection()
+    try:
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(task_retry_schedules)").fetchall()
+        }
+        assert "capability_contract_json" in columns
+    finally:
+        conn.close()
