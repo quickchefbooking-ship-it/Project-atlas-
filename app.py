@@ -518,6 +518,13 @@ def generate_video(payload: GenerateVideoRequest):
     return {"status": "ok", "path": generate_video_from_prompt(payload.prompt, payload.output_path, payload.narration)}
 
 
-if __name__ == "__main__":
+def run_server() -> None:
+    """Start the development server without exposing an unauthenticated local instance."""
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
+
+    host = "0.0.0.0" if API_REQUIRE_AUTH else "127.0.0.1"
+    uvicorn.run("app:app", host=host, port=8000, reload=False)
+
+
+if __name__ == "__main__":
+    run_server()
