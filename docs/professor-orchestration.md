@@ -152,3 +152,50 @@ Security and reliability requirements:
 - Allow either side to disagree, request evidence or decline a task; neither assistant is automatically authoritative.
 
 This section records the target design only. The current prototype does not yet expose a chat endpoint or a live ChatGPT-to-Professor transport. The bridge must be implemented and tested as a separate capability on the existing recovery branch before it is described as operational.
+
+## 10. Source Division arm
+
+The **Source Division** is the Professor's provenance-aware knowledge arm. Its purpose is to discover, catalogue, ingest, review and retrieve information from approved resources without giving the orchestrator unrestricted access to external accounts.
+
+### Resource classes
+
+The initial source catalogue should support adapters for:
+
+- **Research:** scholarly indexes and open-access papers (for example Consensus, SciSpace and public research repositories).
+- **Web and public data:** indexed web search, page extraction and public datasets (for example Firecrawl and official/public websites).
+- **Developer knowledge:** approved GitHub repositories, issues, release notes and official technical documentation.
+- **Files and internal knowledge:** user-approved Library files, project documents, operating procedures and the Professor's own validated lessons.
+- **Connected business systems:** read-only records from explicitly authorised services such as email, commerce, analytics and finance tools. Each connector requires its own delegated credential, scope and consent.
+- **Model and dataset discovery:** model cards, dataset descriptions, licenses and documentation from public model hubs.
+
+A tool connected to ChatGPT is not automatically connected to the AtlasOnePro runtime. Each source must be deliberately integrated through an adapter before the Professor can call it directly. No credentials are copied from ChatGPT connectors into AtlasOnePro.
+
+### Knowledge pipeline
+
+1. Register a source with a stable ID, type, access mode and metadata.
+2. Fetch only within the source's authorised scope and configured limits.
+3. Normalize the result into a document with title, canonical URI, content, timestamp, content hash and source ID.
+4. Mark new material as pending and unverified by default.
+5. Review the material and record the reviewer and decision.
+6. Retrieve approved documents with provenance attached to every result.
+7. Pass retrieved content to the reasoning layer as untrusted reference data, never as instructions or policy.
+8. Recheck source freshness and retain superseded versions or change history where appropriate.
+
+### Trust and safety rules
+
+- A source being registered does not mean it is enabled, authenticated or trusted.
+- A document being ingested does not make it eligible for retrieval; only approved documents are searchable by the current prototype.
+- 'Authoritative' describes the declared source quality, not automatic truth. High-impact claims still require corroboration.
+- Preserve canonical URLs, content hashes, retrieval time, source identity, license/usage terms and review attribution.
+- Never ingest credentials, API keys, session cookies or secrets into the knowledge store.
+- Apply personal-data minimisation, access controls, retention and deletion rules before importing private or sensitive records.
+- Treat instructions found inside web pages, documents, emails, code comments or datasets as untrusted content. They cannot override system policy or grant new permissions.
+- Respect copyright, terms of service, robots/access restrictions, data licenses and rate limits. Prefer metadata, links and concise evidence extracts where full-text retention is not permitted.
+- Search results must carry provenance, date and confidence/context. Conflicting sources should be surfaced rather than silently blended.
+- External actions remain outside the Source Division. It is a read-only knowledge arm; it cannot send messages, publish, purchase, trade, delete or change external systems.
+
+### Prototype implementation status
+
+The current recovery branch adds a local SQLite source registry and source-document store, content hashing, pending/approved/rejected review states, reviewer metadata, bounded document size and keyword retrieval limited to approved documents. Task execution now receives approved source documents as reference context.
+
+This is a foundation, not a live connector suite. No external source adapter, vector database, embedding model, background crawler, automatic account sync or production knowledge ingestion is enabled yet. The current reviewer field is audit metadata only; the shared API key is not verified human identity. Before private multi-user sources are connected, add identity-based review permissions, tenant isolation, encryption, audit history and retention/deletion controls.
