@@ -117,50 +117,87 @@ def review_document(document_id: str, decision: str, reviewer: str) -> dict[str,
     return storage.get_source_document(document_id)
 
 
+def _frontmatter_value(frontmatter: str, key: str) -> str | None:
+    """Read a simple top-level YAML scalar without adding a YAML dependency."""
+    match = re.search(rf"^{re.escape(key)}:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def _bundled_document_metadata(path: Path) -> dict[str, str] | None:
+    """Accept only Markdown notes carrying the explicit curated-reference marker."""
+    content = path.read_text(encoding="utf-8")
+    if not content.startswith("---\\n"):
+        return None
+    closing = content.find("\\n---", 4)
+    if closing < 0:
+        return None
+    frontmatter = content[4:closing]
+    if _frontmatter_value(frontmatter, "review_status") != "curated-reference":
+        return None
+    document_id = _frontmatter_value(frontmatter, "id")
+    title = _frontmatter_value(frontmatter, "title")
+    division = _frontmatter_value(frontmatter, "division")
+    publisher_match = re.search(r"^  publisher:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
+    retrieved_match = re.search(r"^  retrieved:\\s*[\\"']?([^\\n\\"']+)", frontmatter, re.MULTILINE)
+    # The source may expose a single URL or a list of guidance URLs. Preserve
+    # the first canonical source URI for indexing; the note retains all sources.
+    url_match = re.search(r"^  url:\\s*[\\"']?(https?://[^\\s\\"']+)", frontmatter, re.MULTILINE)
+    if not url_match:
+        url_match = re.search(r"^\\s+- url:\\s*[\\"']?(https?://[^\\s\\"']+)", frontmatter, re.MULTILINE)
+    if not all((document_id, title, division, publisher_match, url_match)):
+        return None
+    return {
+        "id": document_id,
+        "title": title,
+        "division": division,
+        "publisher": publisher_match.group(1).strip(),
+        "uri": url_match.group(1).strip(),
+        "retrieved": retrieved_match.group(1).strip() if retrieved_match else "unknown",
+        "content": content.strip(),
+    }
+
+
 def load_bundled_knowledge() -> int:
-    """Copy curated Markdown references into the local library once per content hash."""
+    """Import explicitly curated Markdown notes from every library collection.
+
+    Files without valid frontmatter and the exact curated-reference marker are
+    ignored. New material is therefore not silently promoted merely because it
+    was copied into the repository.
+    """
     library_root = Path(__file__).resolve().parent.parent / "knowledge_library"
-    bundled = [
-        (
-            "bundled-owasp-security",
-            "OWASP Gen AI Security Project — curated knowledge notes",
-            "knowledge_library/security/llm-security-and-prompt-injection.md",
-            "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
-        ),
-        (
-            "bundled-owasp-security",
-            "OWASP Gen AI Security Project — knowledge integrity notes",
-            "knowledge_library/security/knowledge-library-integrity-and-rag.md",
-            "https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/",
-        ),
-    ]
-    register_source(
-        "bundled-owasp-security",
-        "Bundled OWASP security knowledge",
-        "curated_markdown_library",
-        metadata={"collection": "security", "origin": "repository_bundle"},
-    )
+    candidates = sorted(library_root.rglob("*.md"))
     imported = 0
-    for source_id, title, relative_path, uri in bundled:
-        path = library_root.parent / relative_path
-        if not path.is_file():
+    for path in candidates:
+        if path.name.lower() == "readme.md":
             continue
-        content = path.read_text(encoding="utf-8")
-        normalized = content.strip()
+        item = _bundled_document_metadata(path)
+        if item is None:
+            continue
+        source_id = "bundled-" + re.sub(r"[^a-z0-9]+", "-", item["publisher"].lower()).strip("-")
+        register_source(
+            source_id,
+            item["publisher"],
+            "curated_markdown_library",
+            metadata={"collection": item["division"], "origin": "repository_bundle"},
+        )
+        relative_path = path.relative_to(library_root.parent).as_posix()
+        normalized = item["content"]
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
         storage.save_source_document({
             "id": f"bundle-{digest[:24]}",
             "source_id": source_id,
-            "title": title,
-            "uri": uri,
+            "title": item["title"],
+            "uri": item["uri"],
             "content": normalized,
             "content_sha256": digest,
             "trust_level": "reviewed",
             "state": "approved",
             "metadata_json": _encode_metadata({
                 "bundle_path": relative_path,
+                "document_id": item["id"],
+                "collection": item["division"],
                 "review_status": "curated_reference",
-                "retrieved_at": "2026-11-13",
+                "retrieved_at": item["retrieved"],
             }),
             "created_at": _now(),
             "updated_at": _now(),
