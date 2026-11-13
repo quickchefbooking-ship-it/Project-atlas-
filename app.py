@@ -352,18 +352,41 @@ def get_task_cancellation_route(task_id: str):
     return storage.get_task_cancellation(task_id)
 
 
+_RETRY_SCHEDULE_RESPONSE_FIELDS = (
+    "schedule_id", "task_id", "originating_attempt_id", "next_attempt_number",
+    "due_at", "deadline_at", "capability_name", "capability_version",
+    "error_code", "state", "created_at", "claimed_at", "claimed_attempt_id",
+    "task_title", "task_status", "task_attempts",
+)
+
+
+def _public_retry_schedule(record: dict[str, Any]) -> dict[str, Any]:
+    """Expose schedule status without leaking idempotency keys or internal snapshots."""
+    return {
+        field: record[field]
+        for field in _RETRY_SCHEDULE_RESPONSE_FIELDS
+        if field in record
+    }
+
+
 @app.get("/tasks/{task_id}/retry-schedules", dependencies=[Depends(require_api_key)])
 def list_task_retry_schedules_route(task_id: str):
     if manager.get_task(task_id) is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return storage.list_task_retry_schedules(task_id)
+    return [
+        _public_retry_schedule(record)
+        for record in storage.list_task_retry_schedules(task_id)
+    ]
 
 
 @app.get("/tasks/retries/due", dependencies=[Depends(require_api_key)])
 def list_due_retry_schedules_route(limit: int = 50):
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=422, detail="Limit must be between 1 and 100")
-    return storage.list_due_task_retry_schedules(limit=limit)
+    return [
+        _public_retry_schedule(record)
+        for record in storage.list_due_task_retry_schedules(limit=limit)
+    ]
 
 
 @app.post("/tasks/retries/expire", dependencies=[Depends(require_api_key)])
