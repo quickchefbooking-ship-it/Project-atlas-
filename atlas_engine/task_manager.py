@@ -158,6 +158,7 @@ class TaskAPI:
                 "method": evaluation["method"],
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
+            phase = "persistence"
             if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result):
                 current = self.manager.get_task(task_id)
                 return {
@@ -186,9 +187,24 @@ class TaskAPI:
                     )
             return {"task_id": task_id, "status": status, "result": result, "evaluation": evaluation}
         except Exception as exc:
+            error_type = type(exc).__name__
+            if phase == "persistence":
+                # The completion transaction rolls back on failure. Do not write a
+                # separate terminal status without its evaluation: that would create
+                # an incomplete audit trail and falsely imply durable completion.
+                logger.error(
+                    "Task outcome persistence failed for task_id=%s error_type=%s",
+                    task_id,
+                    error_type,
+                )
+                return {
+                    "task_id": task_id,
+                    "status": "outcome_unconfirmed",
+                    "error": "Task outcome could not be persisted. Its final state requires recovery.",
+                }
+
             # Execution exceptions are failed outcomes too. Persist a sanitised,
             # zero-score evaluation with the terminal task state when storage allows.
-            error_type = type(exc).__name__
             failure_record = {
                 "id": f"evaluation-{os.urandom(12).hex()}",
                 "task_id": task_id,
