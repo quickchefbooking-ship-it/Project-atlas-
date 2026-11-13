@@ -72,6 +72,40 @@ def test_lesson_input_validation(monkeypatch, tmp_path, kwargs):
         LearningMemory.save_lesson_for_task(**kwargs)
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_lesson_evidence_rejects_non_finite_numbers(monkeypatch, tmp_path, value):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError, match="finite JSON values"):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test",
+            "diagnostic",
+            "Reject non-standard numeric values in evidence.",
+            "test",
+            {"nested": {"measurement": value}},
+        )
+
+    assert storage.list_lessons(limit=10) == []
+
+
+def test_lesson_evidence_accepts_finite_nested_json(monkeypatch, tmp_path):
+    import json
+
+    _isolated_db(monkeypatch, tmp_path)
+    lesson = LearningMemory.save_lesson_for_task(
+        "task-learning-test",
+        "diagnostic",
+        "Persist finite nested evidence.",
+        "test",
+        {"nested": {"measurement": 1.25}, "labels": ["safe", "finite"]},
+    )
+
+    assert json.loads(lesson["evidence_json"]) == {
+        "nested": {"measurement": 1.25},
+        "labels": ["safe", "finite"],
+    }
+
+
 def test_relevant_lesson_limit_is_bounded():
     with pytest.raises(ValueError, match="between 1 and 50"):
         LearningMemory.get_relevant_lessons("orchestration", limit=51)
