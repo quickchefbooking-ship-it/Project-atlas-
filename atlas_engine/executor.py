@@ -64,9 +64,11 @@ def safe_execute_local(task: dict[str, Any]) -> dict[str, Any]:
         _check_deadline(float(deadline))
     try:
         expression = ast.parse(description, mode="eval")
+        _check_deadline(float(deadline) if deadline is not None else None)
         if sum(1 for _ in ast.walk(expression)) > MAX_AST_NODES:
             raise ValueError("Arithmetic expression exceeds the maximum AST complexity")
         value = _safe_math(expression, float(deadline) if deadline is not None else None)
+        _check_deadline(float(deadline) if deadline is not None else None)
     except (SyntaxError, ZeroDivisionError, OverflowError) as exc:
         raise ValueError("Task is not a supported arithmetic expression") from exc
     return {"type": "safe_math", "value": value}
