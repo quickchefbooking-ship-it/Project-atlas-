@@ -359,6 +359,23 @@ def list_task_retry_schedules_route(task_id: str):
     return storage.list_task_retry_schedules(task_id)
 
 
+@app.get("/tasks/retries/due", dependencies=[Depends(require_api_key)])
+def list_due_retry_schedules_route(limit: int = 50):
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=422, detail="Limit must be between 1 and 100")
+    return storage.list_due_task_retry_schedules(limit=limit)
+
+
+@app.post("/tasks/retries/expire", dependencies=[Depends(require_api_key)])
+def expire_retry_schedules_route(limit: int = 100):
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=422, detail="Limit must be between 1 and 500")
+    return {
+        "expired": storage.expire_task_retry_schedules(limit=limit),
+        "status": "retry_deadlines_scanned",
+    }
+
+
 @app.post("/tasks/{task_id}/recovery-decision", dependencies=[Depends(require_api_key)])
 def resolve_task_recovery_route(task_id: str, payload: TaskRecoveryDecisionInput):
     if manager.get_task(task_id) is None:
