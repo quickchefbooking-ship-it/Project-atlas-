@@ -101,7 +101,16 @@ class TaskAPI:
             return {"error": "Task not found"}
         self.manager.update_status(task_id, "running", increment_attempt=True)
         try:
-            result = self.executor.execute({"title": task.title, "description": task.description})
+            # Retrieve only validated lessons; pass them as context to capable executors.
+            # The restricted local arithmetic executor deliberately ignores this context.
+            relevant_lessons = self.memory.get_relevant_lessons(task.description) if hasattr(
+                self.memory, "get_relevant_lessons"
+            ) else []
+            result = self.executor.execute({
+                "title": task.title,
+                "description": task.description,
+                "relevant_lessons": relevant_lessons,
+            })
             evaluation = self.evaluator.evaluate(result, task.success_criteria)
             status = "passed" if evaluation["passed"] else "failed"
 
