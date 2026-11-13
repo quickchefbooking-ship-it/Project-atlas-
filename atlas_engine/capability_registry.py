@@ -7,9 +7,13 @@ constructed by trusted application code at startup.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
 from types import MappingProxyType
 from typing import Any, Mapping
+
+from jsonschema import Draft202012Validator, ValidationError
+from jsonschema.exceptions import SchemaError
 
 from .retry_policy import CapabilityRetryContract
 
@@ -21,6 +25,7 @@ _ALLOWED_RISK_CLASSES = frozenset({
     "privileged",
 })
 _EXTERNAL_RISKS = frozenset({"external_write", "privileged"})
+MAX_CAPABILITY_PAYLOAD_BYTES = 64 * 1024
 
 
 def _freeze(value: Any) -> Any:
@@ -34,6 +39,15 @@ def _freeze(value: Any) -> Any:
     if type(value) is float and math.isfinite(value):
         return value
     raise ValueError("Capability schemas may contain only JSON-compatible values.")
+
+
+def _thaw(value: Any) -> Any:
+    """Return ordinary JSON containers for the schema-validation library."""
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(item) for item in value]
+    return value
 
 
 def _validate_schema_shape(schema: Mapping[str, Any], field: str) -> None:
@@ -51,6 +65,7 @@ def _validate_schema_shape(schema: Mapping[str, Any], field: str) -> None:
     properties = schema.get("properties", {})
     if any(item not in properties for item in required):
         raise ValueError(f"{field}.required contains an undeclared property.")
+
     def reject_references(value: Any) -> None:
         if isinstance(value, Mapping):
             if "$ref" in value or "$dynamicRef" in value:
@@ -64,6 +79,31 @@ def _validate_schema_shape(schema: Mapping[str, Any], field: str) -> None:
                 reject_references(nested)
 
     reject_references(schema)
+
+
+def _validate_payload(schema: Mapping[str, Any], payload: Any, direction: str) -> None:
+    """Validate finite JSON data without echoing untrusted values in errors."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"Capability {direction} must be a JSON object.")
+    try:
+        encoded = json.dumps(
+            payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
+    except (TypeError, ValueError, RecursionError, UnicodeError) as exc:
+        raise ValueError(f"Capability {direction} must contain finite JSON values.") from exc
+    if len(encoded.encode("utf-8")) > MAX_CAPABILITY_PAYLOAD_BYTES:
+        raise ValueError(
+            f"Capability {direction} exceeds the 64-KiB limit ({MAX_CAPABILITY_PAYLOAD_BYTES} bytes)."
+        )
+
+    validator = Draft202012Validator(_thaw(schema))
+    try:
+        validator.validate(payload)
+    except ValidationError as exc:
+        path = ".".join(str(part) for part in exc.absolute_path) or "<root>"
+        raise ValueError(
+            f"Capability {direction} failed schema validation at {path}."
+        ) from None
 
 
 @dataclass(frozen=True)
@@ -131,9 +171,24 @@ class CapabilityDefinition:
         object.__setattr__(self, "input_schema", _freeze(self.input_schema))
         object.__setattr__(self, "output_schema", _freeze(self.output_schema))
 
+        # Validate schema syntax against the pinned JSON Schema draft at startup.
+        for field_name in ("input_schema", "output_schema"):
+            try:
+                Draft202012Validator.check_schema(_thaw(getattr(self, field_name)))
+            except SchemaError as exc:
+                raise ValueError(f"{field_name} is not a valid Draft 2020-12 schema.") from exc
+
     @property
     def identity(self) -> tuple[str, str]:
         return self.name, self.version
+
+    def validate_input(self, payload: Any) -> None:
+        """Validate a capability request. This does not invoke its handler."""
+        _validate_payload(self.input_schema, payload, "input")
+
+    def validate_output(self, payload: Any) -> None:
+        """Validate a capability result. This does not invoke or persist anything."""
+        _validate_payload(self.output_schema, payload, "output")
 
 
 class CapabilityRegistry:

@@ -11,7 +11,7 @@ def _definition(**overrides):
         "risk_class": "read_only",
         "input_schema": {
             "type": "object",
-            "properties": {"query": {"type": "string"}},
+            "properties": {"query": {"type": "string", "minLength": 3}},
             "required": ["query"],
             "additionalProperties": False,
         },
@@ -165,3 +165,56 @@ def test_retry_contract_must_match_registered_capability_identity():
             retry_contract=contract,
             idempotency_key_scope="tenant+request",
         )
+
+
+def test_input_and_output_are_validated_against_declared_schemas():
+    definition = _definition()
+    definition.validate_input({"query": "atlas"})
+    definition.validate_output({"title": "Atlas research"})
+    with pytest.raises(ValueError, match="input failed schema validation"):
+        definition.validate_input({"query": "x"})
+    with pytest.raises(ValueError, match="output failed schema validation"):
+        definition.validate_output({"title": 42})
+
+
+def test_unknown_properties_are_rejected():
+    definition = _definition()
+    with pytest.raises(ValueError, match="input failed schema validation"):
+        definition.validate_input({"query": "atlas", "admin": True})
+
+
+@pytest.mark.parametrize("payload", [
+    ["not", "an", "object"],
+    {"query": float("nan")},
+    {"query": object()},
+])
+def test_non_object_and_non_json_payloads_are_rejected(payload):
+    with pytest.raises(ValueError):
+        _definition().validate_input(payload)
+
+
+def test_payload_size_is_bounded():
+    definition = _definition()
+    with pytest.raises(ValueError, match="64-KiB limit"):
+        definition.validate_input({"query": "x" * (64 * 1024)})
+
+
+def test_invalid_json_schema_is_rejected_at_definition_time():
+    with pytest.raises(ValueError, match="valid Draft 2020-12 schema"):
+        _definition(input_schema={
+            "type": "object",
+            "properties": {"query": {"type": "not-a-json-schema-type"}},
+        })
+
+
+def test_schema_validation_error_does_not_echo_untrusted_value():
+    definition = _definition(input_schema={
+        "type": "object",
+        "properties": {"query": {"type": "string", "maxLength": 8}},
+        "required": ["query"],
+        "additionalProperties": False,
+    })
+    secret = "do-not-echo-this-secret"
+    with pytest.raises(ValueError) as captured:
+        definition.validate_input({"query": secret})
+    assert secret not in str(captured.value)
