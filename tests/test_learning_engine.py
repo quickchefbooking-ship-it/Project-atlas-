@@ -220,3 +220,43 @@ def test_validated_memory_is_not_hidden_by_newer_unvalidated_lessons(tmp_path, m
 
     assert trusted["id"] in {lesson["id"] for lesson in relevant}
     assert all(lesson["validated"] in (1, True) for lesson in relevant)
+
+
+def test_task_execution_receives_relevant_validated_memory(tmp_path, monkeypatch):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "memory-context.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Use prior knowledge",
+        "Apply the validated lesson about arithmetic",
+        [{"field": "value", "operator": "==", "expected_value": 5}],
+    )
+    trusted_lesson = {"id": "lesson-trusted", "summary": "Prior arithmetic lesson", "validated": 1}
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return [trusted_lesson]
+
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            return None
+
+    class ContextAwareExecutor:
+        def __init__(self):
+            self.payload = None
+
+        def execute(self, payload):
+            self.payload = payload
+            return {"value": 5}
+
+    executor = ContextAwareExecutor()
+    api = TaskAPI(manager, executor, Evaluator(), Memory(), None, None)
+
+    result = api.run_task(task.id)
+
+    assert result["status"] == "passed"
+    assert executor.payload["relevant_lessons"] == [trusted_lesson]
