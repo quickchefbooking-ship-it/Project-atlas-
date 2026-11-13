@@ -327,6 +327,11 @@ class TaskAPI:
                     task_id,
                     type(persistence_error).__name__,
                 )
+                return {
+                    "task_id": task_id,
+                    "status": "outcome_unconfirmed",
+                    "error": "Task failure could not be persisted with its evaluation. Its final state requires recovery.",
+                }
 
             # Keep exception messages out of API responses and logs: they can contain
             # credentials, file paths or private task data. Record only the error type.
