@@ -84,7 +84,7 @@ def init_db() -> None:
                 attempt_id TEXT NOT NULL UNIQUE,
                 actor TEXT NOT NULL,
                 reason TEXT NOT NULL,
-                state TEXT NOT NULL CHECK(state IN ('requested','acknowledged','cancelled','too_late','requires_recovery')),
+                state TEXT NOT NULL CHECK(state IN ('requested','acknowledged','too_late','requires_recovery')),
                 requested_at TEXT NOT NULL,
                 acknowledged_at TEXT,
                 FOREIGN KEY(task_id) REFERENCES tasks(id),
@@ -964,7 +964,7 @@ def request_task_cancellation(
                     "UPDATE task_retry_schedules SET state = 'cancelled' WHERE schedule_id = ? AND state = 'scheduled'",
                     (scheduled_retry["schedule_id"],),
                 )
-                cancellation_state = "cancelled"
+                cancellation_state = "acknowledged"
             else:
                 cancellation_state = "too_late"
         elif task["status"] != "running" or attempt_row["state"] in {"completed", "failed", "abandoned"}:
