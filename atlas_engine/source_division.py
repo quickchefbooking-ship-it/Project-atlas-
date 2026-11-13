@@ -171,6 +171,8 @@ def load_bundled_knowledge() -> int:
         relative_path = path.relative_to(library_root.parent).as_posix()
         normalized = item["content"]
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        if storage.get_source_document_by_hash(source_id, digest) is not None:
+            continue
         storage.save_source_document({
             "id": f"bundle-{digest[:24]}",
             "source_id": source_id,
@@ -195,8 +197,13 @@ def load_bundled_knowledge() -> int:
 
 
 def retrieve(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Keyword retrieval over approved material only; return provenance with every hit."""
-    load_bundled_knowledge()
+    """Keyword retrieval over approved material only; return provenance with every hit.
+
+    Bundled references are loaded explicitly by the application bootstrap, not
+    as a side effect of every query. This keeps isolated callers and tests
+    deterministic and prevents unrelated bundled documents from polluting
+    narrow retrieval results.
+    """
     if not isinstance(query, str) or not query.strip():
         return []
     if not isinstance(limit, int) or limit < 1 or limit > 50:
