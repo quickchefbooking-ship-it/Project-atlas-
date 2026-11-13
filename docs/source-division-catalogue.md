@@ -92,7 +92,7 @@ Two read-only adapters are now implemented in \`atlas_engine/public_research_ada
 - **GitHub:** public repository metadata through the fixed \`api.github.com/repos/{owner}/{repo}\` endpoint.
 - **Hugging Face:** public model or dataset metadata through the fixed \`huggingface.co/api/models/{id}\` and \`/api/datasets/{id}\` endpoints.
 
-The authenticated \`POST /sources/fetch\` route accepts a provider, resource type and provider-native identifier. It does not accept a URL. The adapter constructs the provider endpoint itself, uses HTTPS GET only, applies an eight-second timeout and a 1 MB response cap, and records a retrieval timestamp. No tokens, private repositories, model weights, arbitrary hosts or write operations are used.
+The authenticated \`POST /sources/fetch\` route accepts a provider, resource type and provider-native identifier. It does not accept a URL. The adapter constructs the provider endpoint itself, uses HTTPS GET only, applies an eight-second timeout and a 1 MB response cap, and records a retrieval timestamp. Fixed-host provider requests reject HTTP redirects instead of following provider-controlled `Location` values, preventing a redirect from moving a request to another host. No tokens, private repositories, model weights, arbitrary hosts or write operations are used.
 
 Each fetched record is normalized, SHA-256 hashed and staged as \`pending\` / \`unverified\`. It is not searchable until a separate authorized review process approves it. The browser operator page exposes the same fetch operation. The source catalogue records these as public metadata adapters; it does not imply access to the ChatGPT workspace's connected GitHub or Hugging Face accounts.
 
