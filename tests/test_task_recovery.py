@@ -92,3 +92,16 @@ def test_expired_lease_cannot_be_renewed_even_before_expiry_scan(tmp_path, monke
     assert not storage.heartbeat_task_attempt(
         task.id, claim["attempt_id"], "worker-a", claim["fencing_token"], 30
     )
+
+
+def test_recovery_required_attempt_blocks_claim_even_if_task_is_reset_pending(tmp_path, monkeypatch):
+    manager = _manager(tmp_path, monkeypatch)
+    task = manager.create_task("Held recovery", "Manual reset must not bypass recovery", [])
+    claim = storage.claim_task_with_lease(task.id, "worker-lost", 5)
+    assert claim is not None
+    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    assert storage.mark_expired_task_attempts(now=future) == 1
+    # Simulate an accidental/manual task status reset. The recovery hold must still win.
+    storage.update_task(task.id, {"status": "pending", "updated_at": storage.now_isoformat()})
+    assert storage.claim_task_with_lease(task.id, "worker-new", 30) is None
+    assert storage.list_recovery_required_attempts()[0]["attempt_id"] == claim["attempt_id"]

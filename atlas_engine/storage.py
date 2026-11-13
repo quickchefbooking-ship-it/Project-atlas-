@@ -166,7 +166,7 @@ def claim_task_with_lease(task_id: str, worker_id: str, lease_seconds: int = 60)
             conn.rollback()
             return None
         active = conn.execute(
-            "SELECT 1 FROM task_attempts WHERE task_id = ? AND state = 'active' LIMIT 1",
+            "SELECT 1 FROM task_attempts WHERE task_id = ? AND state IN ('active', 'recovery_required') LIMIT 1",
             (task_id,),
         ).fetchone()
         if active is not None:
