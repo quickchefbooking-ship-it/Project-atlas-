@@ -116,3 +116,33 @@ def test_evaluator_treats_missing_or_incompatible_ordered_values_as_failed_crite
     assert result["score"] == 0.0
     assert result["reasons"] == ["field and expected value are not comparable"]
     assert result["missing_requirements"] == ["count gt 3"]
+
+
+def test_task_failure_does_not_expose_exception_details(tmp_path, monkeypatch, caplog):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "failure-test.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Fail safely", "Trigger a controlled failure", [])
+
+    class BrokenExecutor:
+        @staticmethod
+        def execute(_payload):
+            raise RuntimeError("private-token-and-path-must-not-leak")
+
+    class Memory:
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            return None
+
+    api = TaskAPI(manager, BrokenExecutor(), Evaluator(), Memory(), None, None)
+    result = api.run_task(task.id)
+
+    assert result["status"] == "failed"
+    assert result["error"] == "Task execution failed. Check the server diagnostics using the task ID."
+    assert "private-token-and-path-must-not-leak" not in str(result)
+    assert "RuntimeError" in caplog.text
+    assert "private-token-and-path-must-not-leak" not in caplog.text
+    assert manager.get_task(task.id).status == "failed"
