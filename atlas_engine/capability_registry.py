@@ -7,6 +7,7 @@ constructed by trusted application code at startup.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -28,7 +29,9 @@ def _freeze(value: Any) -> Any:
         return MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(item) for item in value)
-    if value is None or type(value) in (str, int, float, bool):
+    if value is None or type(value) in (str, int, bool):
+        return value
+    if type(value) is float and math.isfinite(value):
         return value
     raise ValueError("Capability schemas may contain only JSON-compatible values.")
 
@@ -48,9 +51,19 @@ def _validate_schema_shape(schema: Mapping[str, Any], field: str) -> None:
     properties = schema.get("properties", {})
     if any(item not in properties for item in required):
         raise ValueError(f"{field}.required contains an undeclared property.")
-    # Remote and recursive schema references are intentionally unsupported.
-    if "$ref" in schema or "$dynamicRef" in schema:
-        raise ValueError(f"{field} cannot use external or recursive schema references.")
+    def reject_references(value: Any) -> None:
+        if isinstance(value, Mapping):
+            if "$ref" in value or "$dynamicRef" in value:
+                raise ValueError(
+                    f"{field} cannot use external or recursive schema references."
+                )
+            for nested in value.values():
+                reject_references(nested)
+        elif isinstance(value, (list, tuple)):
+            for nested in value:
+                reject_references(nested)
+
+    reject_references(schema)
 
 
 @dataclass(frozen=True)
@@ -103,6 +116,8 @@ class CapabilityDefinition:
         if self.retry_contract is not None:
             if not isinstance(self.retry_contract, CapabilityRetryContract):
                 raise ValueError("retry_contract must be a validated retry contract.")
+            if self.retry_contract.identity != (self.name.strip(), self.version.strip()):
+                raise ValueError("Retry contract identity must match the capability.")
             if not self.retry_contract.retry_is_safe:
                 raise ValueError("Retry contract does not prove safe duplicate suppression.")
             if self.idempotency_key_scope is None:
