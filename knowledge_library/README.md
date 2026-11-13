@@ -59,6 +59,9 @@ Every imported item should retain:
 - Only notes with valid frontmatter and the explicit `review_status: curated-reference` marker are pre-approved for bundled import; ordinary README files and pending notes are ignored.
 - Imports are idempotent by source and content hash, so repeated retrieval does not create duplicate records.
 - Source registration, document ingestion and human review functions exist in the prototype.
+- A provider-neutral `SourceAdapter` contract now standardises read-only connector results as title, canonical URI, text content and metadata.
+- A versioned JSON import envelope (`schema_version: 1`) supports safe copy/paste or file-based batch imports of up to 100 documents.
+- Adapter and JSON batches are validated before any writes; credentials embedded in source URLs are rejected, and imported records remain pending/unverified until review.
 - The bundled OWASP notes are curated repository material; they are not live provider integrations.
 - Lawve is available as a read-only research connector in the current ChatGPT environment; direct automatic ingestion into AtlasOnePro is not yet wired.
 - Hugging Face search/documentation tools are available in the current environment; direct automatic ingestion is not yet wired.
@@ -68,9 +71,8 @@ Every imported item should retain:
 
 ## Next engineering steps
 
-1. Add a generic source-adapter contract with a common document envelope.
-2. Add safe import commands for structured JSON records alongside curated Markdown bundles.
-3. Add connector adapters one at a time: web, Lawve, Hugging Face, then GitHub.
-4. Add a review queue and source/jurisdiction metadata checks.
-5. Add tests proving imported content survives restart, duplicates are ignored, and pending documents are not retrievable.
-6. Implement the ChatGPT bridge only after message authentication, authorisation, replay protection and human approval rules are tested.
+1. Implement and test individual read-only provider adapters, starting with public web and Hugging Face documentation.
+2. Add jurisdiction-aware Lawve ingestion and repository/ref-aware GitHub ingestion.
+3. Add a review queue UI/API and stronger source/jurisdiction metadata checks.
+4. Add tests proving imported content survives restart, duplicates are ignored, and pending documents are not retrievable.
+5. Implement the ChatGPT bridge only after message authentication, authorisation, replay protection and human approval rules are tested.
