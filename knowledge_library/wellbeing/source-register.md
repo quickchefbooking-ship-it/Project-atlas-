@@ -13,7 +13,7 @@ source:
   url: "https://github.com/quickchefbooking-ship-it/Project-atlas-"
   retrieved: "2026-11-13"
   source_type: "curated-source-index"
-review_status: "curated-reference"
+review_status: "index-only"
 ---
 
 # Wellbeing Division — initial authoritative source register
