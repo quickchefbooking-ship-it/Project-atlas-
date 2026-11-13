@@ -179,12 +179,12 @@ def test_recovery_routes_are_authenticated_and_never_auto_retry(tmp_path, monkey
     task = app_module.manager.create_task("API recovery", "Inspect an expired lease", [])
     claim = storage.claim_task_with_lease(task.id, "worker-gone", 5)
     assert claim is not None
-    future = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
     conn = storage.get_connection()
     try:
         conn.execute(
             "UPDATE task_attempts SET lease_expires_at = ? WHERE attempt_id = ?",
-            (future, claim["attempt_id"]),
+            (expired, claim["attempt_id"]),
         )
         conn.commit()
     finally:
