@@ -350,3 +350,75 @@ def test_task_claim_is_atomic_and_increments_attempt_once(tmp_path, monkeypatch)
     persisted = manager.get_task(task.id)
     assert persisted.status == "running"
     assert persisted.attempts == 1
+
+
+
+def test_task_completion_and_evaluation_are_atomic(tmp_path, monkeypatch):
+    import pytest
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "atomic-completion.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task("Atomic completion", "Persist outcome and evaluation together", [])
+    assert manager.claim_task(task.id) is True
+
+    # The missing method field fails after the task UPDATE has executed. The
+    # transaction must roll that state change back as well.
+    incomplete_record = {
+        "id": "evaluation-incomplete",
+        "task_id": task.id,
+        "passed": True,
+        "score": 1.0,
+        "reasons_json": "[]",
+        "missing_requirements_json": "[]",
+        "created_at": storage.now_isoformat(),
+    }
+    with pytest.raises(KeyError):
+        storage.complete_task_with_evaluation(
+            task.id, incomplete_record, "passed", {"value": 2}
+        )
+
+    persisted = manager.get_task(task.id)
+    assert persisted.status == "running"
+    assert persisted.score == 0.0
+    assert persisted.result is None
+    assert storage.get_evaluations_for_task(task.id) == []
+
+
+def test_failed_task_result_survives_failure_to_save_learning_lesson(tmp_path, monkeypatch, caplog):
+    from atlas_engine import storage
+    from atlas_engine.task_manager import TaskAPI, TaskManager
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "lesson-write-failure.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Failed evaluation",
+        "Return a value that does not meet the criterion",
+        [{"field": "value", "operator": "==", "expected_value": 99}],
+    )
+
+    class Executor:
+        @staticmethod
+        def execute(_payload):
+            return {"value": 2}
+
+    class BrokenMemory:
+        @staticmethod
+        def save_lesson_for_task(*_args, **_kwargs):
+            raise OSError("private storage location")
+
+    api = TaskAPI(manager, Executor(), Evaluator(), BrokenMemory(), None, None)
+    result = api.run_task(task.id)
+
+    assert result["status"] == "failed"
+    assert result["evaluation"]["passed"] is False
+    assert "error" not in result
+    persisted = manager.get_task(task.id)
+    assert persisted.status == "failed"
+    assert persisted.result == {"value": 2}
+    assert len(storage.get_evaluations_for_task(task.id)) == 1
+    assert "OSError" in caplog.text
+    assert "private storage location" not in caplog.text
