@@ -57,3 +57,9 @@ No vendor is selected by this document. Until selection and implementation are r
 The branch now contains `atlas_engine/verified_identity.py` with a minimal immutable `VerifiedIdentity(issuer, subject)` value and `principal_from_verified_identity(...)`. The composition function resolves the identity through the isolated server-side membership registry and creates the immutable `RequestPrincipal` from the returned tenant and scopes. Unknown, revoked, inactive or ambiguous memberships fail closed.
 
 This is deliberately only the seam between a future token verifier and the registry. The value type can be instantiated by Python code, so it is not cryptographic proof and must never be populated from request data. Until the real verifier and server-only composition wiring exist, the proposal-review route remains disabled and no HTTP endpoint may accept this object from a client.
+
+## Implemented local scope policy (still not an authenticator)
+
+`atlas_engine/scope_policy.py` now provides a closed local role-to-scope map for the future verifier adapter. The starter `atlas_viewer` role grants read-only scopes; `atlas_operator` grants the bounded task, evaluation, lesson and proposal read/write scopes. Unknown roles grant nothing, malformed role claims fail closed, and proposal-review permission is deliberately absent. The mapper accepts verified provider roles only; it has no input for client-requested scopes.
+
+This mapping is a conservative engineering starting point, not a final production role model. The selected identity provider's role/group claims, tenant administrator lifecycle, break-glass policy and separation-of-duties model must be reviewed before activation. The map must remain server-controlled and must not be overridden by tenant payloads.
