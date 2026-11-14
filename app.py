@@ -491,7 +491,11 @@ def proposals():
 
 @app.post("/proposals/{proposal_id}/review", dependencies=[Depends(require_api_key)])
 def review_proposal(proposal_id: str, payload: ProposalReviewInput):
-    return api.review_proposal(proposal_id, payload)
+    """Keep review disabled until a trusted identity provider supplies a verified principal."""
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Proposal review is temporarily disabled until verified human identity and tenant authorization are configured.",
+    )
 
 
 

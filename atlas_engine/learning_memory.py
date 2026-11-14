@@ -96,6 +96,19 @@ class LearningMemory:
             raise ValueError("Lesson evidence must be an object.")
 
         _validate_json_value(evidence)
+        if lesson_type.strip() == "arithmetic_alias":
+            application = evidence.get("application")
+            if not isinstance(application, dict) or set(application) != {"alias", "expression"}:
+                raise ValueError(
+                    "Arithmetic alias lessons require application with only alias and expression."
+                )
+            alias = application.get("alias")
+            expression = application.get("expression")
+            if (
+                not isinstance(alias, str) or not alias.strip() or len(alias) > 80
+                or not isinstance(expression, str) or not expression.strip() or len(expression) > 256
+            ):
+                raise ValueError("Arithmetic alias application fields are invalid.")
         try:
             evidence_json = json.dumps(
                 evidence, sort_keys=True, allow_nan=False, separators=(",", ":")
@@ -130,7 +143,32 @@ class LearningMemory:
         incoming_keywords = sorted(LearningMemory._keywords(task_description))[:64]
         # Rank across the full validated corpus rather than truncating candidates to the 100 newest
         # records, so older useful lessons remain discoverable as memory grows.
-        return search_validated_lessons(incoming_keywords, limit=limit)
+        lessons = search_validated_lessons(incoming_keywords, limit=limit)
+        runtime_lessons: list[Dict[str, Any]] = []
+        for lesson in lessons:
+            # SQLite returns integer booleans. Normalize the validated marker so
+            # specialist contracts receive one stable representation.
+            lesson["validated"] = lesson.get("validated") in (1, True)
+            if lesson.get("lesson_type") == "arithmetic_alias":
+                try:
+                    evidence = json.loads(lesson.get("evidence_json") or "{}")
+                except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                    raise ValueError("Validated arithmetic alias lesson evidence is malformed.") from exc
+                application = evidence.get("application") if isinstance(evidence, dict) else None
+                if not isinstance(application, dict):
+                    raise ValueError("Validated arithmetic alias lesson requires application evidence.")
+                if set(application) != {"alias", "expression"}:
+                    raise ValueError("Arithmetic alias application fields must contain only alias and expression.")
+                alias = application.get("alias")
+                expression = application.get("expression")
+                if (
+                    not isinstance(alias, str) or not alias.strip() or len(alias) > 80
+                    or not isinstance(expression, str) or not expression.strip() or len(expression) > 256
+                ):
+                    raise ValueError("Arithmetic alias application fields are invalid.")
+                lesson["application"] = {"alias": alias.strip(), "expression": expression.strip()}
+            runtime_lessons.append(lesson)
+        return runtime_lessons
 
     @staticmethod
     def get_recent_task_history(limit: int = 20) -> List[Dict[str, Any]]:

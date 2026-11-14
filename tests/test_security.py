@@ -132,3 +132,19 @@ def test_development_entrypoint_preserves_network_binding_when_authentication_is
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 8000
     assert captured["reload"] is False
+
+
+def test_proposal_review_is_disabled_even_with_shared_api_key_until_verified_identity_exists(monkeypatch):
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    client = TestClient(app_module.app)
+
+    response = client.post(
+        "/proposals/proposal-example/review",
+        headers={"X-API-Key": "test-secret"},
+        json={"action": "approve", "approved_by": "forged-admin"},
+    )
+
+    assert response.status_code == 503
+    assert "verified human identity" in response.json()["detail"]

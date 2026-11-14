@@ -151,6 +151,38 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS lesson_usage_events (
+                usage_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                attempt_id TEXT NOT NULL,
+                lesson_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                UNIQUE(attempt_id, lesson_id),
+                FOREIGN KEY(task_id) REFERENCES tasks(id),
+                FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id),
+                FOREIGN KEY(lesson_id) REFERENCES lessons(id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_lesson_usage_task_recorded
+            ON lesson_usage_events(task_id, recorded_at)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS lesson_experiment_runs (
+                experiment_id TEXT PRIMARY KEY,
+                criteria_version TEXT NOT NULL,
+                execution_mode TEXT NOT NULL CHECK(execution_mode = 'offline_in_process_only'),
+                arm_order_seed INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_lesson_experiment_runs_created
+            ON lesson_experiment_runs(created_at DESC)
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS proposals (
                 id TEXT PRIMARY KEY, task_id TEXT, problem TEXT NOT NULL,
                 evidence_json TEXT NOT NULL, proposed_change TEXT NOT NULL,
@@ -671,12 +703,22 @@ def complete_task_with_evaluation(
     status: str,
     result: Dict[str, Any],
     attempt: Optional[Dict[str, Any]] = None,
+    consumed_lesson_ids: Optional[list[str] | tuple[str, ...]] = None,
 ) -> bool:
-    """Persist a task's terminal state and evaluation as one SQLite transaction.
+    """Persist terminal outcome and validated lesson-use receipts atomically.
 
     Only a currently running task can be completed. If either write fails, both
     writes roll back so the task cannot appear complete without its evaluation.
     """
+    lesson_ids = () if consumed_lesson_ids is None else consumed_lesson_ids
+    if not isinstance(lesson_ids, (list, tuple)) or len(lesson_ids) > 50:
+        raise ValueError("Consumed lesson IDs must be a bounded list or tuple.")
+    if any(not isinstance(item, str) or not item.strip() or len(item) > 256 for item in lesson_ids):
+        raise ValueError("Consumed lesson IDs must be non-empty bounded strings.")
+    if len(set(lesson_ids)) != len(lesson_ids):
+        raise ValueError("Consumed lesson IDs must be unique.")
+    if lesson_ids and attempt is None:
+        raise ValueError("Lesson-use attribution requires a fenced task attempt.")
     if status not in {"passed", "failed"}:
         raise ValueError("Task completion status must be passed or failed.")
     if record.get("task_id") != task_id:
@@ -742,6 +784,24 @@ def complete_task_with_evaluation(
                 record["missing_requirements_json"], record["method"], record["created_at"],
             ),
         )
+        if lesson_ids:
+            placeholders = ",".join("?" for _ in lesson_ids)
+            eligible = conn.execute(
+                f"SELECT id FROM lessons WHERE validated = 1 AND id IN ({placeholders})",
+                tuple(lesson_ids),
+            ).fetchall()
+            if {row["id"] for row in eligible} != set(lesson_ids):
+                conn.rollback()
+                raise ValueError("Lesson-use receipt contains an unknown or unvalidated lesson.")
+            recorded_at = now_isoformat()
+            for lesson_id in lesson_ids:
+                conn.execute(
+                    """INSERT INTO lesson_usage_events
+                       (usage_id, task_id, attempt_id, lesson_id, recorded_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (f"lesson-use-{os.urandom(12).hex()}", task_id,
+                     attempt["attempt_id"], lesson_id, recorded_at),
+                )
         conn.commit()
         return True
     except Exception:
