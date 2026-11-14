@@ -189,3 +189,12 @@ source, proposal and learning routes remain on their existing boundary and
 must not be treated as tenant-isolated. The empty application capability
 catalogue also means readiness previews will block unknown capabilities;
 that is intentional until trusted capability definitions are registered.
+
+
+`POST /professor/tenant/plans` now accepts a bounded plan description from a
+verified tenant principal with `plans:write`. The request schema rejects
+unknown fields, bounds the plan to 64 steps and validates the existing typed
+Professor plan contract (dependency graph, risk classes, scopes, timeouts and
+resource budgets). The server generates the plan ID and persists only a
+`DRAFT`. The request cannot supply a tenant ID, state, approval reference,
+worker identity or execution result. Creation never approves or executes work.
