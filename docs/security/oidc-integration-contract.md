@@ -375,3 +375,23 @@ completed plan dependencies; they do not automatically substitute the latest
 review revision. A subsequent integration step must make reviewed revisions
 available to evaluation/report execution without weakening the tenant or
 dependency boundaries.
+
+
+## Reviewed evidence in downstream execution
+
+The tenant step dependency hand-off now checks for a latest persisted reviewer
+revision whenever a direct dependency is a completed
+`research.evidence.bundle` step. If one exists, that revision is supplied to
+the downstream capability input mapper instead of the immutable original
+execution result. This means the evaluation stage and the report stage both
+receive the reviewed bundle when their plan declares the bundle as a direct
+dependency; the report's evaluation input therefore corresponds to the same
+reviewed revision.
+
+The substitution is tenant- and plan-scoped, derived from persisted direct
+dependencies, bounded by the existing 64 KiB hand-off limit, and requires the
+verified principal to hold `evidence:review`. If a review exists but the
+executor lacks that scope, the hand-off is denied rather than silently using
+the unreviewed bundle. The original step result is never modified. When no
+review revision exists, the original bundle remains the input and the
+evaluation continues to reflect the absence of reviewer annotations.
