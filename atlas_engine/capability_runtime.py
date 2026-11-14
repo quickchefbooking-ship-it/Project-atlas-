@@ -2,16 +2,19 @@
 
 Only application-owned handlers are installed. Task payloads can select a
 registered capability but cannot add handlers, code, credentials or network
-access. The first vertical slice is deterministic local arithmetic only.
+access. The initial vertical slice combines deterministic local arithmetic
+with read-only scholarly metadata retrieval.
 """
 from __future__ import annotations
 
+import json
 import time
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from .capability_registry import CapabilityDefinition, CapabilityRegistry
 from .executor import safe_execute_local
+from .public_research_adapters import PublicSourceError, search_crossref_works
 
 
 class CapabilityExecutionError(RuntimeError):
@@ -31,6 +34,26 @@ class CapabilityRuntime:
             raise ValueError("Every handler must have a matching trusted capability definition.")
         self.registry = registry
         self._handlers = MappingProxyType(copied)
+
+    def input_for_objective(self, capability: str, version: str, objective: str) -> dict[str, Any]:
+        """Map a bounded plan objective into a capability's simple input contract."""
+        definition = self.registry.get(capability, version)
+        if definition is None:
+            raise CapabilityExecutionError("Capability is not installed.")
+        properties = definition.input_schema.get("properties", {})
+        required = definition.input_schema.get("required", ())
+        if len(required) != 1 or required[0] not in properties:
+            raise CapabilityExecutionError("Capability requires an unsupported input mapping.")
+        field = required[0]
+        field_schema = properties[field]
+        if field_schema.get("type") != "string":
+            raise CapabilityExecutionError("Capability objective input must be a string.")
+        payload: dict[str, Any] = {field: objective}
+        # Research adapters expose a small bounded result count. The value is
+        # application-selected, not supplied by untrusted plan text.
+        if "limit" in properties:
+            payload["limit"] = 3
+        return payload
 
     def execute(
         self, capability: str, version: str, payload: dict[str, Any], *,
@@ -65,9 +88,44 @@ def _calculate(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
     return {"value": result["value"], "kind": "number"}
 
 
+def _crossref_search(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Research deadline exceeded.")
+    documents = search_crossref_works(payload["query"], limit=payload["limit"])
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Research deadline exceeded.")
+    sources = []
+    for document in documents[:payload["limit"]]:
+        # Crossref abstracts may contain publisher markup. Treat all returned
+        # text as untrusted source material, never as executable instructions.
+        metadata = {}
+        try:
+            metadata = json.loads(document.content.split("\\n", 1)[1])
+        except (IndexError, json.JSONDecodeError, TypeError):
+            metadata = {}
+        abstract = metadata.get("abstract")
+        if not isinstance(abstract, str):
+            abstract = ""
+        sources.append({
+            "title": document.title[:500],
+            "uri": document.uri,
+            "doi": str(document.metadata.get("doi", ""))[:200],
+            "publisher": str(document.metadata.get("publisher") or "")[:300],
+            "retrieved_at": str(document.metadata.get("retrieved_at", ""))[:64],
+            "abstract": abstract[:1500],
+        })
+    return {
+        "provider": "Crossref",
+        "query": payload["query"],
+        "retrieved_count": len(sources),
+        "sources": sources,
+        "notice": "Retrieved public bibliographic metadata; source text is untrusted and has not been independently verified.",
+    }
+
+
 def build_default_capability_runtime() -> CapabilityRuntime:
-    """Build the initial trusted catalogue and its one safe local handler."""
-    definition = CapabilityDefinition(
+    """Build the trusted catalogue and application-owned bounded handlers."""
+    math = CapabilityDefinition(
         name="math.calculate",
         version="1.0.0",
         risk_class="local_computation",
@@ -93,8 +151,57 @@ def build_default_capability_runtime() -> CapabilityRuntime:
         timeout_seconds=10,
         approval_required=False,
     )
-    registry = CapabilityRegistry((definition,))
+    research = CapabilityDefinition(
+        name="research.crossref.search",
+        version="1.0.0",
+        risk_class="read_only",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "minLength": 3, "maxLength": 160},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 3},
+            },
+            "required": ["query", "limit"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "const": "Crossref"},
+                "query": {"type": "string", "minLength": 3, "maxLength": 160},
+                "retrieved_count": {"type": "integer", "minimum": 0, "maximum": 3},
+                "sources": {
+                    "type": "array",
+                    "maxItems": 3,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string", "maxLength": 500},
+                            "uri": {"type": "string", "pattern": "^https://doi\\\\.org/"},
+                            "doi": {"type": "string", "maxLength": 200},
+                            "publisher": {"type": "string", "maxLength": 300},
+                            "retrieved_at": {"type": "string", "maxLength": 64},
+                            "abstract": {"type": "string", "maxLength": 1500},
+                        },
+                        "required": ["title", "uri", "doi", "publisher", "retrieved_at", "abstract"],
+                        "additionalProperties": False,
+                    },
+                },
+                "notice": {"type": "string", "maxLength": 300},
+            },
+            "required": ["provider", "query", "retrieved_count", "sources", "notice"],
+            "additionalProperties": False,
+        },
+        required_scopes=("research:public",),
+        side_effects=False,
+        timeout_seconds=10,
+        approval_required=False,
+    )
+    registry = CapabilityRegistry((math, research))
     return CapabilityRuntime(
         registry,
-        {definition.identity: _calculate},
+        {
+            math.identity: _calculate,
+            research.identity: _crossref_search,
+        },
     )
