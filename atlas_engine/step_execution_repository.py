@@ -379,13 +379,21 @@ class StepExecutionRepository:
         finally:
             conn.close()
 
-    def list_events(self, plan_id: str, step_id: str) -> tuple[StepExecutionEvent, ...]:
+    def list_events(
+        self, plan_id: str, step_id: str, *, limit: int = 100
+    ) -> tuple[StepExecutionEvent, ...]:
+        """Return the most recent bounded event window in chronological order."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit must be between 1 and 500.")
         conn = self._connection_factory()
         try:
             rows = conn.execute(
-                """SELECT * FROM professor_plan_step_events
-                   WHERE plan_id = ? AND step_id = ? ORDER BY event_id""",
-                (plan_id, step_id),
+                """SELECT * FROM (
+                       SELECT * FROM professor_plan_step_events
+                       WHERE plan_id = ? AND step_id = ?
+                       ORDER BY event_id DESC LIMIT ?
+                   ) ORDER BY event_id ASC""",
+                (plan_id, step_id, limit),
             ).fetchall()
             return tuple(
                 StepExecutionEvent(
