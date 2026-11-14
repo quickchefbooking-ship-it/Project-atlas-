@@ -223,3 +223,32 @@ execute local or external work, or enable retries. External-side-effect and
 privileged steps remain blocked because action-bound verified human approval
 has not yet been implemented. A `READY` state means only that the current
 metadata and policy checks passed; it is not permission to execute.
+
+
+## First bounded Professor execution capability
+
+The application now installs a trusted, immutable capability runtime containing
+one handler: `math.calculate@1.0.0`. It accepts a bounded arithmetic expression
+and evaluates it using the existing AST-based local arithmetic evaluator. It
+does not use a shell, execute Python supplied by a caller, access the network,
+write external systems or invoke paid AI services. The capability is classified
+as `local_computation`, has a ten-second ceiling, validates both input and
+output against its registered JSON Schemas, and requires the server-assigned
+`compute:local` scope.
+
+A verified tenant operator with `plans:execute`, `plans:write`,
+`steps:claim`, `steps:complete`, `steps:read` and `compute:local` may call
+`POST /professor/tenant/plans/{plan_id}/execute-next`. The route rechecks the
+central plan preview, transitions an eligible READY plan to RUNNING, claims
+exactly one dependency-ready step with a fenced lease, invokes only the
+application-owned handler, and persists the bounded result or a generic failure
+code. Repeated calls advance one step at a time; the plan becomes SUCCEEDED
+only after every step is recorded as succeeded. A failed or expired attempt is
+not automatically replayed.
+
+For this initial vertical slice, `math.calculate` treats the step's
+`objective` field as the arithmetic expression (for example, `2 + 2`). It is
+a deliberate proving-ground capability, not yet a general natural-language
+planner or research executor. External-side-effect and privileged capabilities
+remain blocked; no approval bypass, arbitrary plugin loader, network handler,
+production identity provider or deployment is introduced.
