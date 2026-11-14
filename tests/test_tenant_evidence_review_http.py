@@ -175,9 +175,7 @@ def test_downstream_dependency_handoff_uses_latest_review_revision(monkeypatch, 
         tenant_path = str(tmp_path / "tenant.sqlite")
         db = sqlite3.connect(tenant_path)
         db.row_factory = sqlite3.Row
-        principal = __import__(
-            "atlas_engine.identity_policy", fromlist=["RequestPrincipal"]
-        ).RequestPrincipal(
+        principal = RequestPrincipal(
             ISSUER, "reviewer-a", "tenant-a", True,
             frozenset({"steps:read", "evidence:review"}),
         )
