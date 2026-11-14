@@ -95,6 +95,16 @@ def test_approval_transition_requires_reference(repository):
         approval_reference="approval-123",
     )
     assert approved.state is PlanState.APPROVED
+    assert approved.approval_reference == "approval-123"
+    assert repository.get("plan-test-1").approval_reference == "approval-123"
+    history = repository.list_transitions("plan-test-1")
+    assert [event.to_state for event in history] == [
+        PlanState.DRAFT,
+        PlanState.AWAITING_APPROVAL,
+        PlanState.APPROVED,
+    ]
+    assert history[-1].from_state is PlanState.AWAITING_APPROVAL
+    assert history[-1].approval_reference == "approval-123"
 
 
 def test_illegal_state_transition_is_rejected(repository):
@@ -126,3 +136,52 @@ def test_plan_listing_is_bounded_and_can_filter_by_state(repository):
     assert len(repository.list(limit=1)) == 1
     with pytest.raises(ValueError):
         repository.list(limit=0)
+
+
+def test_new_plans_cannot_be_created_in_a_non_draft_state(repository):
+    plan = make_plan()
+    approved = ProfessorPlan(
+        plan_id=plan.plan_id,
+        objective=plan.objective,
+        acceptance_criteria=plan.acceptance_criteria,
+        steps=plan.steps,
+        state=PlanState.APPROVED,
+        approval_reference="unverified-reference",
+    )
+    with pytest.raises(PlanStateConflict, match="created in draft"):
+        repository.create(approved)
+
+
+def test_approval_reference_is_rejected_for_non_approval_transition(repository):
+    repository.create(make_plan())
+    with pytest.raises(PlanStateConflict, match="only accepted when approving"):
+        repository.transition(
+            "plan-test-1",
+            expected_state=PlanState.DRAFT,
+            new_state=PlanState.READY,
+            approval_reference="unexpected-reference",
+        )
+
+
+def test_plan_transition_history_records_creation_and_normal_transitions(repository):
+    repository.create(make_plan())
+    repository.transition(
+        "plan-test-1",
+        expected_state=PlanState.DRAFT,
+        new_state=PlanState.READY,
+    )
+    history = repository.list_transitions("plan-test-1")
+    assert len(history) == 2
+    assert history[0].from_state is None
+    assert history[0].to_state is PlanState.DRAFT
+    assert history[1].from_state is PlanState.DRAFT
+    assert history[1].to_state is PlanState.READY
+    assert history[1].approval_reference is None
+
+
+def test_plan_contract_approve_preserves_reference():
+    plan = make_plan(RiskClass.EXTERNAL_SIDE_EFFECT)
+    awaiting = plan.mark_ready()
+    approved = awaiting.approve(approval_reference="approval-contract-1")
+    assert approved.state is PlanState.APPROVED
+    assert approved.approval_reference == "approval-contract-1"
