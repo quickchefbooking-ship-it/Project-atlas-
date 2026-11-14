@@ -260,3 +260,10 @@ The first conversation seam is implemented in `atlas_engine/conversation_contrac
 The input builder retains recent context within explicit limits (24 turns, 24,000 aggregate characters, 4,000 characters per message) and appends the latest user turn. The default locale is `en-GB`, matching the intended Professor voice. These are transport/context bounds, not a substitute for tenant-aware persistence, privacy controls or provider-side token limits.
 
 The provider protocol is not yet connected to an implementation. The voice endpoint therefore remains unavailable for general conversation until a provider is selected, configured and tested. Any provider adapter must preserve the approval boundary, avoid treating retrieved/user-supplied text as instructions, and return provenance identifying the provider and model. No paid provider is enabled by this contract.
+
+
+## Tenant-scoped Professor plan prototype
+
+An isolated `TenantPlanRepository` now stores tenant-owned plan metadata, plan-step metadata and actor-attributed transition history in separate `tenant_professor_*` tables. Every repository read and write includes the verified principal's tenant predicate. Composite keys prevent cross-tenant step-parent links, and identical plan IDs may exist in different tenants.
+
+Approval transitions are intentionally unavailable until action-bound verified approval exists. This repository is not wired to the global plan or step repositories, does not migrate live data and does not enable tenant HTTP routes. Tests cover cross-tenant read/list/transition denial, ID collision isolation, compare-and-swap state changes, scope and membership denial, and composite foreign-key enforcement.
