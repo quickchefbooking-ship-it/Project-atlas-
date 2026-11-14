@@ -10,6 +10,8 @@ The registry maps an already-verified identity pair (`issuer`, `subject`) to ten
 
 - `tenant_registry`: stable tenant ID, display name and active state.
 - `tenant_memberships`: issuer + subject + tenant composite key, active state and server-provisioned scope set.
+- `membership_audit_events`: append-only event records for tenant creation/deactivation/reactivation and membership provision/revocation. Events are committed in the same SQLite transaction as the corresponding change; failed changes do not leave success events.
+- Audit details contain the target identity, tenant and scope changes, but never bearer tokens or raw identity claims.
 - Foreign keys require membership to reference an existing tenant.
 - Membership lookup fails for unknown identities, revoked memberships, inactive tenants and corrupt permission records.
 - If an identity has multiple active tenant memberships, lookup fails as ambiguous unless a specific tenant is selected and independently matched against that identity's stored membership rows.
