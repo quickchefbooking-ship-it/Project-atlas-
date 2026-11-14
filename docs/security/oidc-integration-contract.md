@@ -279,3 +279,10 @@ fetching, summarisation claim, source approval, external write or automatic
 retry is introduced. The next research increment should add evidence
 normalisation and cross-source comparison while preserving per-claim source
 links and uncertainty.
+
+
+## Deterministic evidence bundling foundation
+
+The branch now includes `atlas_engine/evidence_engine.py`, a bounded, deterministic evidence-bundling primitive. It accepts up to 20 source records and up to 20 explicitly annotated claims per source; preserves source title, URI, DOI, publisher and retrieval timestamp; links each annotation to its source; detects duplicate DOI/canonical-URI records; and flags when supplied annotations for the same explicit claim ID include both `supports` and `challenges` labels.
+
+This is intentionally not an automated truth engine. Claim text and relation labels must be supplied by a reviewer or a separately validated extractor. A conflict means conflicting annotations, not proven factual disagreement. Confidence remains `not_scored`; source quality, methodology and truth are not inferred. The module is currently a tested foundation and is not yet wired as a new plan capability because the current plan executor does not pass prior step outputs into downstream steps. That data-flow contract must be designed before exposing evidence assembly to task plans.
