@@ -72,7 +72,7 @@ def test_rejects_untrusted_or_overprivileged_claims(claim_changes, policy_change
 
 
 def test_rejects_non_demo_environment():
-    with pytest.raises(ValueError, match="Literal"):
+    with pytest.raises(ServiceAuthorizationError, match="Demo only"):
         claims(environment="live")
 
 
