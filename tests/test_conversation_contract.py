@@ -19,13 +19,15 @@ def test_conversation_requires_user_final_turn():
 
 
 def test_conversation_rejects_oversized_context():
+    messages = tuple(
+        ConversationMessage("user" if index % 2 == 0 else "assistant", "x" * 3_500)
+        for index in range(7)
+    )
     with pytest.raises(ValueError, match="context exceeds"):
         ConversationInput(
             conversation_id="c1",
             user_id="u1",
-            messages=(
-                ConversationMessage("user", "x" * (MAX_CONTEXT_CHARS + 1)),
-            ),
+            messages=messages,
         )
 
 
