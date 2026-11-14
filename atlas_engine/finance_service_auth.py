@@ -42,6 +42,8 @@ class VerifiedServiceTokenClaims:
     environment: Literal["demo"]
 
     def __post_init__(self) -> None:
+        if self.environment != "demo":
+            raise ServiceAuthorizationError("Only the Demo environment is permitted by this contract.")
         for value, field, limit in (
             (self.issuer, "issuer", 512),
             (self.subject, "subject", MAX_SUBJECT),
