@@ -35,6 +35,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
+        ("/professor/evidence-review", "GET"),
     }
     verified_identity_routes = {
         ("/identity/me", "GET"),
