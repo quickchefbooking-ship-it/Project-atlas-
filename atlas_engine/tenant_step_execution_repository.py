@@ -373,8 +373,11 @@ class TenantStepExecutionRepository:
             return {}
         placeholders = ",".join("?" for _ in dependencies)
         rows = self.db.execute(
-            f"""SELECT step_id,state,result_json FROM tenant_professor_step_runs
-                WHERE tenant_id=? AND plan_id=? AND step_id IN ({placeholders})""",
+            f"""SELECT r.step_id,r.state,r.result_json,p.capability
+                FROM tenant_professor_step_runs r
+                JOIN tenant_professor_plan_steps p
+                  ON p.tenant_id=r.tenant_id AND p.plan_id=r.plan_id AND p.step_id=r.step_id
+                WHERE r.tenant_id=? AND r.plan_id=? AND r.step_id IN ({placeholders})""",
             (tenant_id, plan_id, *dependencies),
         ).fetchall()
         by_id = {row["step_id"]: row for row in rows}
@@ -384,6 +387,31 @@ class TenantStepExecutionRepository:
         ):
             raise TenantStepConflict("Every direct dependency must succeed before outputs can be handed off.")
         results = {item: json.loads(by_id[item]["result_json"]) for item in dependencies}
+
+        # If a direct dependency is an evidence bundle, use its latest
+        # append-only reviewer revision for downstream evaluation/reporting.
+        # The immutable execution result remains unchanged. Reading a reviewed
+        # revision is itself permission-gated; never silently fall back when a
+        # revision exists but this principal lacks review access.
+        table = self.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_evidence_reviews'"
+        ).fetchone()
+        if table is not None:
+            for dependency in dependencies:
+                if by_id[dependency]["capability"] != "research.evidence.bundle":
+                    continue
+                reviewed = self.db.execute("""
+                  SELECT bundle_json FROM tenant_evidence_reviews
+                  WHERE tenant_id=? AND plan_id=? AND bundle_step_id=?
+                  ORDER BY review_id DESC LIMIT 1
+                """, (tenant_id, plan_id, dependency)).fetchone()
+                if reviewed is None:
+                    continue
+                authorize_tenant_resource(
+                    self.principal, tenant_id, {"evidence:review"}
+                )
+                results[dependency] = json.loads(reviewed["bundle_json"])
+
         _json_payload(results, max_bytes=65_536)
         return results
 
