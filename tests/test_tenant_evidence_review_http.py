@@ -81,6 +81,7 @@ def _client(monkeypatch, tmp_path, *, review_scope=True):
             ),
         ),
     ))
+    steps.list_steps("review-plan")
     bundle = {
         "schema_version": 1,
         "summary": {"source_count": 1, "claim_count": 0, "confidence": "not_scored"},
