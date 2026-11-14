@@ -347,7 +347,8 @@ class TenantStepExecutionRepository:
 
     def list_steps(self, plan_id: str) -> tuple[TenantStepRecord, ...]:
         tenant_id = self._auth("steps:read")
-        self._seed_runs(tenant_id, plan_id)
+        with self.db:
+            self._seed_runs(tenant_id, plan_id)
         rows = self.db.execute("""
           SELECT r.*,p.ordinal,p.capability,p.capability_version,p.risk
           FROM tenant_professor_step_runs r JOIN tenant_professor_plan_steps p
