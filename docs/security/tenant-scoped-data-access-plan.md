@@ -178,3 +178,16 @@ The safe integration sequence is:
 7. Preserve the proposal-review HTTP 503 guard until individual verified human identity, tenant scope, separation of duties and audit behavior are all implemented and tested.
 
 The current app intentionally has no tenant-principal dependency and no customer tenant route. This is safer than adding a dependency that accepts a fabricated principal or than partially tenant-filtering a route whose underlying storage is global. The next implementation should be a provider adapter and dependency only after provider selection, with test doubles confined to tests and no production bypass flag.
+
+
+## Next build programme progress: identity contract and isolation proof
+
+The provider-neutral OIDC interface is now represented by:
+
+- `atlas_engine/oidc_contract.py`: strict provider configuration, explicit algorithm allowlist, verifier protocol and typed post-verification claims contract.
+- `atlas_engine/oidc_composition.py`: checks the verified-claims contract and resolves the subject through server-side membership. Stored membership scopes remain authoritative; token role strings cannot override them.
+- `tests/test_oidc_contract.py` and `tests/test_oidc_composition.py`: configuration rejection, issuer/audience mismatch, malformed claims, unknown subject and server-side permission authority.
+
+The contract is not a JWT implementation. It does not fetch keys, verify signatures, enforce token expiry against a live clock or provide an HTTP bearer dependency. Those are implementation gates for the selected provider adapter.
+
+The execution isolation tests have also been expanded to cover cross-tenant cancellation, retry-schedule and lesson-use writes, plus attempts to query execution records using another tenant's task ID. All changes remain isolated prototype/test code; the live FastAPI routes and global storage have not been switched to tenant mode.
