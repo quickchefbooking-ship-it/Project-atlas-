@@ -286,3 +286,12 @@ links and uncertainty.
 The branch now includes `atlas_engine/evidence_engine.py`, a bounded, deterministic evidence-bundling primitive. It accepts up to 20 source records and up to 20 explicitly annotated claims per source; preserves source title, URI, DOI, publisher and retrieval timestamp; links each annotation to its source; detects duplicate DOI/canonical-URI records; and flags when supplied annotations for the same explicit claim ID include both `supports` and `challenges` labels.
 
 This is intentionally not an automated truth engine. Claim text and relation labels must be supplied by a reviewer or a separately validated extractor. A conflict means conflicting annotations, not proven factual disagreement. Confidence remains `not_scored`; source quality, methodology and truth are not inferred. The module is currently a tested foundation and is not yet wired as a new plan capability because the current plan executor does not pass prior step outputs into downstream steps. That data-flow contract must be designed before exposing evidence assembly to task plans.
+
+
+## Completed dependency output hand-off and evidence capability
+
+The tenant step repository now exposes `dependency_results(plan_id, step_id)`. It derives direct dependencies only from the persisted plan contract, requires every direct dependency to have succeeded, reads only within the verified principal's tenant, and caps the combined JSON hand-off at 64 KiB. A caller cannot nominate arbitrary source step IDs.
+
+The execution route supplies these completed outputs to the trusted capability runtime. The new read-only `research.evidence.bundle@1.0.0` capability converts source records from completed research dependencies into the deterministic evidence bundle. It requires `research:public`, accepts no task-supplied handler or arbitrary source-step selector, and does not write externally.
+
+The current Crossref-to-evidence path preserves title, DOI URI, DOI, publisher and retrieval timestamp. Crossref abstracts remain source material and are not transformed into verified claims. The evidence bundle therefore records source provenance and duplicate records, while confidence remains `not_scored` until claim annotations and a separately reviewed evaluation process exist.
