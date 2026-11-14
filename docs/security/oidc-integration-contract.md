@@ -69,3 +69,35 @@ This mapping is a conservative engineering starting point, not a final productio
 The branch now includes `atlas_engine/tenant_admin.py`, a narrow server-side façade for provisioning and revoking a member within the acting administrator's own tenant. It requires an immutable `RequestPrincipal`, active membership, and the reserved `tenant:members:manage` scope. The target tenant is always taken from the principal; the façade exposes no caller-supplied tenant selector. The new scope is allowlisted for policy validation but is deliberately not granted to the starter viewer or operator roles.
 
 Membership provision/revoke audit events can now record the acting principal's issuer and subject. The registry's lower-level provisioning methods remain bootstrap primitives and may still create events with NULL actor fields; production administrative operations must use the façade after a real trusted identity adapter is deployed. The Python object boundary is not cryptographic authentication, and this change does not enable any HTTP admin endpoint or select an identity provider.
+
+
+## Provider-neutral verifier contract and selection gate
+
+The branch now defines `atlas_engine/oidc_contract.py`:
+
+- immutable deployment configuration with exact issuer, API audience, HTTPS JWKS URI, explicit algorithm allowlist and bounded clock skew;
+- a `TokenVerifier` protocol for the future cryptographic adapter;
+- a minimal immutable `VerifiedTokenClaims` output contract;
+- a second-stage issuer/audience/claim-shape check before membership resolution.
+
+`atlas_engine/oidc_composition.py` composes the trusted verifier output with the server-side membership registry. Provider role strings are not permissions at request time; the registry's server-controlled membership scopes remain authoritative. This prevents token-supplied role text from silently escalating a tenant membership.
+
+These modules do not verify signatures, fetch JWKS, validate token time claims against a live clock, or authenticate bearer tokens. No production verifier or FastAPI dependency is wired. The typed claim object can be instantiated by Python code, so it must only be returned by the future trusted verifier and must never be built from HTTP input.
+
+### Provider evaluation scorecard
+
+Before selecting a vendor, evaluate each candidate against the same evidence checklist:
+
+| Criterion | Required evidence |
+| --- | --- |
+| OIDC conformance | Exact issuer/audience behaviour, supported flows, discovery and JWKS rotation |
+| Signing security | Algorithm controls, key rollover, unknown-key and JWKS outage behaviour |
+| MFA and passkeys | Enforceable tenant policy, recovery controls and phishing-resistant options |
+| Organisation model | Multiple organisations per identity, invitations, deactivation and membership lifecycle |
+| UK/EU data handling | Contractual residency options, subprocessors, retention and transfer terms |
+| Audit and operations | Admin audit export, security events, alerting and incident support |
+| Enterprise lifecycle | SCIM or equivalent provisioning/deprovisioning, role/group claim controls |
+| Commercial fit | Free/developer tier, production pricing, MAU/user limits and enterprise costs |
+| Portability | Standards-based export, custom domain/issuer options and practical exit plan |
+
+No provider is selected by this scorecard. A decision requires current vendor evidence, expected user volumes, budget and legal/data-processing review. Keep the application provider-neutral until that comparison is complete.
