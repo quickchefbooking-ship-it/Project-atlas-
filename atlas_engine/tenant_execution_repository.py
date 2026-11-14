@@ -31,6 +31,28 @@ def initialize_execution_schema(connection: sqlite3.Connection) -> None:
                 ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS tenant_recovery_audit_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            decision_id TEXT NOT NULL UNIQUE,
+            tenant_id TEXT NOT NULL,
+            actor_issuer TEXT NOT NULL,
+            actor_subject TEXT NOT NULL,
+            action TEXT NOT NULL,
+            retry_safe INTEGER NOT NULL CHECK(retry_safe IN (0, 1)),
+            side_effects_reconciled INTEGER NOT NULL CHECK(side_effects_reconciled IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (decision_id) REFERENCES tenant_recovery_decisions(decision_id)
+                ON DELETE RESTRICT
+        );
+
+        CREATE TRIGGER IF NOT EXISTS prevent_recovery_audit_update
+        BEFORE UPDATE ON tenant_recovery_audit_events
+        BEGIN SELECT RAISE(ABORT, 'recovery audit events are append-only'); END;
+
+        CREATE TRIGGER IF NOT EXISTS prevent_recovery_audit_delete
+        BEFORE DELETE ON tenant_recovery_audit_events
+        BEGIN SELECT RAISE(ABORT, 'recovery audit events are append-only'); END;
+
         CREATE TABLE IF NOT EXISTS tenant_cancellations (
             cancellation_id TEXT PRIMARY KEY,
             tenant_id TEXT NOT NULL,
@@ -150,13 +172,20 @@ class TenantExecutionRepository:
     def add_recovery_decision(self, decision_id: str, task_id: int, attempt_id: int,
                               action: str, reason: str, retry_safe: bool = False,
                               side_effects_reconciled: bool = False) -> None:
-        self._require_attempt(task_id, attempt_id, "tasks:write")
-        if not decision_id.strip() or not reason.strip():
-            raise ValueError("decision_id and reason are required.")
+        """Record a tenant-bound operator decision; never replays work itself."""
+        self._require_attempt(task_id, attempt_id, "professor:recovery:decide")
+        if not isinstance(decision_id, str) or not decision_id.strip() or len(decision_id) > 128:
+            raise ValueError("decision_id must be a non-empty string of at most 128 characters.")
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise ValueError("reason must be a non-empty string of at most 2000 characters.")
         if action not in {"mark_failed", "retry"}:
             raise ValueError("Unsupported recovery action.")
         if not isinstance(retry_safe, bool) or not isinstance(side_effects_reconciled, bool):
             raise ValueError("Recovery flags must be booleans.")
+        if action == "retry" and not (retry_safe and side_effects_reconciled):
+            raise ValueError(
+                "Retry requires explicit retry-safety and side-effect-reconciliation attestations."
+            )
         with self._connection:
             self._connection.execute(
                 """INSERT INTO tenant_recovery_decisions
@@ -166,6 +195,31 @@ class TenantExecutionRepository:
                 (decision_id, self._principal.tenant_id, task_id, attempt_id,
                  action, reason.strip(), int(retry_safe), int(side_effects_reconciled)),
             )
+            self._connection.execute(
+                """INSERT INTO tenant_recovery_audit_events
+                   (decision_id, tenant_id, actor_issuer, actor_subject, action,
+                    retry_safe, side_effects_reconciled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (decision_id, self._principal.tenant_id, self._principal.issuer,
+                 self._principal.subject, action, int(retry_safe),
+                 int(side_effects_reconciled)),
+            )
+
+    def list_recovery_audit_events(self, task_id: int) -> list:
+        """Return append-only operator attribution for one tenant-owned task."""
+        self._require_task(task_id, "tasks:read")
+        rows = self._connection.execute(
+            """SELECT e.event_id, e.decision_id, e.tenant_id, e.actor_issuer,
+                      e.actor_subject, e.action, e.retry_safe,
+                      e.side_effects_reconciled, e.created_at
+               FROM tenant_recovery_audit_events e
+               JOIN tenant_recovery_decisions d
+                 ON d.decision_id = e.decision_id AND d.tenant_id = e.tenant_id
+               WHERE e.tenant_id = ? AND d.task_id = ?
+               ORDER BY e.event_id""",
+            (self._principal.tenant_id, task_id),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def list_recovery_decisions(self, task_id: int) -> list:
         self._require_task(task_id, "tasks:read")
