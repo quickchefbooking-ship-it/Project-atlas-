@@ -139,3 +139,19 @@ def test_invalid_scope_input_is_rejected():
     ]).mark_ready()
     with pytest.raises(ValueError, match="granted_scopes"):
         preview_plan(item, CapabilityRegistry([capability()]), granted_scopes={" "})
+
+
+def test_plan_can_pin_an_exact_capability_version():
+    item = plan([
+        PlanStep(
+            "lookup", "knowledge.lookup", "Retrieve sources", RiskClass.READ_ONLY,
+            capability_version="2",
+        ),
+    ]).mark_ready()
+    registry = CapabilityRegistry([
+        capability(version="1"),
+        capability(version="2"),
+    ])
+    result = preview_plan(item, registry)
+    assert result.steps[0].readiness is StepReadiness.STRUCTURALLY_READY
+    assert result.steps[0].capability_version == "2"
