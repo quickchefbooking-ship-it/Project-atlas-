@@ -296,3 +296,40 @@ def test_retrieval_does_not_expose_application_for_other_lesson_types(monkeypatc
     assert len(lessons) == 1
     assert lessons[0]["validated"] is True
     assert "application" not in lessons[0]
+
+
+
+def test_arithmetic_alias_creation_requires_exact_structured_application(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    lesson = LearningMemory.save_lesson_for_task(
+        "task-learning-test",
+        "arithmetic_alias",
+        "A dozen eggs means twelve.",
+        "reviewed-test-fixture",
+        {"application": {"alias": "a dozen eggs", "expression": "12"}},
+    )
+
+    assert lesson["validated"] is False
+    assert storage.list_lessons(limit=10, validated_only=True) == []
+
+
+@pytest.mark.parametrize("application", [
+    None,
+    {"alias": "a dozen eggs"},
+    {"alias": "a dozen eggs", "expression": "12", "extra": "not allowed"},
+    {"alias": "", "expression": "12"},
+    {"alias": "a dozen eggs", "expression": "x" * 257},
+])
+def test_arithmetic_alias_creation_rejects_malformed_application(monkeypatch, tmp_path, application):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test",
+            "arithmetic_alias",
+            "Malformed arithmetic alias lesson.",
+            "test",
+            {"application": application},
+        )
+
+    assert storage.list_lessons(limit=10) == []
