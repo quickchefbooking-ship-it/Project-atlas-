@@ -42,6 +42,7 @@ def test_tenant_plan_inspection_is_bearer_authenticated_and_tenant_scoped(monkey
     from atlas_engine import storage
 
     monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "core.sqlite"))
+    storage.init_db()
     monkeypatch.setenv("ATLAS_TENANT_DATA_DB_PATH", str(tmp_path / "tenant-plans.sqlite"))
     monkeypatch.setenv("ATLAS_MEMBERSHIP_DB_PATH", str(tmp_path / "memberships.sqlite"))
     for name in ("ATLAS_OIDC_ISSUER", "ATLAS_OIDC_AUDIENCE",
