@@ -212,8 +212,13 @@ class TenantStepExecutionRepository:
                 raise TenantStepPlanNotRunning("Tenant plan must be running before steps can be claimed.")
             self._seed_runs(tenant_id, plan_id)
             self._expire(tenant_id, plan_id, now)
-            dependencies = {s["step_id"]: tuple(s.get("depends_on", ()))
-                            for s in json.loads(plan["plan_json"])["steps"]}
+            plan_steps = {
+                s["step_id"]: s for s in json.loads(plan["plan_json"])["steps"]
+            }
+            dependencies = {
+                step_id: tuple(step.get("depends_on", ()))
+                for step_id, step in plan_steps.items()
+            }
             rows = self.db.execute("""
               SELECT r.step_id,r.attempt_number,r.fencing_token,p.risk
               FROM tenant_professor_step_runs r
@@ -239,6 +244,14 @@ class TenantStepExecutionRepository:
             if selected is None:
                 self.db.commit()
                 return None
+            step_contract = plan_steps.get(selected["step_id"], {})
+            required_scopes = frozenset(step_contract.get("required_scopes", ()))
+            missing_scopes = required_scopes - self.principal.scopes
+            if missing_scopes:
+                self.db.commit()
+                raise TenantStepError(
+                    "Worker lacks required step scopes: " + ", ".join(sorted(missing_scopes))
+                )
             if selected["risk"] in {"external_side_effect", "privileged"}:
                 self.db.commit()
                 raise TenantStepError(
