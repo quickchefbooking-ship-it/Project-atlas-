@@ -207,3 +207,21 @@ A tool connected to ChatGPT is not automatically connected to the AtlasOnePro ru
 The current recovery branch adds a local SQLite source registry and source-document store, content hashing, pending/approved/rejected review states, reviewer metadata, bounded document size and bounded metadata (16 KiB, 32 nesting levels, finite JSON only, credential-like keys rejected), and keyword retrieval limited to approved documents. Task execution now receives approved source documents as reference context.
 
 This is a foundation, not a live connector suite. No external source adapter, vector database, embedding model, background crawler, automatic account sync or production knowledge ingestion is enabled yet. The current reviewer field is audit metadata only; the shared API key is not verified human identity. Before private multi-user sources are connected, add identity-based review permissions, tenant isolation, encryption, audit history and retention/deletion controls.
+
+
+## Voice and conversational interface milestone
+
+The browser prototype is served at `/professor/voice`. It provides a text input, browser speech-recognition input where supported, selectable device speech voices, spoken output, stop controls and a health check against Professor Core. The client requests microphone permission only when the user starts listening. The selected speech language defaults to `en-GB`; available voice names are discovered from the device at runtime.
+
+This separates the user-facing voice channel from the reasoning backend. The authenticated `POST /professor/conversation` boundary currently returns HTTP 503 with an explicit not-configured message. It intentionally does not route arbitrary natural-language text into the restricted arithmetic executor or invent conversational answers.
+
+### Next steps to make Professor conversational
+
+1. Select and approve a conversational model/provider, including cost and data-processing terms.
+2. Implement a provider adapter behind a narrow interface, with timeouts, token/input/output limits, structured errors and safe logging.
+3. Define conversation context and memory policy: short-lived session context first; long-term memory only with provenance, retention and user controls.
+4. Add retrieval from approved knowledge sources with citations and untrusted-source isolation.
+5. Add a tested response endpoint and stream responses to the browser; connect text and speech playback.
+6. Add safety/policy checks and approval gates before any specialist arm or external action is invoked.
+
+No provider has been enabled. The voice interface can demonstrate device speech output and microphone capture, but it cannot yet answer general questions as a conversational Professor.
