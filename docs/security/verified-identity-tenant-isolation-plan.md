@@ -4,7 +4,7 @@ Status: design and policy primitives only. This document does not claim that Atl
 
 ## Current state and security boundary
 
-- The current HTTP dependency authenticates a shared `X-API-Key`; it does not identify an individual human reviewer.
+- The current HTTP dependency authenticates a shared `X-API-Key`; it does not identify an individual human reviewer. The proposal-review route is deliberately disabled with HTTP 503 until verified identity and tenant authorization are configured.
 - `ProposalReviewInput.approved_by` is caller-supplied audit metadata. It is not identity proof.
 - `RequestPrincipal` is an immutable policy value intended to be constructed only by trusted server-side authentication code. There is currently no configured OIDC provider or middleware that can safely construct it.
 - Core task, proposal, lesson and source records are not yet tenant-partitioned. The existing single-host SQLite store is not a multi-tenant isolation boundary.
@@ -23,7 +23,7 @@ Before enabling authenticated user sessions:
 
 ## Proposal-review route migration
 
-- Preserve the current route as unavailable for human approval until verified identity is configured.
+- Keep the current route unavailable for human approval (HTTP 503) until verified identity and tenant authorization are configured.
 - Introduce a server dependency that returns a verified principal or denies the request.
 - Resolve proposal tenant ownership from the database, not from request input.
 - Authorize the principal against that tenant and `lessons:review` before changing status.
@@ -50,4 +50,4 @@ OIDC provider selection, secrets, callback URLs, production database migration, 
 
 ## Current safe status
 
-The pure reviewer policy is implemented and unit-tested. The live review route remains on its legacy shared-API-key boundary and must not be represented as verified-human authorization. No production tenant migration, identity provider, merge or deployment has been performed.
+The pure reviewer policy is implemented and unit-tested. The live proposal-review route fails closed with HTTP 503; a shared API key and caller-supplied `approved_by` value cannot enable approval. No production tenant migration or identity provider has been configured, and no merge or deployment has been performed.
