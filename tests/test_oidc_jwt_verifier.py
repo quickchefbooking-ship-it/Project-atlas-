@@ -137,3 +137,26 @@ def test_oversized_or_empty_token_rejected_before_key_lookup():
     with pytest.raises(ValueError):
         verifier.verify("x" * 8193)
     assert jwks.received_token is None
+
+
+def test_multiple_audiences_require_matching_authorized_party():
+    payload = _payload(aud=["atlas-api", "another-api"])
+    token = _token(payload)
+    verifier = PyJWTTokenVerifier(CONFIG, FakeJWKS(PRIVATE_KEY.public_key()))
+    with pytest.raises(ValueError, match="claims are malformed"):
+        verifier.verify(token)
+
+
+def test_multiple_audiences_accept_matching_authorized_party():
+    payload = _payload(aud=["atlas-api", "another-api"], azp="atlas-api")
+    token = _token(payload)
+    verifier = PyJWTTokenVerifier(CONFIG, FakeJWKS(PRIVATE_KEY.public_key()))
+    assert verifier.verify(token).audiences == ("atlas-api", "another-api")
+
+
+def test_mismatched_authorized_party_is_rejected():
+    payload = _payload(azp="another-client")
+    token = _token(payload)
+    verifier = PyJWTTokenVerifier(CONFIG, FakeJWKS(PRIVATE_KEY.public_key()))
+    with pytest.raises(ValueError, match="claims are malformed"):
+        verifier.verify(token)
