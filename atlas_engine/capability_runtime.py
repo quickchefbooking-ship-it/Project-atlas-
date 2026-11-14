@@ -42,17 +42,22 @@ class CapabilityRuntime:
             raise CapabilityExecutionError("Capability is not installed.")
         properties = definition.input_schema.get("properties", {})
         required = definition.input_schema.get("required", ())
-        if len(required) != 1 or required[0] not in properties:
+        string_fields = [
+            field for field in required
+            if field in properties and properties[field].get("type") == "string"
+        ]
+        if len(string_fields) != 1:
             raise CapabilityExecutionError("Capability requires an unsupported input mapping.")
-        field = required[0]
-        field_schema = properties[field]
-        if field_schema.get("type") != "string":
-            raise CapabilityExecutionError("Capability objective input must be a string.")
-        payload: dict[str, Any] = {field: objective}
-        # Research adapters expose a small bounded result count. The value is
-        # application-selected, not supplied by untrusted plan text.
-        if "limit" in properties:
-            payload["limit"] = 3
+        payload: dict[str, Any] = {string_fields[0]: objective}
+        # The only supported non-text required input is a bounded result limit.
+        # It is selected by application policy, never by untrusted plan text.
+        for field in required:
+            if field == string_fields[0]:
+                continue
+            field_schema = properties[field]
+            if field != "limit" or field_schema.get("type") != "integer":
+                raise CapabilityExecutionError("Capability requires an unsupported input mapping.")
+            payload[field] = min(3, field_schema.get("maximum", 3))
         return payload
 
     def execute(
