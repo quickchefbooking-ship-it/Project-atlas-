@@ -41,6 +41,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/tenant/plans/{plan_id}", "GET"),
         ("/professor/tenant/plans", "POST"),
         ("/professor/tenant/plans/{plan_id}/prepare", "POST"),
+        ("/professor/tenant/plans/{plan_id}/execute-next", "POST"),
     }
     unprotected = []
     for route in app_module.app.routes:
