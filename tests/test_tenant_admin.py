@@ -55,3 +55,15 @@ def test_membership_admin_cannot_be_forged_from_mapping(registry):
 def test_administration_uses_only_principal_tenant(registry):
     provision_tenant_member(registry, ADMIN, ISSUER, "member-a", {"tasks:read"})
     assert registry.resolve_membership(ISSUER, "member-a").tenant_id == "tenant-a"
+
+
+def test_registry_rejects_actor_without_admin_scope(registry):
+    viewer = RequestPrincipal(ISSUER, "viewer", "tenant-a", True, frozenset({"tasks:read"}))
+    with pytest.raises(AuthorizationDenied):
+        registry.provision_membership(ISSUER, "new-user", "tenant-a", {"tasks:read"}, _actor=viewer)
+
+
+def test_registry_rejects_actor_from_another_tenant(registry):
+    other_admin = RequestPrincipal(ISSUER, "admin-b", "tenant-b", True, frozenset({"tenant:members:manage"}))
+    with pytest.raises(AuthorizationDenied):
+        registry.provision_membership(ISSUER, "new-user", "tenant-a", {"tasks:read"}, _actor=other_admin)
