@@ -36,6 +36,7 @@ from atlas_engine.tenant_plan_repository import TenantPlanRepository, TenantPlan
 from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository, TenantStepNotFound, initialize_tenant_step_schema
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
 from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
+from atlas_engine.tenant_plan_lifecycle import router as tenant_plan_lifecycle_router
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
 app.state.tenant_data_path = None
+app.state.tenant_capability_registry = CapabilityRegistry()
+app.include_router(tenant_plan_lifecycle_router)
 
 
 class TenantPlanStepInput(BaseModel):
