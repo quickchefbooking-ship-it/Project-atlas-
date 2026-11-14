@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101a29">
+<title>AtlasOnePro · Talk to Professor</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#edf3fb;background:#101a29;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -10%,#2a4564 0,transparent 48%),#101a29}
+header{padding:24px 20px 18px;text-align:center;border-bottom:1px solid #29394d;background:#101a29cc}
+.mark{width:46px;height:46px;border:1px solid #6b91b9;border-radius:15px;display:grid;place-items:center;margin:0 auto 12px;font-size:22px;color:#b7d8fa}
+.eyebrow{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:#9bb7d5;font-weight:750}
+h1{font-size:1.55rem;margin:7px 0}.sub{color:#aebdd0;font-size:.9rem}
+main{width:min(760px,100%);margin:0 auto;padding:18px 14px 36px}
+.panel{border:1px solid #2b3d53;background:#172537;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 14px 35px #0002}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.status{font-size:.78rem;color:#b7c8dc}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#d1a65d;margin-right:7px}
+.dot.ready{background:#78c5a2}.dot.busy{background:#77a9e8}
+h2{font-size:1rem;margin:0 0 12px}
+#transcript{min-height:220px;max-height:48vh;overflow:auto;display:flex;flex-direction:column;gap:11px;padding:4px 1px}
+.message{max-width:90%;padding:12px 14px;border-radius:14px;line-height:1.48;font-size:.94rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.message.professor{align-self:flex-start;background:#20364d;border:1px solid #36516d}
+.message.you{align-self:flex-end;background:#31577c;border:1px solid #527da5}
+.message small{display:block;font-size:.68rem;opacity:.72;margin-bottom:5px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:1px solid #668db6;border-radius:12px;background:#315a83;color:white;padding:13px 12px;font:inherit;font-weight:700;cursor:pointer}
+button.secondary{background:#1b2b3e;border-color:#425a75;color:#d7e6f6}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #a6cff8;outline-offset:2px}
+textarea,input,select{width:100%;border:1px solid #40566f;border-radius:10px;background:#0f1a28;color:#f3f7fc;padding:12px;font:inherit}
+textarea{min-height:66px;resize:vertical}
+.row{display:flex;gap:9px;align-items:stretch}.row>*{min-width:0}.row textarea{flex:1}.row button{flex:0 0 82px}
+label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
+.note{font-size:.77rem;color:#9eafc3;line-height:1.5;margin:10px 0 0}
+.mic{font-size:1.3rem;margin-right:6px}
+.warning{border-left:3px solid #d3a75e;padding:10px 12px;background:#332b20;color:#f0d9ad;border-radius:5px;font-size:.8rem;line-height:1.5}
+@media(max-width:420px){main{padding:13px 10px 28px}.panel{padding:13px}#transcript{min-height:190px}.message{max-width:96%}}
+</style>
+</head>
+<body>
+<header>
+<div class="mark" aria-hidden="true">A</div>
+<div class="eyebrow">AtlasOnePro · Professor</div>
+<h1>Talk to Professor</h1>
+<div class="sub">Your voice and conversation interface</div>
+</header>
+<main>
+<section class="panel">
+<div class="topline"><h2>Conversation</h2><div class="status" id="state"><span class="dot"></span>Not connected</div></div>
+<div id="transcript" aria-live="polite">
+<div class="message professor"><small>PROFESSOR · INTRODUCTION</small>Hello. I'm Professor, the central assistant for AtlasOnePro. The voice interface is being brought online. You can test the microphone and my spoken voice here; my full conversational reasoning service is not connected yet.</div>
+</div>
+<div class="row">
+<textarea id="message" maxlength="4000" placeholder="Type a message to Professor…" aria-label="Message to Professor"></textarea>
+<button id="send" type="button">Send</button>
+</div>
+<p class="note">Text is available even when microphone access is unavailable. Your conversation is not sent until you press Send.</p>
+</section>
+<section class="panel">
+<h2>Voice controls</h2>
+<div class="controls">
+<button id="listen" type="button"><span class="mic">🎙</span>Start listening</button>
+<button id="stop" class="secondary" type="button" disabled>Stop listening</button>
+<button id="speak" class="secondary" type="button">Test Professor's voice</button>
+<button id="silence" class="secondary" type="button">Stop speaking</button>
+</div>
+<label for="voice">Available voice on this device</label>
+<select id="voice"><option value="">System default</option></select>
+<label for="rate">Speaking pace</label>
+<input id="rate" type="range" min="0.8" max="1.15" step="0.05" value="0.95">
+<p class="note" id="voiceStatus">Voice output uses the speech voices available on your device. Microphone input depends on browser support and permission.</p>
+</section>
+<section class="panel">
+<h2>Connect to Professor Core</h2>
+<label for="apiKey">Instance API key</label>
+<input id="apiKey" type="password" autocomplete="off" placeholder="Enter ATLAS_API_KEY">
+<button id="connect" type="button" style="width:100%;margin-top:10px">Check connection</button>
+<p class="note">The key stays in this page's memory only. It is not saved in browser storage or the page URL. Use a trusted HTTPS connection.</p>
+<div class="note" id="connection">Not checked.</div>
+</section>
+<div class="warning">Honest capability boundary: speech recognition converts your voice to text and speech synthesis reads replies aloud. The current Professor Core does not yet have a general conversational model connected, so this page will not pretend that a scripted fallback is an intelligent answer. External AI remains disabled until separately configured and approved.</div>
+</main>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+ let apiKey = "";
+ let recognition = null;
+ let voices = [];
+ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+ function state(label, kind) {
+   $("state").innerHTML = '<span class="dot ' + (kind || "") + '"></span>' + label;
+ }
+ function addMessage(who, body, label) {
+   const node = document.createElement("div");
+   node.className = "message " + who;
+   const small = document.createElement("small");
+   small.textContent = label || (who === "you" ? "YOU" : "PROFESSOR");
+   const content = document.createElement("div");
+   content.textContent = body;
+   node.append(small, content);
+   $("transcript").appendChild(node);
+   $("transcript").scrollTop = $("transcript").scrollHeight;
+ }
+ function loadVoices() {
+   voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+   const select = $("voice");
+   const selected = select.value;
+   select.replaceChildren(new Option("System default", ""));
+   voices.filter(v => /^en(-|_)/i.test(v.lang)).forEach((voice, i) => {
+     const option = new Option(voice.name + " · " + voice.lang, String(i));
+     select.add(option);
+   });
+   if (selected && Number(selected) < voices.length) select.value = selected;
+ }
+ function speak(text) {
+   if (!("speechSynthesis" in window)) {
+     $("voiceStatus").textContent = "Speech output is not supported in this browser.";
+     return;
+   }
+   window.speechSynthesis.cancel();
+   const utterance = new SpeechSynthesisUtterance(text);
+   const index = $("voice").value;
+   if (index !== "" && voices[Number(index)]) utterance.voice = voices[Number(index)];
+   utterance.lang = utterance.voice ? utterance.voice.lang : "en-GB";
+   utterance.rate = Number($("rate").value);
+   utterance.pitch = 1;
+   utterance.onstart = () => state("Professor speaking", "busy");
+   utterance.onend = () => state("Ready", "ready");
+   utterance.onerror = () => state("Voice output unavailable", "");
+   window.speechSynthesis.speak(utterance);
+ }
+ function startListening() {
+   if (!SpeechRecognition) {
+     $("voiceStatus").textContent = "This browser does not expose speech recognition. Try a supported browser or use the text box.";
+     return;
+   }
+   recognition = new SpeechRecognition();
+   recognition.lang = "en-GB";
+   recognition.interimResults = true;
+   recognition.continuous = false;
+   recognition.onstart = () => { $("listen").disabled = true; $("stop").disabled = false; state("Listening", "busy"); };
+   recognition.onresult = event => {
+     let finalText = "";
+     let interim = "";
+     for (let i = event.resultIndex; i < event.results.length; i++) {
+       if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
+       else interim += event.results[i][0].transcript;
+     }
+     $("message").value = finalText || interim;
+     if (finalText) $("message").dataset.voiceFinal = "true";
+   };
+   recognition.onerror = event => { $("voiceStatus").textContent = "Microphone: " + event.error + ". You can still type."; };
+   recognition.onend = () => { $("listen").disabled = false; $("stop").disabled = true; state("Ready", "ready"); };
+   try { recognition.start(); } catch (error) { $("voiceStatus").textContent = error.message; }
+ }
+ async function sendMessage() {
+   const value = $("message").value.trim();
+   if (!value) return;
+   addMessage("you", value);
+   $("message").value = "";
+   $("message").dataset.voiceFinal = "";
+   if (!apiKey) {
+     const reply = "I've received your message through the interface, but the Professor Core is not connected. Enter the instance API key and check the connection. The conversational reasoning service still needs to be connected before I can answer questions.";
+     addMessage("professor", reply);
+     speak(reply);
+     return;
+   }
+   try {
+     const response = await fetch("/professor/conversation", {
+       method: "POST",
+       headers: {"Content-Type": "application/json", "X-API-Key": apiKey},
+       body: JSON.stringify({message: value})
+     });
+     const data = await response.json().catch(() => ({}));
+     if (!response.ok) throw new Error(data.detail || ("Request failed (" + response.status + ")"));
+     addMessage("professor", data.reply || "No response was returned.");
+     if (data.reply) speak(data.reply);
+   } catch (error) {
+     const reply = error.message;
+     addMessage("professor", reply);
+     speak(reply);
+   }
+ }
+ $("listen").addEventListener("click", startListening);
+ $("stop").addEventListener("click", () => { if (recognition) recognition.stop(); });
+ $("send").addEventListener("click", sendMessage);
+ $("message").addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+ $("speak").addEventListener("click", () => speak("Hello. I'm Professor, the central assistant for AtlasOnePro. My voice channel is ready for testing."));
+ $("silence").addEventListener("click", () => { if (window.speechSynthesis) window.speechSynthesis.cancel(); state("Ready", "ready"); });
+ $("connect").addEventListener("click", async () => {
+   apiKey = $("apiKey").value.trim();
+   if (!apiKey) { $("connection").textContent = "Enter the API key first."; return; }
+   try {
+     const response = await fetch("/health", {headers: {"X-API-Key": apiKey}});
+     if (!response.ok) throw new Error("Core health check returned " + response.status + ".");
+     const data = await response.json();
+     $("connection").textContent = "Connected to " + (data.service || "Professor Core") + ".";
+     state("Core reachable", "ready");
+   } catch (error) {
+     apiKey = "";
+     $("connection").textContent = error.message;
+     state("Not connected", "");
+   }
+ });
+ if (window.speechSynthesis) {
+   loadVoices();
+   window.speechSynthesis.onvoiceschanged = loadVoices;
+ } else $("voiceStatus").textContent = "Speech output is not supported in this browser.";
+ if (!SpeechRecognition) $("voiceStatus").textContent += " Speech recognition is not exposed here; text input remains available.";
+})();
+</script>
+</body>
+</html>
