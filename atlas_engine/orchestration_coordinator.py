@@ -52,6 +52,7 @@ _RISK_LEVEL = {
 }
 _CAPABILITY_RISK = {
     "read_only": RiskClass.READ_ONLY,
+    "local_computation": RiskClass.LOCAL_COMPUTATION,
     "local_write": RiskClass.DRAFT_CREATION,
     "external_write": RiskClass.EXTERNAL_SIDE_EFFECT,
     "privileged": RiskClass.PRIVILEGED,
