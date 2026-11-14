@@ -160,6 +160,7 @@ def submit_evidence_review(
             "bundle": reviewed,
         }
     except AuthorizationDenied:
+        connection.rollback()
         raise HTTPException(status_code=403, detail="Evidence review access denied.") from None
     except (TenantStepNotFound, TenantPlanNotFound):
         connection.rollback()
