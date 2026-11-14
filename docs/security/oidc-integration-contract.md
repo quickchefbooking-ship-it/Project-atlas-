@@ -404,3 +404,12 @@ The branch serves a minimal reviewer page at `/professor/evidence-review`. It lo
 For this initial interface, a reviewer pastes a short-lived API access token into a password field. The token is held only in page memory, is not written to browser storage or a URL, and can be cleared from the page. Use HTTPS and a trusted device. This is not a browser login/session implementation; secure HttpOnly cookie sessions, CSRF controls, login/callback/logout, refresh and revocation must be implemented after the identity provider and session model are selected.
 
 The page renders the source register and existing claim annotations, and permits explicit supports/challenges/mentions annotations against a selected source. It does not auto-extract claims, score confidence or imply that reviewer labels establish truth. API errors for authentication, permission, missing bundles, invalid input and unavailable identity/storage are presented as distinct user-facing messages.
+
+
+## Professor report presentation
+
+The branch serves a read-only report page at `/professor/report`. A reviewer supplies a short-lived OIDC bearer token and a plan ID; the page calls the tenant-scoped plan inspection endpoint and selects only a succeeded step result whose report type is `professor_evidence_report`. It does not execute plans, modify annotations, accept tenant IDs, or persist credentials in browser storage.
+
+The page presents the report summary, findings, challenges, disagreements, evidence gaps, source register, duplicate record groups and limitations. Source URLs are rendered as links only when they are HTTPS URLs. Report text is inserted as text, not interpreted as HTML. The report's own confidence and overall-conclusion fields are preserved; the interface explicitly states that reviewer annotations are not proof and no truth conclusion is drawn from labels alone.
+
+The page requires a completed evidence → evaluation → report workflow. It does not silently generate or refresh a report if the underlying review revision changes; the plan must be run through the report capability again so the report is built from the intended reviewed evidence. Browser login/session support remains a separate deployment requirement.
