@@ -1,9 +1,9 @@
-"""Verifiable contract for lesson-aware executors.
+"""Verifiable contract for lesson-aware executor receipts.
 
-An executor must explicitly report which validated lesson IDs it consumed.
-This module validates that receipt against the exact context Professor supplied.
-It does not execute a model, persist attribution, or claim that a lesson improved
-an outcome; durable attribution requires a later atomic storage integration.
+An executor explicitly reports which validated lesson IDs it claims to have
+consumed. Professor validates the receipt against the exact supplied context
+and atomically persists accepted IDs with the task outcome. This is auditable
+attribution, not cryptographic proof of semantic use or evidence of improvement.
 """
 from __future__ import annotations
 
