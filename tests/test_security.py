@@ -36,6 +36,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
     }
+    verified_identity_routes = {("/identity/me", "GET")}
     unprotected = []
     for route in app_module.app.routes:
         if not isinstance(route, APIRoute):
@@ -43,11 +44,17 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         for method in route.methods or set():
             if (route.path, method) in intentionally_public:
                 continue
-            has_api_key_dependency = any(
-                dependency.call is app_module.require_api_key
-                for dependency in route.dependant.dependencies
-            )
-            if not has_api_key_dependency:
+            if (route.path, method) in verified_identity_routes:
+                protected = any(
+                    dependency.call is app_module.require_verified_principal
+                    for dependency in route.dependant.dependencies
+                )
+            else:
+                protected = any(
+                    dependency.call is app_module.require_api_key
+                    for dependency in route.dependant.dependencies
+                )
+            if not protected:
                 unprotected.append(f"{method} {route.path}")
 
     assert unprotected == []
@@ -149,3 +156,16 @@ def test_proposal_review_is_disabled_even_with_shared_api_key_until_verified_ide
 
     assert response.status_code == 503
     assert "verified human identity" in response.json()["detail"]
+
+
+
+def test_identity_introspection_does_not_accept_shared_api_key_as_human_identity(monkeypatch):
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    client = TestClient(app_module.app)
+
+    response = client.get("/identity/me", headers={"X-API-Key": "test-secret"})
+
+    assert response.status_code == 503
+    assert "Verified user identity is not configured" in response.json()["detail"]
