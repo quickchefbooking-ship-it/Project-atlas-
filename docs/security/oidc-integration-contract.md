@@ -321,3 +321,25 @@ The runtime includes `research.professor.report@1.0.0`. It accepts a completed e
 - Duplicate-record notices, combined limitations and a reviewer note.
 
 The report builder rejects evaluation references to sources absent from the supplied bundle and rejects unknown evaluation statuses. It does not generate a new overall truth conclusion, confidence score or unsupported source-quality judgement. The capability is read-only and requires both completed dependencies from the same tenant-scoped plan hand-off.
+
+
+## Explicit reviewer annotation and audit trail
+
+The new `atlas_engine/reviewer_annotations.py` primitive accepts only explicit
+reviewer-supplied claim text, source ID and relation labels
+(`supports`, `challenges` or `mentions`). It rejects unknown source IDs,
+unsupported fields, inconsistent claim text, duplicate submissions and
+unbounded input. It returns a copy of the evidence bundle and records a
+reviewer identifier and review timestamp on every annotation; the original
+bundle is not mutated.
+
+The evaluation engine now carries those reviewer attribution records forward,
+and the Professor report includes them beside each classified claim. Reviewer
+labels remain interpretations rather than proof, and confidence remains
+`not_scored`. The annotation primitive itself does not authenticate a user:
+the eventual HTTP review endpoint must derive reviewer identity from the
+verified tenant principal, never from a client-supplied reviewer field, and
+must persist the reviewed bundle under the same tenant boundary. This commit
+establishes and tests the validation and audit-data contract; it does not
+claim that a browser review screen or authenticated annotation endpoint is
+already available.
