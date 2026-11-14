@@ -1,5 +1,6 @@
 import sqlite3
 import time
+import json
 
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,7 @@ from atlas_engine.oidc_contract import OIDCProviderConfig, VerifiedTokenClaims
 from atlas_engine.plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.tenant_plan_repository import TenantPlanRepository
+from atlas_engine.source_adapters import SourceDocument
 
 ISSUER = "https://identity.execution.test/"
 CONFIG = OIDCProviderConfig(
@@ -48,7 +50,7 @@ def setup(monkeypatch, tmp_path):
     scopes = {
         "plans:read", "plans:write", "plans:execute",
         "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
-        "compute:local",
+        "compute:local", "research:public",
     }
     memberships.provision_membership(ISSUER, "operator", "tenant-a", scopes)
     memberships.provision_membership(ISSUER, "viewer", "tenant-a", scopes - {"plans:execute"})
@@ -115,5 +117,74 @@ def test_execute_next_does_not_run_external_or_privileged_capabilities(monkeypat
         response = client.post("/professor/tenant/plans/math-plan/execute-next", headers=headers)
         assert response.status_code == 200
         assert response.json()["result"]["value"] == 4
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_execute_next_runs_read_only_crossref_research_and_preserves_citations(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        metadata = {
+            "doi": "10.1234/atlas.test",
+            "publisher": "Example Academic Press",
+            "retrieved_at": "2026-11-14T12:00:00+00:00",
+            "abstract": "A public abstract used as untrusted source material.",
+        }
+        document = SourceDocument(
+            title="A study of safe AI orchestration",
+            uri="https://doi.org/10.1234/atlas.test",
+            content="Crossref scholarly metadata\n" + json.dumps(metadata),
+            metadata=metadata,
+        )
+        calls = []
+        def fake_search(query, limit=5):
+            calls.append((query, limit))
+            return [document]
+
+        monkeypatch.setattr(
+            "atlas_engine.capability_runtime.search_crossref_works", fake_search
+        )
+        from atlas_engine import storage
+        tenant_path = str(tmp_path / "tenant.sqlite")
+        connection = sqlite3.connect(tenant_path)
+        connection.row_factory = sqlite3.Row
+        scopes = frozenset({
+            "plans:read", "plans:write", "plans:execute",
+            "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+            "compute:local", "research:public",
+        })
+        principal = RequestPrincipal(ISSUER, "operator", "tenant-a", True, scopes)
+        plans = TenantPlanRepository(connection, principal)
+        plans.create(ProfessorPlan(
+            "research-plan", "Find public scholarly evidence",
+            ("Return source-linked scholarly metadata",),
+            (PlanStep(
+                "search", "research.crossref.search",
+                "safe AI orchestration", RiskClass.READ_ONLY,
+                required_scopes=("research:public",),
+                capability_version="1.0.0",
+            ),),
+        ))
+        connection.close()
+
+        prepared = client.post(
+            "/professor/tenant/plans/research-plan/prepare", headers=headers
+        )
+        assert prepared.status_code == 200
+        assert prepared.json()["state"] == "ready"
+
+        response = client.post(
+            "/professor/tenant/plans/research-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "completed"
+        assert body["plan_state"] == "succeeded"
+        assert body["result"]["provider"] == "Crossref"
+        assert body["result"]["retrieved_count"] == 1
+        assert body["result"]["sources"][0]["uri"] == "https://doi.org/10.1234/atlas.test"
+        assert body["result"]["sources"][0]["abstract"] == metadata["abstract"]
+        assert "untrusted" in body["result"]["notice"]
+        assert calls == [("safe AI orchestration", 3)]
     finally:
         client.__exit__(None, None, None)
