@@ -212,37 +212,38 @@ class StepExecutionRepository:
         try:
             conn.execute("BEGIN IMMEDIATE")
             plan = conn.execute(
-                "SELECT state FROM professor_plans WHERE plan_id = ?", (plan_id,)
+                "SELECT state, plan_json FROM professor_plans WHERE plan_id = ?", (plan_id,)
             ).fetchone()
             if plan is None:
                 raise StepNotFound("Plan was not found.")
             if plan["state"] != PlanState.RUNNING.value:
                 raise StepPlanNotRunning("Plan must be running before steps can be claimed.")
             self._expire_claims(conn, plan_id, now)
-            row = conn.execute(
-                """SELECT s.step_id, s.attempt_number, s.fencing_token
-                   FROM professor_plan_steps AS s
-                   WHERE s.plan_id = ? AND s.state = 'pending'
-                     AND NOT EXISTS (
-                       SELECT 1
-                       FROM json_each(
-                         (SELECT json_extract(p.plan_json, '$.steps')
-                          FROM professor_plans AS p WHERE p.plan_id = s.plan_id)
-                       ) AS step_json
-                       WHERE json_extract(step_json.value, '$.step_id') = s.step_id
-                         AND EXISTS (
-                           SELECT 1 FROM json_each(step_json.value, '$.depends_on') AS dep
-                           WHERE NOT EXISTS (
-                             SELECT 1 FROM professor_plan_steps AS done
-                             WHERE done.plan_id = s.plan_id
-                               AND done.step_id = dep.value
-                               AND done.state = 'succeeded'
-                           )
-                         )
-                     )
-                   ORDER BY s.ordinal LIMIT 1""",
+            plan_steps = {
+                item["step_id"]: tuple(item.get("depends_on", ()))
+                for item in json.loads(plan["plan_json"])["steps"]
+            }
+            pending_rows = conn.execute(
+                """SELECT step_id, attempt_number, fencing_token
+                   FROM professor_plan_steps
+                   WHERE plan_id = ? AND state = 'pending'
+                   ORDER BY ordinal""",
                 (plan_id,),
-            ).fetchone()
+            ).fetchall()
+            row = next(
+                (
+                    candidate for candidate in pending_rows
+                    if all(
+                        conn.execute(
+                            """SELECT state FROM professor_plan_steps
+                               WHERE plan_id = ? AND step_id = ?""",
+                            (plan_id, dependency),
+                        ).fetchone()["state"] == "succeeded"
+                        for dependency in plan_steps[candidate["step_id"]]
+                    )
+                ),
+                None,
+            )
             if row is None:
                 conn.commit()
                 return None
