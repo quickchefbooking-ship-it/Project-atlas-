@@ -50,6 +50,7 @@ class PlanStep:
     expected_output: str = ""
     timeout_seconds: int = 30
     resource_budget: int = 1
+    capability_version: str | None = None
 
     def __post_init__(self) -> None:
         for value, label in (
@@ -79,6 +80,12 @@ class PlanStep:
             raise PlanValidationError("resource_budget must be between 1 and 100.")
         if not isinstance(self.expected_output, str) or len(self.expected_output) > MAX_PLAN_TEXT:
             raise PlanValidationError("expected_output must be a bounded string.")
+        if self.capability_version is not None and (
+            not isinstance(self.capability_version, str)
+            or not self.capability_version.strip()
+            or len(self.capability_version) > 64
+        ):
+            raise PlanValidationError("capability_version must be a non-empty string of at most 64 characters.")
 
 
 @dataclass(frozen=True)
