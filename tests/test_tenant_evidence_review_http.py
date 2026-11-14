@@ -231,9 +231,11 @@ def test_ask_professor_answers_only_from_completed_tenant_report(monkeypatch, tm
         tenant_path = str(tmp_path / "tenant.sqlite")
         db = sqlite3.connect(tenant_path)
         db.execute("""
-          UPDATE tenant_professor_step_runs
-          SET state='succeeded',result_json=?
-          WHERE tenant_id='tenant-a' AND plan_id='review-plan' AND step_id='report'
+          INSERT INTO tenant_professor_step_runs
+            (tenant_id,plan_id,step_id,state,result_json)
+          VALUES('tenant-a','review-plan','report','succeeded',?)
+          ON CONFLICT(tenant_id,plan_id,step_id)
+          DO UPDATE SET state='succeeded',result_json=excluded.result_json
         """, (json.dumps(report),))
         db.commit()
         db.close()
