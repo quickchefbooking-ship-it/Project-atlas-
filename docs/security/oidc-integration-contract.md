@@ -343,3 +343,35 @@ must persist the reviewed bundle under the same tenant boundary. This commit
 establishes and tests the validation and audit-data contract; it does not
 claim that a browser review screen or authenticated annotation endpoint is
 already available.
+
+
+## Authenticated tenant evidence review API
+
+The authenticated review API is now exposed at:
+
+- `POST /professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review`
+- `GET /professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review`
+
+Both routes require a verified OIDC principal and the server-provisioned
+`evidence:review` scope. The step repository separately enforces
+`steps:read`. The server resolves the plan and completed step inside the
+principal's tenant; callers cannot submit a tenant ID, bundle contents,
+reviewer ID or review timestamp. Only a succeeded
+`research.evidence.bundle` step with schema version 1 is eligible.
+
+Reviewer attribution is a stable pseudonymous digest of the verified issuer
+and subject. Review timestamps are generated server-side. Each accepted
+submission appends a new immutable revision to
+`tenant_evidence_reviews`; update and delete triggers protect the audit
+history. The original completed step result is never overwritten. The GET
+route returns the latest reviewed bundle, or the original bundle with
+`awaiting_review` status before the first submission.
+
+The HTTP API and tenant schema are implemented with route tests for successful
+persistence and retrieval, rejection of client-supplied reviewer identity, and
+missing review scope. This is an API foundation, not yet a browser review
+screen. The evaluation/report plan capabilities still consume their declared
+completed plan dependencies; they do not automatically substitute the latest
+review revision. A subsequent integration step must make reviewed revisions
+available to evaluation/report execution without weakening the tenant or
+dependency boundaries.
