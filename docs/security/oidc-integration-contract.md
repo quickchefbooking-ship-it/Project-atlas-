@@ -413,3 +413,12 @@ The branch serves a read-only report page at `/professor/report`. A reviewer sup
 The page presents the report summary, findings, challenges, disagreements, evidence gaps, source register, duplicate record groups and limitations. Source URLs are rendered as links only when they are HTTPS URLs. Report text is inserted as text, not interpreted as HTML. The report's own confidence and overall-conclusion fields are preserved; the interface explicitly states that reviewer annotations are not proof and no truth conclusion is drawn from labels alone.
 
 The page requires a completed evidence → evaluation → report workflow. It does not silently generate or refresh a report if the underlying review revision changes; the plan must be run through the report capability again so the report is built from the intended reviewed evidence. Browser login/session support remains a separate deployment requirement.
+
+
+## Grounded Professor report questions
+
+The tenant-authenticated `POST /professor/tenant/plans/{plan_id}/ask` route accepts a bounded question and retrieves from a succeeded `research.professor.report` step belonging to the verified principal's tenant. It requires the existing `steps:read` boundary through the tenant step repository; the client cannot nominate a tenant, report body, reviewer or source set. Missing reports return a conflict response and cross-tenant or unreadable plans remain unavailable.
+
+This first question interface is intentionally deterministic report retrieval, not an LLM or a claim of general conversational reasoning. It matches question terms against report claim IDs, claims, statuses and interpretations; direct category questions can retrieve findings, challenges, disagreements and evidence gaps. Responses preserve claim IDs and source IDs, include report limitations, cap returned records, and say when no report passage matches. Source text is treated as data and is never executed as instructions. The endpoint invokes no capabilities, external tools, plan execution, writes or model provider.
+
+The report page's Ask The Professor panel calls this route using the same short-lived OIDC bearer token held in page memory. It renders returned content as text, not HTML. The separate general conversation endpoint remains disabled until a real reasoning provider is selected, configured and security-tested. No paid provider or secret is enabled by this change.
