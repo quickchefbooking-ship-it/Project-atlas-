@@ -127,3 +127,44 @@ of the existing global application routes. Existing proposal review remains
 disabled. Do not describe the application as having verified-user
 authentication or production tenant isolation until those remaining pieces
 and the route-by-route data migration have been implemented and tested.
+
+
+## Cryptographic verifier and opt-in application wiring
+
+The branch now includes `atlas_engine/oidc_jwt_verifier.py`, implemented with
+pinned `PyJWT[crypto]`. It obtains signing keys only from the deployment's
+configured HTTPS JWKS URI, restricts verification to the configured algorithm
+allowlist, and verifies the signature, exact issuer, API audience, expiry and
+not-before claims. It requires `exp`, `nbf`, `iss`, `sub` and `aud`; validates
+the returned claim types; and enforces `azp` when multiple audiences are present.
+JWKS transport failures are distinguished from rejected/unknown signing keys.
+The JWKS client uses a bounded five-second timeout and a five-minute key-set
+cache, with PyJWT's key-refresh behavior for unknown key IDs.
+
+The FastAPI composition root now builds this verifier only when all five
+deployment settings are present:
+
+- `ATLAS_OIDC_ISSUER` — exact configured issuer
+- `ATLAS_OIDC_AUDIENCE` — this API's audience
+- `ATLAS_OIDC_JWKS_URI` — trusted HTTPS signing-key endpoint
+- `ATLAS_OIDC_ALLOWED_ALGORITHMS` — explicit comma-separated algorithm allowlist
+- `ATLAS_MEMBERSHIP_DB_PATH` — server-controlled membership database path
+
+If any setting is missing or configuration is invalid, verified identity
+remains disabled. The isolated membership registry is initialized at that
+configured path; membership provisioning remains a trusted administrative
+operation and there is no public provisioning endpoint.
+
+`GET /identity/me` is the first route protected by the verified bearer
+principal. It returns only the authenticated issuer, subject, tenant and
+server-assigned scopes. This is an integration diagnostic endpoint, not a
+substitute for tenant-aware application routes. Existing global task/source/
+proposal routes are not yet tenant-scoped, and proposal review remains
+disabled. Do not attach the dependency to those routes until their storage
+ownership and tenant predicates are migrated and tested.
+
+The verifier and configuration tests use generated RSA keys and injected JWKS
+clients; they do not call a real identity provider or prove a production
+provider's discovery, key rotation, login, callback, refresh, logout, MFA or
+session behavior. Provider selection and real deployment configuration remain
+explicit gates. Do not add real issuer secrets or tokens to the repository.
