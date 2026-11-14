@@ -395,3 +395,12 @@ executor lacks that scope, the hand-off is denied rather than silently using
 the unreviewed bundle. The original step result is never modified. When no
 review revision exists, the original bundle remains the input and the
 evaluation continues to reflect the absence of reviewer annotations.
+
+
+## Browser evidence-review interface
+
+The branch serves a minimal reviewer page at `/professor/evidence-review`. It loads only the static interface without exposing tenant evidence. Evidence retrieval and annotation submission still use the authenticated review API and require a verified OIDC bearer token with the `evidence:review` scope. The page does not accept a tenant ID, reviewer ID or review timestamp; those values remain server-derived.
+
+For this initial interface, a reviewer pastes a short-lived API access token into a password field. The token is held only in page memory, is not written to browser storage or a URL, and can be cleared from the page. Use HTTPS and a trusted device. This is not a browser login/session implementation; secure HttpOnly cookie sessions, CSRF controls, login/callback/logout, refresh and revocation must be implemented after the identity provider and session model are selected.
+
+The page renders the source register and existing claim annotations, and permits explicit supports/challenges/mentions annotations against a selected source. It does not auto-extract claims, score confidence or imply that reviewer labels establish truth. API errors for authentication, permission, missing bundles, invalid input and unavailable identity/storage are presented as distinct user-facing messages.
