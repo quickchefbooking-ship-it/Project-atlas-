@@ -14,6 +14,9 @@ ALLOWED_SCOPES = frozenset({
     "evaluations:read", "evaluations:write",
     "lessons:read", "lessons:write",
     "proposals:read", "proposals:write",
+    # Reserved for a future explicitly provisioned tenant administrator.
+    # No starter provider role is mapped to this permission.
+    "tenant:members:manage",
 })
 
 # Deliberately narrow starter policy. Proposal review is not granted here.
