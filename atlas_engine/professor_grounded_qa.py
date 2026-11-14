@@ -90,7 +90,7 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
         }
 
     # For a specific claim, return only exact lexical matches from claim text.
-    terms = {word for word in re.findall(r"[a-z0-9]{3,}", q) if word not in {"what", "with", "does", "this", "that", "from", "about", "tell", "show", "report"}}
+    terms = {word for word in re.findall(r"[a-z0-9]{3,}", q) if word not in {"what", "with", "does", "this", "that", "from", "about", "tell", "show", "report", "the", "and", "for", "are", "was", "is", "how", "why", "can", "you", "your", "who", "when", "where"}}
     candidates = []
     for key, _label in _SECTIONS:
         for item in items_for(key):
@@ -117,7 +117,7 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
                 "interpretation": item.get("interpretation", ""),
             })
         return {
-            "answer": f"I found {len(records)} report item(s) matching your wording. These are report annotations, not independently verified facts.",
+            "answer": f"I found {len(records)} report item(s) matching your wording. These annotations are not independent verification of the underlying facts.",
             "basis": "lexical_claim_match",
             "items": records,
             "limitations": report.get("limitations", []),
