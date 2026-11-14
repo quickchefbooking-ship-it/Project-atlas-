@@ -363,6 +363,12 @@ class TenantStepExecutionRepository:
         tenant_id = self._auth("steps:read")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
             raise ValueError("limit must be between 1 and 500.")
+        exists = self.db.execute("""
+          SELECT 1 FROM tenant_professor_step_runs
+          WHERE tenant_id=? AND plan_id=? AND step_id=?
+        """, (tenant_id, plan_id, step_id)).fetchone()
+        if exists is None:
+            raise TenantStepNotFound("Plan step was not found.")
         rows = self.db.execute("""
           SELECT * FROM (
             SELECT * FROM tenant_professor_step_events
