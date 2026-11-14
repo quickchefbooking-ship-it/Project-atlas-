@@ -18,7 +18,7 @@ and permissions are derived server-side. The request accepts only a
 - Answers only from one completed Professor evidence report in that plan.
 - Returns source IDs, claim IDs and recorded report sections where relevant.
 - Returns an explicit insufficient-context answer when the report cannot answer.
-- Labels the mode `deterministic_report_grounded`.
+- Labels the mode `deterministic_report_lookup`.
 - Does not call an LLM, access the web, invoke capabilities, execute a plan,
   change evidence reviews, or persist conversation history.
 
