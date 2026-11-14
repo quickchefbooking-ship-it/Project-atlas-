@@ -6,6 +6,7 @@ Raw tokens are never logged or returned. Client tenant/role/scope fields are
 never read; membership and permissions come only from the server registry.
 """
 from dataclasses import dataclass
+import sqlite3
 import re
 import time
 from typing import Optional
@@ -80,10 +81,10 @@ def require_verified_principal(
         )
     try:
         return service.authenticate(match.group(1))
-    except (IdentityVerifierUnavailable, OIDCVerifierUnavailable):
+    except (IdentityVerifierUnavailable, OIDCVerifierUnavailable, sqlite3.Error):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Identity verification is temporarily unavailable.",
+            detail="Identity verification or membership lookup is temporarily unavailable.",
         ) from None
     except Exception:
         # Do not leak signature, issuer, membership or token parsing details.
