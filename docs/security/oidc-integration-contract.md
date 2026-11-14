@@ -101,3 +101,29 @@ Before selecting a vendor, evaluate each candidate against the same evidence che
 | Portability | Standards-based export, custom domain/issuer options and practical exit plan |
 
 No provider is selected by this scorecard. A decision requires current vendor evidence, expected user volumes, budget and legal/data-processing review. Keep the application provider-neutral until that comparison is complete.
+
+
+## Implemented HTTP bearer boundary (adapter still unconfigured)
+
+`atlas_engine/http_identity.py` now provides a FastAPI dependency and immutable
+`VerifiedIdentityService` composition object. It accepts only a bounded
+Authorization bearer header, delegates cryptographic verification to the
+configured `TokenVerifier`, rechecks issuer/audience and token time claims,
+then resolves the subject through the server-side membership registry.
+Client-supplied tenant, role and scope fields are not read. Multiple active
+memberships are rejected rather than guessed. Raw tokens and verifier details
+are not returned in HTTP errors or logged by this boundary.
+
+The dependency returns HTTP 503 when no `VerifiedIdentityService` is installed,
+HTTP 401 for invalid credentials or membership, and HTTP 503 for an explicitly
+reported verifier outage. A deployment must install the service through
+server-side application configuration; it must never be populated from a
+request body or environment values containing raw user tokens.
+
+This is an integration primitive, not a live login system. There is still no
+cryptographic verifier implementation, configured issuer/JWKS, HTTP route
+using this dependency, login/callback/session flow, or tenant-aware conversion
+of the existing global application routes. Existing proposal review remains
+disabled. Do not describe the application as having verified-user
+authentication or production tenant isolation until those remaining pieces
+and the route-by-route data migration have been implemented and tested.
