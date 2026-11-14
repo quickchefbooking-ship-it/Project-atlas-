@@ -54,7 +54,7 @@ def test_tenant_plan_inspection_is_bearer_authenticated_and_tenant_scoped(monkey
     memberships.create_tenant("tenant-a", "Tenant A")
     memberships.create_tenant("tenant-b", "Tenant B")
     memberships.provision_membership(
-        ISSUER, "alice", "tenant-a", {"plans:read", "steps:read"}
+        ISSUER, "alice", "tenant-a", {"plans:read", "steps:read", "plans:write"}
     )
     memberships.provision_membership(
         ISSUER, "bob", "tenant-b", {"plans:read", "steps:read"}
@@ -87,6 +87,45 @@ def test_tenant_plan_inspection_is_bearer_authenticated_and_tenant_scoped(monkey
         )
         connection.close()
 
+        create_response = client.post(
+            "/professor/tenant/plans",
+            headers={"Authorization": "Bearer valid-test-token"},
+            json={
+                "objective": "Prepare a research brief",
+                "acceptance_criteria": ["Sources are recorded"],
+                "steps": [{
+                    "step_id": "collect",
+                    "capability": "knowledge.search",
+                    "objective": "Find relevant sources",
+                    "risk": "read_only",
+                    "required_scopes": ["research:read"],
+                }],
+            },
+        )
+        assert create_response.status_code == 201
+        created = create_response.json()
+        assert created["state"] == "draft"
+        assert created["execution_enabled"] is False
+        assert created["tenant_id"] == "tenant-a"
+
+        # Approval and execution fields cannot be smuggled into draft creation.
+        forged_approval = client.post(
+            "/professor/tenant/plans",
+            headers={"Authorization": "Bearer valid-test-token"},
+            json={
+                "objective": "Forged approval",
+                "acceptance_criteria": ["No"],
+                "steps": [{
+                    "step_id": "send",
+                    "capability": "mail.send",
+                    "objective": "Send a message",
+                    "risk": "external_side_effect",
+                }],
+                "approval_reference": "attacker-controlled",
+            },
+        )
+        assert forged_approval.status_code == 422
+
         response = client.get(
             "/professor/tenant/plans/plan-a",
             headers={"Authorization": "Bearer valid-test-token"},
@@ -113,6 +152,21 @@ def test_tenant_plan_inspection_is_bearer_authenticated_and_tenant_scoped(monkey
             headers={"Authorization": "Bearer valid-test-token"},
         )
         assert insufficient_scope.status_code == 403
+        denied_create = client.post(
+            "/professor/tenant/plans",
+            headers={"Authorization": "Bearer valid-test-token"},
+            json={
+                "objective": "No write permission",
+                "acceptance_criteria": ["No"],
+                "steps": [{
+                    "step_id": "read",
+                    "capability": "knowledge.search",
+                    "objective": "Search",
+                    "risk": "read_only",
+                }],
+            },
+        )
+        assert denied_create.status_code == 403
 
         # A shared API key is not a substitute for a verified human identity.
         api_key_only = client.get(
