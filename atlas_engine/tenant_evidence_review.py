@@ -230,3 +230,10 @@ def professor_evidence_review_ui():
     """Serve the browser evidence-review interface; all evidence data stays behind OIDC."""
     page = Path(__file__).resolve().parent.parent / "static" / "professor_evidence_review.html"
     return FileResponse(page, media_type="text/html")
+
+
+@router.get("/professor/report", include_in_schema=False)
+def professor_report_ui():
+    """Serve the read-only, tenant-authenticated Professor report interface."""
+    page = Path(__file__).resolve().parent.parent / "static" / "professor_report.html"
+    return FileResponse(page, media_type="text/html")
