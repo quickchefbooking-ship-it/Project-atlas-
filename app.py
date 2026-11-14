@@ -24,6 +24,10 @@ from atlas_engine.source_adapters import import_json_batch, stage_adapter_result
 from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, search_crossref_works, PublicSourceError
 import logging
 from atlas_engine.public_web_retrieval import fetch_public_web_page
+from atlas_engine.http_identity import VerifiedIdentityService, require_verified_principal
+from atlas_engine.oidc_contract import OIDCProviderConfig
+from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
+from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +65,52 @@ async def lifespan(app: FastAPI):
     if storage.get_source("public-web") is None:
         register_source("public-web", "Allowlisted Public Web Pages", "allowlisted_public_web", access_mode="read_only", metadata={"scope": "approved public HTTPS hosts; HTML/plain text only; pending review"})
     logger.info("Imported %s new curated knowledge documents", imported)
+    try:
+        identity_service = _identity_service_from_environment()
+        app.state.identity_service = identity_service
+        if identity_service is not None:
+            logger.info("Verified identity boundary configured from deployment settings")
+    except Exception:
+        # Do not start a partially configured identity service. The dependency
+        # remains unavailable (503) until all trusted settings are corrected.
+        app.state.identity_service = None
+        logger.error("OIDC identity configuration is invalid; verified identity remains disabled")
     yield
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
+app.state.identity_service = None
+
+
+def _identity_service_from_environment() -> Optional[VerifiedIdentityService]:
+    """Build the verifier only from complete deployment-owned OIDC settings."""
+    required = (
+        "ATLAS_OIDC_ISSUER",
+        "ATLAS_OIDC_AUDIENCE",
+        "ATLAS_OIDC_JWKS_URI",
+        "ATLAS_OIDC_ALLOWED_ALGORITHMS",
+        "ATLAS_MEMBERSHIP_DB_PATH",
+    )
+    values = {name: os.getenv(name) for name in required}
+    if not all(values.values()):
+        return None
+    algorithms = frozenset(
+        item.strip() for item in values["ATLAS_OIDC_ALLOWED_ALGORITHMS"].split(",")
+        if item.strip()
+    )
+    config = OIDCProviderConfig(
+        issuer=values["ATLAS_OIDC_ISSUER"],
+        audience=values["ATLAS_OIDC_AUDIENCE"],
+        jwks_uri=values["ATLAS_OIDC_JWKS_URI"],
+        allowed_algorithms=algorithms,
+    )
+    memberships = SQLiteMembershipRegistry(values["ATLAS_MEMBERSHIP_DB_PATH"])
+    memberships.initialize()
+    return VerifiedIdentityService(
+        config=config,
+        verifier=PyJWTTokenVerifier(config),
+        memberships=memberships,
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -168,6 +214,17 @@ def professor_sources_ui():
 @app.get("/health")
 def health():
     return api.health()
+
+
+@app.get("/identity/me")
+def identity_me(principal=Depends(require_verified_principal)):
+    """Return the authenticated tenant principal for integration diagnostics."""
+    return {
+        "issuer": principal.issuer,
+        "subject": principal.subject,
+        "tenant_id": principal.tenant_id,
+        "scopes": sorted(principal.scopes),
+    }
 
 
 @app.get("/sources", dependencies=[Depends(require_api_key)])
