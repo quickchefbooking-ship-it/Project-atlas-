@@ -47,9 +47,9 @@ def setup_client(monkeypatch, tmp_path):
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
     memberships.create_tenant("tenant-b", "Tenant B")
-    memberships.provision_membership(ISSUER, "alice", "tenant-a", {"plans:read", "steps:read"})
+    memberships.provision_membership(ISSUER, "alice", "tenant-a", {"plans:read", "plans:write", "steps:read"})
     memberships.provision_membership(ISSUER, "bob", "tenant-b", {"plans:read", "steps:read"})
-    memberships.provision_membership(ISSUER, "limited", "tenant-a", {"plans:read"})
+    memberships.provision_membership(ISSUER, "limited", "tenant-a", {"plans:read", "plans:write"})
     client = TestClient(app_module.app)
     client.__enter__()
     verifier = Verifier()
@@ -102,7 +102,7 @@ def test_ask_endpoint_answers_from_tenant_report_only(monkeypatch, tmp_path):
         body = response.json()
         assert body["basis"] == "findings"
         assert body["items"][0]["claim_id"] == "claim-1"
-        assert body["mode"] == "deterministic_report_grounded"
+        assert body["mode"] == "deterministic_report_lookup"
         assert body["tools_invoked"] is False
         assert body["execution_performed"] is False
     finally:
