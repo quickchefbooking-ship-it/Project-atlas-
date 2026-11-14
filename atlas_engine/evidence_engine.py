@@ -5,8 +5,6 @@ claims from abstracts, judge truth, or treat source count as proof.
 """
 from __future__ import annotations
 
-import hashlib
-import re
 from collections import defaultdict
 from typing import Any
 from urllib.parse import urlparse
@@ -15,7 +13,6 @@ MAX_SOURCES = 20
 MAX_CLAIMS_PER_SOURCE = 20
 MAX_TEXT = 2000
 _RELATIONS = {"supports", "challenges", "mentions"}
-_SPACE = re.compile(r"\\s+")
 
 
 def _text(value: Any, field: str, maximum: int = MAX_TEXT) -> str:
