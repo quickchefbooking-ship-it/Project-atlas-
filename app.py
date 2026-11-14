@@ -277,6 +277,59 @@ def professor_conversation(payload: ConversationRequest):
     )
 
 
+@app.post("/professor/tenant/plans/{plan_id}/ask")
+def ask_professor_about_report(
+    plan_id: str,
+    payload: ProfessorReportQuestionInput,
+    principal=Depends(require_verified_principal),
+):
+    """Answer a question from this tenant's completed report without executing tools."""
+    database_path = getattr(app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(status_code=503, detail="Professor report storage is not configured.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plans = TenantPlanRepository(connection, principal)
+        steps = TenantStepExecutionRepository(connection, principal)
+        # Both repositories enforce tenant ownership and their respective read scopes.
+        plans.get(plan_id)
+        records = steps.list_steps(plan_id)
+        reports = [
+            item.result for item in records
+            if item.state == "succeeded"
+            and isinstance(item.result, dict)
+            and item.result.get("report_type") == "professor_evidence_report"
+        ]
+        if not reports:
+            raise HTTPException(status_code=409, detail="This plan has no completed Professor evidence report yet.")
+        if len(reports) > 1:
+            raise HTTPException(status_code=409, detail="Multiple report results exist; select a report step before asking questions.")
+        try:
+            result = answer_report_question(reports[0], payload.question)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return {
+            "plan_id": plan_id,
+            "answer": result["answer"],
+            "basis": result["basis"],
+            "items": result.get("items", []),
+            "sources": result.get("sources", []),
+            "limitations": result.get("limitations", []),
+            "mode": "deterministic_report_grounded",
+            "tools_invoked": False,
+            "execution_performed": False,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Professor report access denied.") from None
+    except (TenantPlanNotFound, TenantStepNotFound):
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Professor report storage is temporarily unavailable.") from None
+    finally:
+        connection.close()
+
+
 @app.get("/professor/sources", include_in_schema=False)
 def professor_sources_ui():
     """Serve the static Source Division operator interface; data remains API-key protected."""
