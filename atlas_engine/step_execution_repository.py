@@ -7,7 +7,6 @@ moved to recovery_required and are never automatically replayed.
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -224,7 +223,7 @@ class StepExecutionRepository:
                 for item in json.loads(plan["plan_json"])["steps"]
             }
             pending_rows = conn.execute(
-                """SELECT step_id, attempt_number, fencing_token
+                """SELECT step_id, attempt_number, fencing_token, risk
                    FROM professor_plan_steps
                    WHERE plan_id = ? AND state = 'pending'
                    ORDER BY ordinal""",
@@ -247,6 +246,11 @@ class StepExecutionRepository:
             if row is None:
                 conn.commit()
                 return None
+            if row["risk"] in {"external_side_effect", "privileged"}:
+                raise StepExecutionError(
+                    "External and privileged steps remain blocked until verified, "
+                    "action-bound authorisation is implemented."
+                )
             attempt = row["attempt_number"] + 1
             token = row["fencing_token"] + 1
             expires = now + lease_seconds
