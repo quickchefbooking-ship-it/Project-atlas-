@@ -152,3 +152,12 @@ Point 1 is considered prototype-complete only when all of the following are true
 5. Source/document/experiment ownership rules are documented for migration rehearsal.
 
 This does not complete the production data-layer migration. A schema-versioned migration, verified ownership mapping, orphan report, row-count/hash reconciliation, rollback rehearsal and backup/restore validation remain release gates.
+
+
+## Identity administration progress
+
+The branch now contains a server-side membership administration façade in `atlas_engine/tenant_admin.py`. Provisioning and revocation require an active `RequestPrincipal` with the reserved `tenant:members:manage` scope, and the tenant is derived from that principal. The starter viewer/operator role map does not grant this scope. Membership mutation audit events can attribute the acting issuer and subject when these operations are called through the façade.
+
+This is an internal authorization seam only. A `RequestPrincipal` remains constructible by trusted Python code and is not proof of a verified login. No OIDC verifier, HTTP principal dependency, tenant-admin endpoint, provider-backed lifecycle, or production activation exists. Low-level registry provisioning remains a bootstrap primitive; production administration must be routed exclusively through a reviewed trusted adapter and façade.
+
+The disposable migration rehearsal now also asserts exact preservation of task, attempt and evaluation values and relationships, not only row counts, and checks foreign-key integrity after the backfill. These are test-only fixtures; no production database was read or changed.
