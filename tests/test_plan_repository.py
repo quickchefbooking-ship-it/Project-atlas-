@@ -43,7 +43,20 @@ def make_plan(risk=RiskClass.READ_ONLY):
 
 
 def test_plan_round_trips_through_sqlite(repository):
-    original = make_plan()
+    original = ProfessorPlan(
+        plan_id="plan-test-1",
+        objective="Prepare a research summary",
+        acceptance_criteria=("Include source evidence",),
+        steps=(
+            PlanStep(
+                step_id="research",
+                capability="knowledge.search",
+                objective="Find approved sources",
+                risk=RiskClass.READ_ONLY,
+                capability_version="3",
+            ),
+        ),
+    )
     repository.create(original)
     assert repository.get(original.plan_id) == original
 
