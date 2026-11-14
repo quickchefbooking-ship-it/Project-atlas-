@@ -44,3 +44,11 @@ def test_policy_does_not_accept_client_requested_scopes():
     assert scopes_for_verified_roles({"atlas_viewer"}) == frozenset({
         "tasks:read", "evaluations:read", "lessons:read", "proposals:read",
     })
+
+
+def test_tenant_membership_admin_scope_is_not_granted_to_starter_roles():
+    assert "tenant:members:manage" in ALLOWED_SCOPES
+    assert all(
+        "tenant:members:manage" not in scopes
+        for scopes in PROVIDER_ROLE_SCOPE_MAP.values()
+    )
