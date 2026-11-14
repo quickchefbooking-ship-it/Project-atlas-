@@ -36,7 +36,10 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
     }
-    verified_identity_routes = {("/identity/me", "GET")}
+    verified_identity_routes = {
+        ("/identity/me", "GET"),
+        ("/professor/tenant/plans/{plan_id}", "GET"),
+    }
     unprotected = []
     for route in app_module.app.routes:
         if not isinstance(route, APIRoute):
