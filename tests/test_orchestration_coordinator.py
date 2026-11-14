@@ -52,7 +52,7 @@ def test_unknown_capability_fails_closed_and_blocks_dependants():
         PlanStep("first", "missing.capability", "Do missing work", RiskClass.READ_ONLY),
         PlanStep("second", "knowledge.lookup", "Continue", RiskClass.READ_ONLY, depends_on=("first",)),
     ]).mark_ready()
-    result = preview_plan(item, CapabilityRegistry())
+    result = preview_plan(item, CapabilityRegistry([capability()]))
     assert result.steps[0].readiness is StepReadiness.BLOCKED_MISSING_CAPABILITY
     assert result.steps[1].readiness is StepReadiness.BLOCKED_DEPENDENCY
 
