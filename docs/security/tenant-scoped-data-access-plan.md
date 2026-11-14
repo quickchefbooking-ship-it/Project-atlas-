@@ -119,3 +119,36 @@ The learning prototype deliberately requires a task parent for proposals. The li
 3. Decide shared versus tenant-private ownership for sources, source documents and offline experiment evidence.
 4. Complete a disposable migration rehearsal and ownership reconciliation design.
 5. Only after those gates, design a verified-principal application integration. Do not wire the prototype into production storage before that review.
+
+## Additional prototype progress: execution lifecycle
+
+The isolated execution prototype now covers:
+
+- recovery decisions, linked to the exact tenant/task/attempt tuple;
+- cancellation records, linked to the exact tenant/task/attempt tuple;
+- retry schedules, with both originating and claimed attempts constrained to the same tenant and task;
+- lesson-use events, constrained so the task, attempt and lesson all belong to the same tenant/task chain.
+
+`atlas_engine/tenant_execution_repository.py` and `tests/test_tenant_execution_repository.py` are prototype-only. The task-attempt prototype now exposes composite unique keys needed by these child constraints. All repository operations still require an immutable `RequestPrincipal`, apply tenant predicates, and use a caller-owned disposable SQLite connection. No live storage, route, worker, or production migration is changed.
+
+## Ownership classification decision for design and rehearsal
+
+Use the following conservative default for the migration design:
+
+- **Sources:** a curated, explicitly approved public catalogue may be shared. Tenant-created or tenant-configured source records must be tenant-owned. Shared catalogue metadata must not imply shared access to fetched content.
+- **Source documents:** tenant-private by default. A document may be promoted into a shared catalogue only through an explicit review/publication workflow that verifies rights, removes customer-confidential material, records provenance and creates an immutable approved shared copy. Never expose a private document merely because its source connector is shared.
+- **Lesson experiment runs:** tenant-owned by default because their payload may contain task/lesson content. Cross-tenant aggregate metrics, if later needed, must be separately generated from minimised, de-identified data under an explicit policy; raw experiment payloads are not global.
+
+These are target design rules for the rehearsal, not a claim that existing records have already been classified or migrated. Existing source/document/experiment rows require provenance and ownership review; ambiguous rows must be quarantined, not assigned to a default tenant.
+
+## Updated Point 1 acceptance gate
+
+Point 1 is considered prototype-complete only when all of the following are true:
+
+1. Task, attempt, evaluation, lesson, proposal, recovery, cancellation, retry and lesson-use prototype repositories have tenant predicates and appropriate scope checks.
+2. Composite foreign keys prevent cross-tenant parent/child combinations at the database layer.
+3. Negative tests cover both repository access and direct SQL relationship violations.
+4. The full CI suite passes on the latest branch head.
+5. Source/document/experiment ownership rules are documented for migration rehearsal.
+
+This does not complete the production data-layer migration. A schema-versioned migration, verified ownership mapping, orphan report, row-count/hash reconciliation, rollback rehearsal and backup/restore validation remain release gates.
