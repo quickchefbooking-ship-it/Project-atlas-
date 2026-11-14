@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping
 
 from .capability_registry import CapabilityDefinition, CapabilityRegistry
 from .executor import safe_execute_local
+from .evidence_engine import build_evidence_bundle
 from .public_research_adapters import PublicSourceError, search_crossref_works
 
 
@@ -35,13 +36,34 @@ class CapabilityRuntime:
         self.registry = registry
         self._handlers = MappingProxyType(copied)
 
-    def input_for_objective(self, capability: str, version: str, objective: str) -> dict[str, Any]:
-        """Map a bounded plan objective into a capability's simple input contract."""
+    def input_for_objective(self, capability: str, version: str, objective: str, *, dependency_outputs: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Map trusted plan text or completed dependency outputs to a registered input."""
         definition = self.registry.get(capability, version)
         if definition is None:
             raise CapabilityExecutionError("Capability is not installed.")
         properties = definition.input_schema.get("properties", {})
         required = definition.input_schema.get("required", ())
+        if capability == "research.evidence.bundle":
+            if "sources" not in required or not isinstance(dependency_outputs, Mapping):
+                raise CapabilityExecutionError("Evidence bundling requires completed dependency outputs.")
+            sources = []
+            for output in dependency_outputs.values():
+                if not isinstance(output, Mapping) or not isinstance(output.get("sources"), list):
+                    continue
+                for source in output["sources"]:
+                    if not isinstance(source, Mapping):
+                        raise CapabilityExecutionError("A dependency returned an invalid source record.")
+                    sources.append({
+                        "title": source.get("title"),
+                        "uri": source.get("uri"),
+                        "doi": source.get("doi") or None,
+                        "publisher": source.get("publisher", ""),
+                        "retrieved_at": source.get("retrieved_at", ""),
+                        "claims": [],
+                    })
+            if not sources:
+                raise CapabilityExecutionError("No source records were available from completed dependencies.")
+            return {"sources": sources[:20]}
         string_fields = [
             field for field in required
             if field in properties and properties[field].get("type") == "string"
@@ -91,6 +113,15 @@ def _calculate(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
         "_execution_deadline_monotonic": deadline,
     })
     return {"value": result["value"], "kind": "number"}
+
+
+def _evidence_bundle(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Evidence bundling deadline exceeded.")
+    result = build_evidence_bundle(payload["sources"])
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Evidence bundling deadline exceeded.")
+    return result
 
 
 def _crossref_search(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
@@ -204,11 +235,57 @@ def build_default_capability_runtime() -> CapabilityRuntime:
         timeout_seconds=10,
         approval_required=False,
     )
-    registry = CapabilityRegistry((math, research))
+    evidence = CapabilityDefinition(
+        name="research.evidence.bundle",
+        version="1.0.0",
+        risk_class="read_only",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array", "minItems": 1, "maxItems": 20,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string", "minLength": 1, "maxLength": 500},
+                            "uri": {"type": "string", "minLength": 1, "maxLength": 1000},
+                            "doi": {"type": ["string", "null"], "maxLength": 200},
+                            "publisher": {"type": "string", "maxLength": 300},
+                            "retrieved_at": {"type": "string", "maxLength": 64},
+                            "claims": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                        },
+                        "required": ["title", "uri", "doi", "publisher", "retrieved_at", "claims"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["sources"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "sources": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                "claims": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "duplicate_records": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                "summary": {"type": "object"},
+                "limitations": {"type": "array", "maxItems": 4, "items": {"type": "string"}},
+            },
+            "required": ["schema_version", "sources", "claims", "duplicate_records", "summary", "limitations"],
+            "additionalProperties": False,
+        },
+        required_scopes=("research:public",),
+        side_effects=False,
+        timeout_seconds=10,
+        approval_required=False,
+    )
+    registry = CapabilityRegistry((math, research, evidence))
     return CapabilityRuntime(
         registry,
         {
             math.identity: _calculate,
             research.identity: _crossref_search,
+            evidence.identity: _evidence_bundle,
         },
     )
