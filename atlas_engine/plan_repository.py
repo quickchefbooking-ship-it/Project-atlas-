@@ -15,6 +15,7 @@ from typing import Any
 
 from .plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
 from .storage import get_connection
+from .step_execution_repository import initialize_step_execution_schema
 
 
 class PlanRepositoryError(RuntimeError):
@@ -153,6 +154,7 @@ class PlanRepository:
                 ON professor_plan_transitions(plan_id, transition_id)
                 """
             )
+            initialize_step_execution_schema(conn)
             conn.commit()
         finally:
             conn.close()
@@ -181,6 +183,19 @@ class PlanRepository:
                     """,
                     (plan.plan_id, plan.state.value, now),
                 )
+                for ordinal, step in enumerate(plan.steps):
+                    conn.execute(
+                        """
+                        INSERT INTO professor_plan_steps(
+                            plan_id, step_id, ordinal, capability, capability_version,
+                            risk, state, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+                        """,
+                        (
+                            plan.plan_id, step.step_id, ordinal, step.capability,
+                            step.capability_version, step.risk.value, now, now,
+                        ),
+                    )
                 conn.commit()
             except sqlite3.IntegrityError as exc:
                 conn.rollback()
