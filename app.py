@@ -32,6 +32,8 @@ from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.identity_policy import AuthorizationDenied
 from atlas_engine.capability_registry import CapabilityRegistry
+from atlas_engine.capability_runtime import build_default_capability_runtime
+from atlas_engine.tenant_plan_execution import router as tenant_plan_execution_router
 from atlas_engine.tenant_plan_repository import TenantPlanRepository, TenantPlanNotFound, initialize_tenant_plan_schema
 from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository, TenantStepNotFound, initialize_tenant_step_schema
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
@@ -93,8 +95,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
 app.state.tenant_data_path = None
-app.state.tenant_capability_registry = CapabilityRegistry()
+app.state.tenant_capability_runtime = build_default_capability_runtime()
+app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
 app.include_router(tenant_plan_lifecycle_router)
+app.include_router(tenant_plan_execution_router)
 
 
 class TenantPlanStepInput(BaseModel):
