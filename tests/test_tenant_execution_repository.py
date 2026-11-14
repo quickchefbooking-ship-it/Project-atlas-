@@ -19,7 +19,7 @@ class TenantExecutionRepositoryTests(unittest.TestCase):
         ensure_execution_parent_keys(self.db)
         initialize_execution_schema(self.db)
         self.a = RequestPrincipal("issuer", "alice", "tenant-a", True,
-                                  frozenset({"tasks:read", "tasks:write", "lessons:read", "lessons:write"}))
+                                  frozenset({"tasks:read", "tasks:write", "lessons:read", "lessons:write", "professor:recovery:decide"}))
         self.b = RequestPrincipal("issuer", "bob", "tenant-b", True,
                                   frozenset({"tasks:read", "tasks:write", "lessons:read", "lessons:write"}))
         self.ta = TenantTaskRepository(self.db, self.a).create_task("A task")
@@ -42,6 +42,31 @@ class TenantExecutionRepositoryTests(unittest.TestCase):
         self.assertEqual(self.rb.list_cancellations(self.tb), [])
         with self.assertRaises(Exception):
             self.ra.add_recovery_decision("bad", self.ta, self.ab, "retry", "cross tenant")
+
+
+    def test_retry_recovery_requires_both_safety_attestations(self):
+        with self.assertRaises(ValueError):
+            self.ra.add_recovery_decision("unsafe-1", self.ta, self.aa, "retry", "Not reconciled", True, False)
+        with self.assertRaises(ValueError):
+            self.ra.add_recovery_decision("unsafe-2", self.ta, self.aa, "retry", "Not assessed", False, True)
+        self.assertEqual(self.ra.list_recovery_decisions(self.ta), [])
+
+    def test_recovery_audit_records_verified_principal_and_is_append_only(self):
+        self.ra.add_recovery_decision("audited-1", self.ta, self.aa, "mark_failed", "Operator review")
+        events = self.ra.list_recovery_audit_events(self.ta)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["actor_issuer"], "issuer")
+        self.assertEqual(events[0]["actor_subject"], "alice")
+        self.assertEqual(events[0]["action"], "mark_failed")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("DELETE FROM tenant_recovery_audit_events WHERE decision_id = 'audited-1'")
+
+    def test_recovery_requires_dedicated_operator_scope(self):
+        ordinary_writer = RequestPrincipal("issuer", "alice", "tenant-a", True,
+                                           frozenset({"tasks:read", "tasks:write"}))
+        repo = TenantExecutionRepository(self.db, ordinary_writer)
+        with self.assertRaises(AuthorizationDenied):
+            repo.add_recovery_decision("denied-recovery", self.ta, self.aa, "mark_failed", "No operator scope")
 
     def test_retry_schedule_and_lesson_use(self):
         self.ra.add_retry_schedule("s1", self.ta, self.aa, 2, "2030-01-01T00:00:00Z",
