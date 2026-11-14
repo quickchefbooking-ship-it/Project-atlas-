@@ -168,3 +168,24 @@ clients; they do not call a real identity provider or prove a production
 provider's discovery, key rotation, login, callback, refresh, logout, MFA or
 session behavior. Provider selection and real deployment configuration remain
 explicit gates. Do not add real issuer secrets or tokens to the repository.
+
+
+## First tenant-scoped Professor route
+
+`GET /professor/tenant/plans/{plan_id}` is now the first application route
+behind the verified-principal dependency. It reads only the isolated tenant
+plan database configured by `ATLAS_TENANT_DATA_DB_PATH`, composes the
+tenant-aware plan and step repositories with the Professor inspection
+facade, and returns a bounded observational report. It does not dispatch,
+resume, execute or retry steps. A caller without `plans:read` or
+`steps:read` is denied; a plan belonging to another tenant is returned as
+not found. The endpoint does not use the shared API key as a substitute for
+human identity.
+
+The tenant plan database is deliberately separate from both the legacy core
+task database and the membership database. Its schema is initialized only
+when the deployment supplies the dedicated path. Existing global task,
+source, proposal and learning routes remain on their existing boundary and
+must not be treated as tenant-isolated. The empty application capability
+catalogue also means readiness previews will block unknown capabilities;
+that is intentional until trusted capability definitions are registered.
