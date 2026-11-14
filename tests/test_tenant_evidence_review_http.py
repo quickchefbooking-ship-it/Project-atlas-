@@ -60,6 +60,7 @@ def _client(monkeypatch, tmp_path, *, review_scope=True):
     db = sqlite3.connect(tenant_path)
     db.row_factory = sqlite3.Row
     principal = RequestPrincipal(ISSUER, "reviewer-a", "tenant-a", True, frozenset(scopes))
+    steps = TenantStepExecutionRepository(db, principal)
     TenantPlanRepository(db, principal).create(ProfessorPlan(
         "review-plan", "Review a completed evidence bundle",
         ("Retain explicit reviewer attribution",),
