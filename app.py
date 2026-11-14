@@ -122,6 +122,10 @@ class TaskCancellationRequestInput(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class ConversationRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
 class GenerateImageRequest(BaseModel):
     prompt: str
     output_path: Optional[str] = None
@@ -131,6 +135,28 @@ class GenerateVideoRequest(BaseModel):
     prompt: str
     narration: Optional[str] = None
     output_path: Optional[str] = None
+
+
+@app.get("/professor/voice", include_in_schema=False)
+def professor_voice_ui():
+    """Serve the browser-based voice interface; speech runs on the user's device."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "professor_voice.html",
+        media_type="text/html",
+    )
+
+
+@app.post("/professor/conversation", dependencies=[Depends(require_api_key)])
+def professor_conversation(payload: ConversationRequest):
+    """Fail closed until a real conversational reasoning backend is configured."""
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Professor's conversational reasoning service is not configured yet. "
+            "The voice interface can capture speech and play spoken responses, "
+            "but general question answering is not enabled."
+        ),
+    )
 
 
 @app.get("/professor/sources", include_in_schema=False)
