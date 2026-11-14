@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping
 from .capability_registry import CapabilityDefinition, CapabilityRegistry
 from .executor import safe_execute_local
 from .evidence_engine import build_evidence_bundle
+from .evidence_evaluation import evaluate_evidence_bundle
 from .public_research_adapters import PublicSourceError, search_crossref_works
 
 
@@ -64,6 +65,13 @@ class CapabilityRuntime:
             if not sources:
                 raise CapabilityExecutionError("No source records were available from completed dependencies.")
             return {"sources": sources[:20]}
+        if capability == "research.evidence.evaluate":
+            if "bundle" not in required or not isinstance(dependency_outputs, Mapping):
+                raise CapabilityExecutionError("Evidence evaluation requires a completed evidence-bundle dependency.")
+            for output in dependency_outputs.values():
+                if isinstance(output, Mapping) and output.get("schema_version") == 1 and isinstance(output.get("claims"), list) and isinstance(output.get("sources"), list):
+                    return {"bundle": dict(output)}
+            raise CapabilityExecutionError("No completed evidence bundle was available from direct dependencies.")
         string_fields = [
             field for field in required
             if field in properties and properties[field].get("type") == "string"
@@ -121,6 +129,15 @@ def _evidence_bundle(payload: dict[str, Any], deadline: float) -> dict[str, Any]
     result = build_evidence_bundle(payload["sources"])
     if time.monotonic() >= deadline:
         raise TimeoutError("Evidence bundling deadline exceeded.")
+    return result
+
+
+def _evidence_evaluate(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Evidence evaluation deadline exceeded.")
+    result = evaluate_evidence_bundle(payload["bundle"])
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Evidence evaluation deadline exceeded.")
     return result
 
 
@@ -280,12 +297,41 @@ def build_default_capability_runtime() -> CapabilityRuntime:
         timeout_seconds=10,
         approval_required=False,
     )
-    registry = CapabilityRegistry((math, research, evidence))
+    evaluation = CapabilityDefinition(
+        name="research.evidence.evaluate",
+        version="1.0.0",
+        risk_class="read_only",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "bundle": {"type": "object"},
+            },
+            "required": ["bundle"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "evaluations": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "summary": {"type": "object"},
+                "limitations": {"type": "array", "maxItems": 4, "items": {"type": "string"}},
+            },
+            "required": ["schema_version", "evaluations", "summary", "limitations"],
+            "additionalProperties": False,
+        },
+        required_scopes=("research:public",),
+        side_effects=False,
+        timeout_seconds=10,
+        approval_required=False,
+    )
+    registry = CapabilityRegistry((math, research, evidence, evaluation))
     return CapabilityRuntime(
         registry,
         {
             math.identity: _calculate,
             research.identity: _crossref_search,
             evidence.identity: _evidence_bundle,
+            evaluation.identity: _evidence_evaluate,
         },
     )
