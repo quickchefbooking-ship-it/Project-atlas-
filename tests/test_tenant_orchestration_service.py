@@ -110,3 +110,13 @@ def test_report_event_limit_is_bounded():
     plans.create(make_plan())
     with pytest.raises(ValueError):
         service.inspect_plan("tenant-plan", event_limit_per_step=0)
+
+
+def test_service_rejects_repositories_on_different_database_connections():
+    _, principal, plans, _, registry, _ = setup()
+    other_db = sqlite3.connect(":memory:")
+    from atlas_engine.tenant_plan_repository import initialize_tenant_plan_schema
+    initialize_tenant_plan_schema(other_db)
+    other_steps = TenantStepExecutionRepository(other_db, principal)
+    with pytest.raises(ValueError, match="share one database connection"):
+        TenantProfessorOrchestrationService(principal, plans, other_steps, registry)
