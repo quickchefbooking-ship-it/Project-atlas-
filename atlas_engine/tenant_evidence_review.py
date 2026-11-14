@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
@@ -37,6 +38,108 @@ class ReviewerAnnotationInput(BaseModel):
 class EvidenceReviewInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     annotations: list[ReviewerAnnotationInput] = Field(min_length=1, max_length=400)
+
+
+class ProfessorQuestionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(min_length=1, max_length=1000)
+
+
+def _question_terms(value: str) -> set[str]:
+    stop_words = {
+        "about", "after", "also", "and", "are", "can", "does", "for", "from",
+        "give", "have", "how", "into", "its", "more", "most", "not", "our",
+        "please", "report", "say", "says", "show", "tell", "that", "the",
+        "their", "there", "these", "this", "those", "what", "when", "where",
+        "which", "who", "why", "with", "would", "you", "your",
+    }
+    return {
+        token for token in re.findall(r"[a-z0-9]{3,}", value.casefold())
+        if token not in stop_words
+    }
+
+
+def answer_report_question(report: dict[str, Any], question: str) -> dict[str, Any]:
+    """Retrieve matching report records without generating new factual claims."""
+    if not isinstance(report, dict) or report.get("report_type") != "professor_evidence_report":
+        raise ValueError("A completed Professor evidence report is required.")
+    if not isinstance(question, str) or not question.strip() or len(question) > 1000:
+        raise ValueError("Question must contain 1 to 1000 characters.")
+    summary = report.get("executive_summary")
+    if not isinstance(summary, dict):
+        raise ValueError("The Professor report summary is invalid.")
+
+    terms = _question_terms(question)
+    if not terms or terms.issubset({"summary", "overview", "overall", "counts", "conclusion"}):
+        answer = (
+            f"The report records {summary.get('claim_count', 0)} claims: "
+            f"{summary.get('finding_count', 0)} findings, "
+            f"{summary.get('challenge_count', 0)} challenges, "
+            f"{summary.get('disagreement_count', 0)} disagreements and "
+            f"{summary.get('evidence_gap_count', 0)} evidence gaps, across "
+            f"{summary.get('source_count', 0)} sources. Confidence is not scored. "
+            + str(summary.get("overall_conclusion", "No overall truth conclusion is drawn."))
+        )
+        return {
+            "answer_type": "report_summary", "answer": answer, "matches": [],
+            "limitations": report.get("limitations", []),
+            "mode": "deterministic_report_lookup",
+        }
+
+    matches = []
+    for section in ("findings", "challenges", "disagreements", "evidence_gaps"):
+        records = report.get(section, [])
+        if not isinstance(records, list):
+            continue
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            searchable = " ".join(str(record.get(key, "")) for key in
+                                  ("claim_id", "claim", "status", "interpretation"))
+            overlap = terms.intersection(_question_terms(searchable))
+            if overlap:
+                matches.append({
+                    "section": section,
+                    "claim_id": record.get("claim_id"),
+                    "claim": record.get("claim"),
+                    "status": record.get("status"),
+                    "interpretation": record.get("interpretation", ""),
+                    "supporting_sources": record.get("supporting_sources", []),
+                    "challenging_sources": record.get("challenging_sources", []),
+                    "mentioning_sources": record.get("mentioning_sources", []),
+                    "matched_terms": sorted(overlap),
+                })
+    matches.sort(key=lambda item: (-len(item["matched_terms"]), str(item["claim_id"])))
+    matches = matches[:5]
+    if not matches:
+        answer_type = "insufficient_report_match"
+        answer = (
+            "I cannot answer that from the completed report. No matching claim or "
+            "evidence passage was found. A new research step or a more specific "
+            "question may be needed."
+        )
+    else:
+        references = []
+        for item in matches:
+            source_ids = list(dict.fromkeys(
+                item["supporting_sources"] + item["challenging_sources"] +
+                item["mentioning_sources"]
+            ))
+            references.append(
+                f"{item['claim_id']} ({item['section']}; sources: "
+                f"{', '.join(source_ids) if source_ids else 'none recorded'})"
+            )
+        answer_type = "matched_report_records"
+        answer = (
+            f"I found {len(matches)} relevant report record(s). These are report "
+            "classifications based on supplied annotations, not independent "
+            "verification. Relevant records: " + "; ".join(references) + "."
+        )
+    return {
+        "answer_type": answer_type, "answer": answer, "matches": matches,
+        "limitations": report.get("limitations", []),
+        "mode": "deterministic_report_lookup",
+    }
 
 
 def initialize_tenant_evidence_review_schema(db: sqlite3.Connection) -> None:
@@ -119,13 +222,10 @@ def submit_evidence_review(
     try:
         initialize_tenant_evidence_review_schema(connection)
         steps = TenantStepExecutionRepository(connection, principal)
-        # get_step applies the separate steps:read boundary and tenant filter.
         step = steps.get_step(plan_id, bundle_step_id)
         if step.state != "succeeded" or step.capability != "research.evidence.bundle":
             raise ValueError("Only a completed evidence bundle can be reviewed.")
         original = _load_bundle(connection, principal.tenant_id, plan_id, bundle_step_id)
-        # Serialize concurrent reviewers so each revision builds on the
-        # latest committed bundle instead of overwriting another review's work.
         connection.execute("BEGIN IMMEDIATE")
         latest = connection.execute("""
           SELECT bundle_json FROM tenant_evidence_reviews
@@ -221,6 +321,50 @@ def get_evidence_review(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except sqlite3.Error:
         raise HTTPException(status_code=503, detail="Tenant review storage is temporarily unavailable.") from None
+    finally:
+        connection.close()
+
+
+@router.post("/professor/tenant/plans/{plan_id}/ask")
+def ask_professor_about_report(
+    plan_id: str,
+    payload: ProfessorQuestionInput,
+    request: Request,
+    principal=Depends(require_verified_principal),
+):
+    """Answer only from this tenant's completed report; this route is read-only."""
+    database_path = getattr(request.app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(status_code=503, detail="Professor report storage is not configured.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        steps = TenantStepExecutionRepository(connection, principal)
+        records = steps.list_steps(plan_id)  # Enforces tenant boundary and steps:read.
+        report_steps = [
+            item for item in records
+            if item.state == "succeeded"
+            and item.capability == "research.professor.report"
+            and isinstance(item.result, dict)
+            and item.result.get("report_type") == "professor_evidence_report"
+        ]
+        if not report_steps:
+            raise HTTPException(status_code=409, detail="No completed Professor report exists for this plan.")
+        report = report_steps[-1].result
+        try:
+            return {
+                "plan_id": plan_id,
+                "report_step_id": report_steps[-1].step_id,
+                **answer_report_question(report, payload.question),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Professor report access denied.") from None
+    except TenantStepNotFound:
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Professor report storage is temporarily unavailable.") from None
     finally:
         connection.close()
 
