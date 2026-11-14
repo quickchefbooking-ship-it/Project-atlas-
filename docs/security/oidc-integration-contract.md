@@ -63,3 +63,9 @@ This is deliberately only the seam between a future token verifier and the regis
 `atlas_engine/scope_policy.py` now provides a closed local role-to-scope map for the future verifier adapter. The starter `atlas_viewer` role grants read-only scopes; `atlas_operator` grants the bounded task, evaluation, lesson and proposal read/write scopes. Unknown roles grant nothing, malformed role claims fail closed, and proposal-review permission is deliberately absent. The mapper accepts verified provider roles only; it has no input for client-requested scopes.
 
 This mapping is a conservative engineering starting point, not a final production role model. The selected identity provider's role/group claims, tenant administrator lifecycle, break-glass policy and separation-of-duties model must be reviewed before activation. The map must remain server-controlled and must not be overridden by tenant payloads.
+
+## Tenant membership administration and actor-attributed audit
+
+The branch now includes `atlas_engine/tenant_admin.py`, a narrow server-side façade for provisioning and revoking a member within the acting administrator's own tenant. It requires an immutable `RequestPrincipal`, active membership, and the reserved `tenant:members:manage` scope. The target tenant is always taken from the principal; the façade exposes no caller-supplied tenant selector. The new scope is allowlisted for policy validation but is deliberately not granted to the starter viewer or operator roles.
+
+Membership provision/revoke audit events can now record the acting principal's issuer and subject. The registry's lower-level provisioning methods remain bootstrap primitives and may still create events with NULL actor fields; production administrative operations must use the façade after a real trusted identity adapter is deployed. The Python object boundary is not cryptographic authentication, and this change does not enable any HTTP admin endpoint or select an identity provider.
