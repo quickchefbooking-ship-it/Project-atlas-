@@ -169,3 +169,40 @@ def test_old_fencing_token_cannot_overwrite_current_step_state(repositories):
             result={"forged": True},
         )
     assert steps.get_step(plan.plan_id, "first").state == "claimed"
+
+
+def test_external_side_effect_and_privileged_steps_cannot_be_claimed(repositories):
+    from atlas_engine.step_execution_repository import StepExecutionError
+
+    plans, steps = repositories
+    plan = ProfessorPlan(
+        plan_id="restricted-plan",
+        objective="Perform a protected action",
+        acceptance_criteria=("Action is authorised",),
+        steps=(
+            PlanStep(
+                "publish", "social.publish", "Publish externally",
+                RiskClass.EXTERNAL_SIDE_EFFECT,
+            ),
+        ),
+    )
+    plans.create(plan)
+    plans.transition(
+        plan.plan_id,
+        expected_state=PlanState.DRAFT,
+        new_state=PlanState.AWAITING_APPROVAL,
+    )
+    plans.transition(
+        plan.plan_id,
+        expected_state=PlanState.AWAITING_APPROVAL,
+        new_state=PlanState.APPROVED,
+        approval_reference="opaque-reference",
+    )
+    plans.transition(
+        plan.plan_id,
+        expected_state=PlanState.APPROVED,
+        new_state=PlanState.RUNNING,
+    )
+    with pytest.raises(StepExecutionError, match="action-bound authorisation"):
+        steps.claim_next_step(plan.plan_id, "worker-a")
+    assert steps.get_step(plan.plan_id, "publish").state == "pending"
