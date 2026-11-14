@@ -37,6 +37,8 @@ def initialize_prototype_schema(connection: sqlite3.Connection) -> None:
             task_id INTEGER NOT NULL,
             outcome TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tenant_id, attempt_id),
+            UNIQUE (tenant_id, task_id, attempt_id),
             FOREIGN KEY (tenant_id, task_id)
                 REFERENCES tenant_tasks (tenant_id, task_id)
                 ON DELETE CASCADE
