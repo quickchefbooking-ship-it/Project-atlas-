@@ -20,6 +20,7 @@ from .oidc_contract import (
     validate_verified_claims,
 )
 from .tenant_membership import SQLiteMembershipRegistry
+from .oidc_jwt_verifier import OIDCVerifierUnavailable
 
 MAX_BEARER_TOKEN_LENGTH = 8192
 _BEARER_PATTERN = re.compile(r"^Bearer ([A-Za-z0-9._~+/=-]+)$")
@@ -79,7 +80,7 @@ def require_verified_principal(
         )
     try:
         return service.authenticate(match.group(1))
-    except IdentityVerifierUnavailable:
+    except (IdentityVerifierUnavailable, OIDCVerifierUnavailable):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Identity verification is temporarily unavailable.",
