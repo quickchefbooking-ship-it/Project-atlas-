@@ -66,8 +66,13 @@ class PyJWTTokenVerifier:
         expires_at = decoded.get("exp")
         not_before = decoded.get("nbf")
         roles = decoded.get("roles", ())
+        authorized_party = decoded.get("azp")
         audiences = (audience,) if isinstance(audience, str) else audience
         if (
+            (authorized_party is not None and authorized_party != self.config.audience)
+            or (isinstance(audiences, (list, tuple)) and len(audiences) > 1
+                and authorized_party != self.config.audience)
+            or
             not isinstance(issuer, str)
             or not isinstance(subject, str)
             or not subject
