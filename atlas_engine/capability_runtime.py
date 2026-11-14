@@ -94,8 +94,10 @@ def _calculate(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
 
 
 def _crossref_search(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
-    if time.monotonic() >= deadline:
-        raise TimeoutError("Research deadline exceeded.")
+    # The adapter has an eight-second transport ceiling. Refuse to start a
+    # request when the plan budget cannot contain that bounded call.
+    if deadline - time.monotonic() < 8.5:
+        raise TimeoutError("Research step budget is shorter than the bounded provider request.")
     documents = search_crossref_works(payload["query"], limit=payload["limit"])
     if time.monotonic() >= deadline:
         raise TimeoutError("Research deadline exceeded.")
