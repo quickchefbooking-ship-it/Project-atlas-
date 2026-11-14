@@ -98,8 +98,15 @@ def _initialize_tenant_data_store() -> Optional[str]:
     if not database_path:
         return None
     membership_path = os.getenv("ATLAS_MEMBERSHIP_DB_PATH")
-    if membership_path and os.path.abspath(database_path) == os.path.abspath(membership_path):
-        raise ValueError("Tenant plan data and membership data must use separate databases.")
+    protected_paths = [getattr(storage, "DB_PATH", None), membership_path]
+    tenant_real_path = os.path.realpath(database_path)
+    if any(
+        path and tenant_real_path == os.path.realpath(path)
+        for path in protected_paths
+    ):
+        raise ValueError(
+            "Tenant plan data must use a database separate from core and membership storage."
+        )
     connection = sqlite3.connect(database_path, timeout=5)
     try:
         connection.row_factory = sqlite3.Row
