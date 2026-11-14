@@ -24,13 +24,13 @@ class OIDCProviderConfig:
     clock_skew_seconds: int = 60
 
     def __post_init__(self):
-        if not isinstance(self.issuer, str) or not self.issuer.startswith("https://") or self.issuer.endswith("/"):
+        if not isinstance(self.issuer, str) or not self.issuer.startswith("https://"):
             raise OIDCConfigurationError("Issuer must be an exact HTTPS issuer URL without a trailing slash.")
         if not isinstance(self.audience, str) or not self.audience.strip():
             raise OIDCConfigurationError("A non-empty API audience is required.")
         if not isinstance(self.jwks_uri, str) or not self.jwks_uri.startswith("https://"):
             raise OIDCConfigurationError("JWKS URI must use HTTPS.")
-        if not self.allowed_algorithms or not self.allowed_algorithms.issubset(SUPPORTED_ALGORITHMS):
+        if not isinstance(self.allowed_algorithms, (set, frozenset)) or not self.allowed_algorithms or not self.allowed_algorithms.issubset(SUPPORTED_ALGORITHMS):
             raise OIDCConfigurationError("Explicit supported signing algorithms are required.")
         if not isinstance(self.clock_skew_seconds, int) or not 0 <= self.clock_skew_seconds <= 300:
             raise OIDCConfigurationError("Clock skew must be an integer between 0 and 300 seconds.")
