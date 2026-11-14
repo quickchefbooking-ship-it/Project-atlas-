@@ -130,3 +130,29 @@ class TenantTaskRepository:
         ).fetchone():
             raise TenantTaskNotFound("Task was not found.")
         return [dict(row) for row in rows]
+
+    def update_task(self, task_id: int, title: str) -> dict:
+        """Update only a task owned by the principal's tenant."""
+        authorize_tenant_resource(self._principal, self._principal.tenant_id, {"tasks:write"})
+        if not isinstance(title, str) or not title.strip() or len(title) > 500:
+            raise ValueError("title must be a non-empty string of at most 500 characters.")
+        with self._connection:
+            cursor = self._connection.execute(
+                """UPDATE tenant_tasks SET title = ?
+                   WHERE tenant_id = ? AND task_id = ?""",
+                (title.strip(), self._principal.tenant_id, task_id),
+            )
+            if cursor.rowcount != 1:
+                raise TenantTaskNotFound("Task was not found.")
+        return self.get_task(task_id)
+
+    def delete_task(self, task_id: int) -> None:
+        """Delete a tenant-owned task and its dependent attempts atomically."""
+        authorize_tenant_resource(self._principal, self._principal.tenant_id, {"tasks:write"})
+        with self._connection:
+            cursor = self._connection.execute(
+                "DELETE FROM tenant_tasks WHERE tenant_id = ? AND task_id = ?",
+                (self._principal.tenant_id, task_id),
+            )
+            if cursor.rowcount != 1:
+                raise TenantTaskNotFound("Task was not found.")
