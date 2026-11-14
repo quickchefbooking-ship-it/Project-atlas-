@@ -83,3 +83,35 @@ def test_reprovisioning_updates_scopes_and_reactivates_membership(registry):
     registry.provision_membership(ISSUER, SUBJECT, "tenant-a", {"tasks:write"})
     record = registry.resolve_membership(ISSUER, SUBJECT)
     assert record.scopes == frozenset({"tasks:write"})
+
+
+def test_membership_mutations_append_audit_events(registry):
+    registry.provision_membership(ISSUER, SUBJECT, "tenant-a", {"tasks:read", "lessons:review"})
+    registry.revoke_membership(ISSUER, SUBJECT, "tenant-a")
+    events = registry.list_audit_events("tenant-a")
+    assert [event["event_type"] for event in events] == [
+        "tenant.created", "membership.provisioned", "membership.revoked"
+    ]
+    assert events[1]["issuer"] == ISSUER
+    assert events[1]["subject"] == SUBJECT
+    assert events[1]["details"] == {"scopes": ["lessons:review", "tasks:read"]}
+
+
+def test_tenant_deactivation_is_audited(registry):
+    registry.set_tenant_active("tenant-a", False)
+    event = registry.list_audit_events("tenant-a")[-1]
+    assert event["event_type"] == "tenant.deactivated"
+    assert event["details"] == {"active": False}
+
+
+def test_audit_actor_is_not_fabricated_before_verified_admin_auth(registry):
+    event = registry.list_audit_events("tenant-a")[0]
+    assert event["actor_issuer"] is None
+    assert event["actor_subject"] is None
+
+
+def test_failed_mutation_does_not_create_audit_event(registry):
+    before = len(registry.list_audit_events("tenant-a"))
+    with pytest.raises(MembershipNotFoundError):
+        registry.provision_membership(ISSUER, SUBJECT, "missing", {"tasks:read"})
+    assert len(registry.list_audit_events("tenant-a")) == before
