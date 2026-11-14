@@ -76,7 +76,7 @@ Plan steps can now pin `capability_version`. Older plan JSON without that field 
 
 Heartbeats and result commits must present the current worker, attempt and fencing token while the lease is still live. Results are finite JSON capped at 64 KiB; failures store a bounded error code rather than arbitrary exception text. External-side-effect and privileged steps cannot be claimed, even if the plan has an approval reference. This is a storage and ownership foundation only: it does not invoke a capability handler, authorise draft writes, or expose a worker endpoint.
 
-Lease expiry changes a claimed step to `recovery_required` and appends an event stating that automatic replay did not occur. There is deliberately no automatic retry or silent lease reclaim. A separate verified operator recovery decision, with safety and side-effect reconciliation evidence, must be built before such a step can be retried.
+Lease expiry changes a claimed step to `recovery_required` and appends an event stating that automatic replay did not occur. There is deliberately no automatic retry or silent lease reclaim. A tenant-scoped recovery prototype now requires the dedicated `professor:recovery:decide` scope, records the operator issuer/subject in an append-only audit table, and refuses a retry unless both retry-safety and side-effect-reconciliation attestations are true. This prototype records a decision only; it does not reset a step, replay a task, or authorise the current global plan/step tables. A production recovery path still requires verified HTTP identity, tenant ownership on the plan/step records, action-bound evidence, and a separately reviewed state transition.
 
 ## 4. Capability contract
 
