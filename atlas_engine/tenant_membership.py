@@ -9,6 +9,8 @@ import json
 import sqlite3
 from typing import FrozenSet, Optional
 
+from .identity_policy import RequestPrincipal, authorize_tenant_resource
+
 
 class MembershipNotFoundError(LookupError):
     """No membership exists for the verified issuer/subject pair."""
@@ -180,6 +182,10 @@ class SQLiteMembershipRegistry:
         issuer = _required_text(issuer, "issuer")
         subject = _required_text(subject, "subject")
         tenant_id = _required_text(tenant_id, "tenant_id")
+        if _actor is not None:
+            if not isinstance(_actor, RequestPrincipal):
+                raise PermissionError("A RequestPrincipal is required for actor attribution.")
+            authorize_tenant_resource(_actor, tenant_id, {"tenant:members:manage"})
         validated_scopes = _validate_scopes(scopes)
         scopes_json = json.dumps(sorted(validated_scopes), separators=(",", ":"))
         conn = self._connect()
@@ -208,6 +214,10 @@ class SQLiteMembershipRegistry:
         issuer = _required_text(issuer, "issuer")
         subject = _required_text(subject, "subject")
         tenant_id = _required_text(tenant_id, "tenant_id")
+        if _actor is not None:
+            if not isinstance(_actor, RequestPrincipal):
+                raise PermissionError("A RequestPrincipal is required for actor attribution.")
+            authorize_tenant_resource(_actor, tenant_id, {"tenant:members:manage"})
         conn = self._connect()
         try:
             cur = conn.execute(
