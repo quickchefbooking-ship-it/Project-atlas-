@@ -39,6 +39,10 @@ from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRep
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
 from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
 from atlas_engine.tenant_plan_lifecycle import router as tenant_plan_lifecycle_router
+from atlas_engine.tenant_evidence_review import (
+    router as tenant_evidence_review_router,
+    initialize_tenant_evidence_review_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +103,7 @@ app.state.tenant_capability_runtime = build_default_capability_runtime()
 app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
 app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
+app.include_router(tenant_evidence_review_router)
 
 
 class TenantPlanStepInput(BaseModel):
@@ -142,6 +147,7 @@ def _initialize_tenant_data_store() -> Optional[str]:
         connection.row_factory = sqlite3.Row
         initialize_tenant_plan_schema(connection)
         initialize_tenant_step_schema(connection)
+        initialize_tenant_evidence_review_schema(connection)
         connection.commit()
     finally:
         connection.close()
