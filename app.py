@@ -43,7 +43,6 @@ from atlas_engine.tenant_evidence_review import (
     router as tenant_evidence_review_router,
     initialize_tenant_evidence_review_schema,
 )
-from atlas_engine.professor_grounded_qa import answer_report_question
 
 logger = logging.getLogger(__name__)
 
@@ -243,11 +242,6 @@ class TaskCancellationRequestInput(BaseModel):
 
 class ConversationRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
-
-
-class ProfessorReportQuestionInput(BaseModel):
-    model_config = {"extra": "forbid"}
-    question: str = Field(min_length=1, max_length=1000)
 
 
 class GenerateImageRequest(BaseModel):
