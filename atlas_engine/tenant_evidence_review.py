@@ -122,6 +122,9 @@ def submit_evidence_review(
         if step.state != "succeeded" or step.capability != "research.evidence.bundle":
             raise ValueError("Only a completed evidence bundle can be reviewed.")
         original = _load_bundle(connection, principal.tenant_id, plan_id, bundle_step_id)
+        # Serialize concurrent reviewers so each revision builds on the
+        # latest committed bundle instead of overwriting another review's work.
+        connection.execute("BEGIN IMMEDIATE")
         latest = connection.execute("""
           SELECT bundle_json FROM tenant_evidence_reviews
           WHERE tenant_id=? AND plan_id=? AND bundle_step_id=?
@@ -138,13 +141,13 @@ def submit_evidence_review(
                              sort_keys=True, separators=(",", ":"))
         if len(encoded.encode("utf-8")) > 65536:
             raise ValueError("Reviewed evidence bundle exceeds the 64 KiB limit.")
-        with connection:
-            connection.execute("""
-              INSERT INTO tenant_evidence_reviews
-                (tenant_id,plan_id,bundle_step_id,reviewer_id,reviewed_at,bundle_json,annotation_count)
-              VALUES(?,?,?,?,?,?,?)
-            """, (principal.tenant_id, plan_id, bundle_step_id, reviewer_id,
-                  reviewed_at, encoded, len(payload.annotations)))
+        connection.execute("""
+          INSERT INTO tenant_evidence_reviews
+            (tenant_id,plan_id,bundle_step_id,reviewer_id,reviewed_at,bundle_json,annotation_count)
+          VALUES(?,?,?,?,?,?,?)
+        """, (principal.tenant_id, plan_id, bundle_step_id, reviewer_id,
+              reviewed_at, encoded, len(payload.annotations)))
+        connection.commit()
         revision = connection.execute("""
           SELECT MAX(review_id) AS revision FROM tenant_evidence_reviews
           WHERE tenant_id=? AND plan_id=? AND bundle_step_id=?
@@ -159,10 +162,13 @@ def submit_evidence_review(
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Evidence review access denied.") from None
     except (TenantStepNotFound, TenantPlanNotFound):
+        connection.rollback()
         raise HTTPException(status_code=404, detail="Evidence bundle was not found.") from None
     except ValueError as exc:
+        connection.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except sqlite3.Error:
+        connection.rollback()
         raise HTTPException(status_code=503, detail="Tenant review storage is temporarily unavailable.") from None
     finally:
         connection.close()
