@@ -97,3 +97,25 @@ Avoid a generic raw-SQL escape hatch in request handlers. Keep low-level unscope
 ## Safety boundary
 
 This plan is not a production migration, certification, or deployment approval. Keep PR #10 draft and unmerged. Do not modify production data, enable tenant-facing routes, or claim SOC 2/ISO/Cyber Essentials certification from this work.
+
+
+## Prototype implementation progress
+
+The following isolated prototype files now exist on the draft identity/tenant branch:
+
+- `atlas_engine/tenant_repository_prototype.py`: tenant-filtered task and attempt create/read/list/update/delete operations, with composite tenant/parent foreign keys.
+- `tests/test_tenant_repository_prototype.py`: cross-tenant task and attempt access, generic not-found behavior, scope enforcement, update/delete boundaries and database-level child relationship tests.
+- `atlas_engine/tenant_learning_repository.py`: isolated tenant-owned evaluation, lesson and proposal records with tenant-consistent composite foreign keys and tenant-filtered read/write methods.
+- `tests/test_tenant_learning_repository.py`: cross-tenant read/write denial, scope enforcement, composite foreign-key rejection and cascade behavior.
+
+These prototypes use caller-owned disposable SQLite connections and are not imported by the live application. They do not alter `atlas_engine/storage.py`, `DB_PATH`, existing global tables, HTTP routes, or production data.
+
+The learning prototype deliberately requires a task parent for proposals. The live proposal schema permits a nullable task link; that ownership case remains part of the later full ownership design and must not be silently assigned a tenant during migration.
+
+## Next implementation gates
+
+1. Confirm CI for the new prototype modules and tests.
+2. Extend the same tenant-consistent pattern to recovery decisions, cancellations, retry schedules and lesson-usage events.
+3. Decide shared versus tenant-private ownership for sources, source documents and offline experiment evidence.
+4. Complete a disposable migration rehearsal and ownership reconciliation design.
+5. Only after those gates, design a verified-principal application integration. Do not wire the prototype into production storage before that review.
