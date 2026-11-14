@@ -74,3 +74,31 @@ class TenantExecutionRepositoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_every_execution_child_write_rejects_foreign_tenant_attempt(self):
+        with self.assertRaises(Exception):
+            self.ra.add_cancellation("foreign-cancel", self.ta, self.ab, "cross-tenant")
+        with self.assertRaises(Exception):
+            self.ra.add_retry_schedule(
+                "foreign-retry", self.ta, self.ab, 2,
+                "2030-01-01T00:00:00Z", "2030-01-02T00:00:00Z",
+                "worker", "1", "foreign-idem", "temporary", {"max_attempts": 2},
+            )
+        with self.assertRaises(Exception):
+            self.ra.record_lesson_use("foreign-use", self.ta, self.ab, "lesson-a")
+        self.assertEqual(self.ra.list_cancellations(self.ta), [])
+        self.assertEqual(self.ra.list_retry_schedules(self.ta), [])
+        self.assertEqual(self.ra.list_lesson_uses(self.ta), [])
+
+    def test_foreign_tenant_task_ids_are_not_visible_in_execution_reads(self):
+        self.assertEqual(self.ra.list_recovery_decisions(self.ta), [])
+        self.assertEqual(self.ra.list_cancellations(self.ta), [])
+        self.assertEqual(self.ra.list_retry_schedules(self.ta), [])
+        self.assertEqual(self.ra.list_lesson_uses(self.ta), [])
+        with self.assertRaises(Exception):
+            self.ra.list_cancellations(self.tb)
+        with self.assertRaises(Exception):
+            self.ra.list_retry_schedules(self.tb)
+        with self.assertRaises(Exception):
+            self.ra.list_lesson_uses(self.tb)
