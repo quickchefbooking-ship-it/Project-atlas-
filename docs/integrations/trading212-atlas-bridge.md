@@ -41,6 +41,28 @@ Tenant and account identifiers are intentionally absent from caller-supplied cla
 
 **Important limitation:** the module validates claims only after a trusted verifier has authenticated them. It does not verify JWT signatures, fetch JWKS, validate a live key rotation, persist or reject replayed `jti` values, establish tenant/account mapping, or provide an HTTP middleware/endpoint. Those remain mandatory before any connection is enabled.
 
+## Read-only TRADING API contract audit
+
+A read-only inspection of the existing TRADING checkout compared `lib/api-spec/openapi.yaml` with the route, service and application implementations. No files were changed and no broker endpoint was invoked.
+
+The audit found these concrete OpenAPI corrections needed before a bridge client is generated:
+
+- **Authentication:** operations do not declare machine-readable Clerk-session security. The existing Clerk owner check is enforced in the router; it is not the same as an MCP integration token or a future Atlas service token. Keep the owner check and document its 401/403 behavior and the owner-not-configured variants.
+- **Status schema:** actual status payloads include `statusLabel` and `cashRead`, but the closed `Trading212ConnectionStatus` schema omits them.
+- **Cash provenance:** the cash response includes `dataOrigin`; the closed generic read-result schema omits it.
+- **Error variants:** authentication, owner mismatch, same-origin rejection and unexpected server errors omit fields required by the current `Trading212Error` schema. Its enum omits `authentication_required` and `same_origin_required`.
+- **Timeout and validation statuses:** upstream/local timeouts return 504, not the documented 408. Several GET operations can return 400 for invalid environment/query input; unexpected errors can return 500.
+- **History pagination:** each call returns one page. `nextPagePath` cannot be combined with `limit`, `ticker` or `time`. The documented order-history `time` parameter is not accepted by the implementation; only transaction history accepts it.
+- **Payload typing:** account summary/cash are top-level objects, positions are top-level arrays, and history is an object containing `items` and `nextPagePath`. The shared schema is too broad and its item constraints do not match the runtime validator. Do not invent guaranteed provider position fields.
+- **Response headers:** the router sends `Cache-Control: no-store, private`, `Pragma: no-cache` and `X-Trading212-Write-Capability: disabled`; rate-limit and retry headers may also be present.
+- **Connection test:** the OpenAPI description permits Live, while the implemented test-connection handler is Demo-only and same-origin protected.
+
+The minimal backwards-compatible correction is to preserve existing paths, operation IDs and runtime payloads; add route-specific top-level response schemas and typed optional provenance; model the actual error variants with `oneOf`; document actual HTTP codes and pagination constraints; and add a distinct Clerk-session security scheme. Do not describe that scheme as Atlas service authentication.
+
+## Replay protection boundary
+
+`atlas_engine.finance_service_auth` now defines a `FinanceReplayStore` protocol and a fail-closed guard that atomically consumes a verified token ID before a Finance read. This is an interface and enforcement seam only. The test double is process-local and is not suitable for production. A durable, shared atomic implementation (for example, a transactional database uniqueness constraint or an equivalent atomic cache operation), expiry cleanup and operational monitoring remain required. If replay storage is unavailable, the read must fail closed.
+
 ## Next integration stages
 
 1. Reconcile TRADING's OpenAPI schema with actual response fields and add machine-readable authentication requirements.
