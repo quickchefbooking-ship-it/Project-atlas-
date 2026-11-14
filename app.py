@@ -372,7 +372,7 @@ def inspect_tenant_professor_plan(
         plans = TenantPlanRepository(connection, principal)
         steps = TenantStepExecutionRepository(connection, principal)
         service = TenantProfessorOrchestrationService(
-            principal, plans, steps, CapabilityRegistry()
+            principal, plans, steps, getattr(app.state, "tenant_capability_registry", CapabilityRegistry())
         )
         report = service.inspect_plan(
             plan_id, event_limit_per_step=event_limit_per_step
