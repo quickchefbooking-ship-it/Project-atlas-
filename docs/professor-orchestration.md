@@ -60,7 +60,7 @@ The model validates unique step IDs, known dependencies, acyclic dependency grap
 
 Plan readiness is risk-aware: read-only/local/draft plans can be marked ready; any plan containing an external side effect or privileged step moves to `awaiting_approval`. Approval requires an explicit reference and transitions the plan to `approved`. That reference is only a contract-level placeholder until the application binds approval to a verified actor, exact action/target/parameters and expiry. Approval alone does not execute or deploy anything.
 
-The plan contract is an in-memory model at this stage. Durable plan persistence, atomic state transitions, per-step execution records, idempotency, cancellation and recovery remain future work. It must not be represented as a live autonomous planner or worker.
+The typed plan model is persisted by `atlas_engine/plan_repository.py` in the configured SQLite database. It creates a dedicated `professor_plans` table, stores the validated plan definition, supports bounded listing and lookup, and uses an atomic compare-and-swap state transition with an explicit allowed-transition map. Approval transitions require a non-empty approval reference. This repository does not yet bind that reference to a verified human identity or immutable action details, so it is not a production approval system. Per-step execution records, idempotency, cancellation and recovery remain future work. The plan repository does not execute steps and must not be represented as a live autonomous planner or worker.
 
 ## 4. Capability contract
 
