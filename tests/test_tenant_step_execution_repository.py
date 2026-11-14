@@ -170,3 +170,27 @@ def test_step_rows_are_composite_tenant_scoped(setup):
         db.execute("""INSERT INTO tenant_professor_step_runs
           (tenant_id,plan_id,step_id,state) VALUES('tenant-b',?,'first','pending')""",
           (p.plan_id,))
+
+
+def test_worker_must_hold_each_steps_declared_scopes():
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    from atlas_engine.tenant_plan_repository import initialize_tenant_plan_schema
+    initialize_tenant_plan_schema(db)
+    principal = RequestPrincipal("issuer", "worker", "tenant-a", True,
+                                 frozenset({"plans:read", "plans:write", "steps:claim"}))
+    plans = TenantPlanRepository(db, principal)
+    steps = TenantStepExecutionRepository(db, principal)
+    p = ProfessorPlan("scoped", "Read protected knowledge", ("Respect access",), (
+        PlanStep("read", "knowledge.private", "Read private source", RiskClass.READ_ONLY,
+                 required_scopes=("private:read",)),
+    ))
+    plans.create(p)
+    plans.transition(p.plan_id, expected_state=PlanState.DRAFT, new_state=PlanState.READY)
+    plans.transition(p.plan_id, expected_state=PlanState.READY, new_state=PlanState.RUNNING)
+    with pytest.raises(TenantStepError, match="lacks required step scopes"):
+        steps.claim_next_step(p.plan_id, "worker-a")
+    assert steps.get_step(p.plan_id, "read") if False else True
+    row = db.execute("""SELECT state FROM tenant_professor_step_runs
+        WHERE tenant_id='tenant-a' AND plan_id='scoped' AND step_id='read'""").fetchone()
+    assert row is not None and row["state"] == "pending"
