@@ -193,3 +193,35 @@ def test_worker_must_hold_each_steps_declared_scopes():
     row = db.execute("""SELECT state FROM tenant_professor_step_runs
         WHERE tenant_id='tenant-a' AND plan_id='scoped' AND step_id='read'""").fetchone()
     assert row is not None and row["state"] == "pending"
+
+def test_dependency_results_hands_off_only_completed_direct_dependency_outputs(setup):
+    _, plans, _, steps, _ = setup
+    p = running(plans)
+    first = steps.claim_next_step(p.plan_id, "worker-a")
+    steps.complete(first, result={"provider": "Crossref", "sources": [{"doi": "10.1/a"}]})
+    assert steps.dependency_results(p.plan_id, "second") == {
+        "first": {"provider": "Crossref", "sources": [{"doi": "10.1/a"}]}
+    }
+
+
+def test_dependency_results_refuses_pending_or_failed_dependencies(setup):
+    _, plans, _, steps, _ = setup
+    p = running(plans)
+    with pytest.raises(TenantStepConflict, match="must succeed"):
+        steps.dependency_results(p.plan_id, "second")
+
+
+def test_dependency_results_cannot_read_another_tenants_plan(setup):
+    _, plans_a, _, steps_a, steps_b = setup
+    p = running(plans_a)
+    first = steps_a.claim_next_step(p.plan_id, "worker-a")
+    steps_a.complete(first, result={"private": "tenant-a"})
+    with pytest.raises(TenantStepNotFound):
+        steps_b.dependency_results(p.plan_id, "second")
+
+
+def test_dependency_results_rejects_unrelated_step_ids(setup):
+    _, plans, _, steps, _ = setup
+    p = running(plans)
+    with pytest.raises(TenantStepNotFound):
+        steps.dependency_results(p.plan_id, "not-a-step")
