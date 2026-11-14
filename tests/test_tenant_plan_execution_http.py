@@ -188,3 +188,72 @@ def test_execute_next_runs_read_only_crossref_research_and_preserves_citations(m
         assert calls == [("safe AI orchestration", 3)]
     finally:
         client.__exit__(None, None, None)
+
+
+def test_professor_hands_crossref_sources_into_evidence_bundle_capability(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        metadata = {
+            "doi": "10.1234/atlas.chain",
+            "publisher": "Example Academic Press",
+            "retrieved_at": "2026-11-14T12:00:00+00:00",
+            "abstract": "A bounded source abstract.",
+        }
+        document = SourceDocument(
+            title="Evidence hand-off study",
+            uri="https://doi.org/10.1234/atlas.chain",
+            content="Crossref scholarly metadata\n" + json.dumps(metadata),
+            metadata=metadata,
+        )
+        monkeypatch.setattr(
+            "atlas_engine.capability_runtime.search_crossref_works",
+            lambda query, limit=5: [document],
+        )
+        tenant_path = str(tmp_path / "tenant.sqlite")
+        connection = sqlite3.connect(tenant_path)
+        connection.row_factory = sqlite3.Row
+        scopes = frozenset({
+            "plans:read", "plans:write", "plans:execute",
+            "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+            "compute:local", "research:public",
+        })
+        principal = RequestPrincipal(ISSUER, "operator", "tenant-a", True, scopes)
+        plans = TenantPlanRepository(connection, principal)
+        plans.create(ProfessorPlan(
+            "evidence-chain", "Retrieve and organise scholarly sources",
+            ("Keep source provenance throughout the plan",),
+            (
+                PlanStep(
+                    "search", "research.crossref.search", "safe AI orchestration",
+                    RiskClass.READ_ONLY, required_scopes=("research:public",),
+                    capability_version="1.0.0",
+                ),
+                PlanStep(
+                    "bundle", "research.evidence.bundle", "Organise completed source records",
+                    RiskClass.READ_ONLY, depends_on=("search",),
+                    required_scopes=("research:public",), capability_version="1.0.0",
+                ),
+            ),
+        ))
+        connection.close()
+
+        prepared = client.post(
+            "/professor/tenant/plans/evidence-chain/prepare", headers=headers
+        )
+        assert prepared.status_code == 200
+        first = client.post(
+            "/professor/tenant/plans/evidence-chain/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.json()["status"] == "step_succeeded"
+        second = client.post(
+            "/professor/tenant/plans/evidence-chain/execute-next", headers=headers
+        )
+        assert second.status_code == 200
+        result = second.json()["result"]
+        assert result["schema_version"] == 1
+        assert result["summary"]["source_count"] == 1
+        assert result["sources"][0]["uri"] == "https://doi.org/10.1234/atlas.chain"
+        assert result["summary"]["confidence"] == "not_scored"
+    finally:
+        client.__exit__(None, None, None)
