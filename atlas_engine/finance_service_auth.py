@@ -107,6 +107,48 @@ class AuthorizedFinanceService:
     scopes: FrozenSet[str]
     environment: Literal["demo"]
     token_id: str
+    expires_at: int
+
+
+class FinanceReplayStore(Protocol):
+    """Durable store implementing an atomic, single-use token-ID claim.
+
+    Implementations must atomically reject an existing token_id and retain a
+    new ID until expires_at plus the configured clock-skew window. Storage
+    errors must fail closed; a process-local dictionary is not production-safe.
+    """
+
+    def consume_once(self, token_id: str, *, expires_at: int) -> bool:
+        """Return true only when this token ID was atomically recorded first."""
+        ...
+
+
+def require_unreplayed_finance_service(
+    principal: AuthorizedFinanceService,
+    replay_store: FinanceReplayStore,
+    *,
+    now: datetime | None = None,
+    clock_skew_seconds: int = 0,
+) -> AuthorizedFinanceService:
+    """Atomically consume a verified token ID before allowing a Finance read.
+
+    This is only a storage contract and enforcement seam. No production store
+    is supplied here; callers must inject a durable atomic implementation.
+    """
+    if not isinstance(principal, AuthorizedFinanceService):
+        raise TypeError("An authorized Finance service principal is required.")
+    if isinstance(clock_skew_seconds, bool) or not isinstance(clock_skew_seconds, int) or not 0 <= clock_skew_seconds <= 120:
+        raise ServiceAuthorizationError("clock_skew_seconds must be between 0 and 120.")
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ServiceAuthorizationError("now must be timezone-aware.")
+    if int(current.timestamp()) > principal.expires_at + clock_skew_seconds:
+        raise ServiceAuthorizationError("Service token has expired before replay check.")
+    if not callable(getattr(replay_store, "consume_once", None)):
+        raise TypeError("A durable FinanceReplayStore implementation is required.")
+    if replay_store.consume_once(principal.token_id, expires_at=principal.expires_at) is not True:
+        raise ServiceAuthorizationError("Service token replay detected.")
+    return principal
 
 
 def authorize_finance_service(
@@ -151,4 +193,5 @@ def authorize_finance_service(
         scopes=frozenset(claims.scopes),
         environment="demo",
         token_id=claims.token_id,
+        expires_at=claims.expires_at,
     )
