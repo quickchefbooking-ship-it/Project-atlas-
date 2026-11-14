@@ -105,8 +105,10 @@ def execute_next_tenant_professor_step(
         try:
             # Capability-specific input mapping is derived from the trusted
             # registered schema. The plan objective is data, never executable code.
+            dependency_outputs = steps.dependency_results(plan_id, step.step_id)
             capability_input = runtime.input_for_objective(
-                step.capability, version, step.objective
+                step.capability, version, step.objective,
+                dependency_outputs=dependency_outputs,
             )
             result = runtime.execute(
                 step.capability, version, capability_input,
