@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -32,6 +33,17 @@ class PlanStateConflict(PlanRepositoryError):
     """A plan changed state before this transition could be applied."""
 
 
+@dataclass(frozen=True)
+class PlanTransitionRecord:
+    """Append-only record of a persisted plan state transition."""
+
+    plan_id: str
+    from_state: PlanState | None
+    to_state: PlanState
+    approval_reference: str | None
+    created_at: str
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -42,6 +54,7 @@ def _encode_plan(plan: ProfessorPlan) -> str:
         "objective": plan.objective,
         "acceptance_criteria": list(plan.acceptance_criteria),
         "state": plan.state.value,
+        "approval_reference": plan.approval_reference,
         "steps": [
             {
                 "step_id": step.step_id,
@@ -82,6 +95,8 @@ def _decode_plan(raw: str) -> ProfessorPlan:
         acceptance_criteria=tuple(payload["acceptance_criteria"]),
         steps=steps,
         state=PlanState(payload["state"]),
+        # Older persisted plans predate this field; keep them readable.
+        approval_reference=payload.get("approval_reference"),
     )
 
 
@@ -115,6 +130,27 @@ class PlanRepository:
                 ON professor_plans(state, updated_at DESC)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS professor_plan_transitions (
+                    transition_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    plan_id TEXT NOT NULL REFERENCES professor_plans(plan_id) ON DELETE RESTRICT,
+                    from_state TEXT,
+                    to_state TEXT NOT NULL CHECK(to_state IN (
+                        'draft','ready','awaiting_approval','approved',
+                        'running','succeeded','failed','cancelled'
+                    )),
+                    approval_reference TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_professor_plan_transitions_plan
+                ON professor_plan_transitions(plan_id, transition_id)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -122,6 +158,8 @@ class PlanRepository:
     def create(self, plan: ProfessorPlan) -> ProfessorPlan:
         if not isinstance(plan, ProfessorPlan):
             raise TypeError("A validated ProfessorPlan is required.")
+        if plan.state is not PlanState.DRAFT or plan.approval_reference is not None:
+            raise PlanStateConflict("New plans must be created in draft state without an approval reference.")
         conn = self._connection_factory()
         now = _now()
         try:
@@ -132,6 +170,14 @@ class PlanRepository:
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (plan.plan_id, plan.state.value, _encode_plan(plan), now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO professor_plan_transitions(
+                        plan_id, from_state, to_state, approval_reference, created_at
+                    ) VALUES (?, NULL, ?, NULL, ?)
+                    """,
+                    (plan.plan_id, plan.state.value, now),
                 )
                 conn.commit()
             except sqlite3.IntegrityError as exc:
@@ -201,6 +247,8 @@ class PlanRepository:
             or len(approval_reference) > 256
         ):
             raise PlanStateConflict("An action-bound approval reference is required.")
+        if new_state is not PlanState.APPROVED and approval_reference is not None:
+            raise PlanStateConflict("An approval reference is only accepted when approving a plan.")
         conn = self._connection_factory()
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -223,6 +271,10 @@ class PlanRepository:
                 acceptance_criteria=current.acceptance_criteria,
                 steps=current.steps,
                 state=new_state,
+                approval_reference=(
+                    approval_reference if new_state is PlanState.APPROVED
+                    else current.approval_reference
+                ),
             )
             cursor = conn.execute(
                 """
@@ -235,7 +287,50 @@ class PlanRepository:
             if cursor.rowcount != 1:
                 conn.rollback()
                 raise PlanStateConflict("Plan state changed concurrently.")
+            transitioned_at = _now()
+            conn.execute(
+                """
+                INSERT INTO professor_plan_transitions(
+                    plan_id, from_state, to_state, approval_reference, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    plan_id,
+                    expected_state.value,
+                    new_state.value,
+                    approval_reference,
+                    transitioned_at,
+                ),
+            )
             conn.commit()
             return updated
+        finally:
+            conn.close()
+
+    def list_transitions(self, plan_id: str) -> tuple[PlanTransitionRecord, ...]:
+        """Return the append-only state history for one plan, oldest first."""
+        if not isinstance(plan_id, str) or not plan_id.strip() or len(plan_id) > 128:
+            raise ValueError("plan_id must be a non-empty string of at most 128 characters.")
+        conn = self._connection_factory()
+        try:
+            rows = conn.execute(
+                """
+                SELECT plan_id, from_state, to_state, approval_reference, created_at
+                FROM professor_plan_transitions
+                WHERE plan_id = ?
+                ORDER BY transition_id ASC
+                """,
+                (plan_id,),
+            ).fetchall()
+            return tuple(
+                PlanTransitionRecord(
+                    plan_id=row["plan_id"],
+                    from_state=PlanState(row["from_state"]) if row["from_state"] else None,
+                    to_state=PlanState(row["to_state"]),
+                    approval_reference=row["approval_reference"],
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            )
         finally:
             conn.close()
