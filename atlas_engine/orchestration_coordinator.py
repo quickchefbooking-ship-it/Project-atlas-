@@ -89,9 +89,10 @@ def preview_plan(
 
     for step_id in plan.topological_order():
         step = by_id[step_id]
-        definition = registry.get(step.capability, _find_version(registry, step.capability))
-        # The version is selected only when exactly one trusted definition has
-        # this name. Plans will gain an explicit version field before execution.
+        version = step.capability_version or _find_version(registry, step.capability)
+        definition = registry.get(step.capability, version) if version else None
+        # Legacy plans may omit a version only when exactly one registered
+        # version exists. Ambiguous names fail closed; never select "latest".
         if definition is None:
             previews[step_id] = StepPreview(
                 step_id, step.capability, None,
