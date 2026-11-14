@@ -295,3 +295,17 @@ The tenant step repository now exposes `dependency_results(plan_id, step_id)`. I
 The execution route supplies these completed outputs to the trusted capability runtime. The new read-only `research.evidence.bundle@1.0.0` capability converts source records from completed research dependencies into the deterministic evidence bundle. It requires `research:public`, accepts no task-supplied handler or arbitrary source-step selector, and does not write externally.
 
 The current Crossref-to-evidence path preserves title, DOI URI, DOI, publisher and retrieval timestamp. Crossref abstracts remain source material and are not transformed into verified claims. The evidence bundle therefore records source provenance and duplicate records, while confidence remains `not_scored` until claim annotations and a separately reviewed evaluation process exist.
+
+
+## Deterministic evidence evaluation capability
+
+The Professor runtime now includes `research.evidence.evaluate@1.0.0`. It accepts only an evidence bundle produced by a direct, completed plan dependency and classifies each claim as:
+
+- `supported_by_supplied_annotations`
+- `challenged_by_supplied_annotations`
+- `conflicting_annotations`
+- `insufficient_evidence`
+
+Each result preserves the claim text and source IDs grouped by supplied relation. Duplicate DOI/URI records are treated as one record group for the reported annotation count, so duplicate metadata cannot appear as independent corroboration. The result carries an explicit interpretation and limitations, and confidence remains `not_scored`.
+
+This is a transparent classification of supplied reviewer annotations, not an AI truth judgement. It does not assess journal quality, study design, sample size, bias, causality, source recency or factual accuracy. Crossref search currently returns bibliographic records and abstracts without claim annotations, so an ordinary Crossref-to-bundle-to-evaluation plan will correctly report insufficient evidence until a reviewer or separately validated extraction step supplies claim annotations. The capability is read-only, bounded to the existing plan dependency hand-off, and requires `research:public`.
