@@ -191,3 +191,43 @@ def test_real_lesson_aware_arithmetic_specialist_records_consumption_in_task_pip
     events = _events(task.id)
     assert len(events) == 1
     assert events[0]["lesson_id"] == "lesson-double-dozen"
+
+
+
+def test_real_memory_store_retrieves_and_executes_validated_arithmetic_alias(tmp_path, monkeypatch):
+    from atlas_engine.learning_memory import LearningMemory
+    from atlas_engine.lesson_aware_arithmetic import LessonAwareArithmeticExecutor
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "real-memory-specialist.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Resolve a stored arithmetic alias",
+        "double dozen",
+        [{"field": "value", "operator": "==", "expected_value": 24}],
+    )
+    storage.save_lesson({
+        "id": "lesson-real-double-dozen",
+        "task_id": task.id,
+        "lesson_type": "arithmetic_alias",
+        "summary": "double dozen exact arithmetic alias",
+        "source": "reviewed-test-fixture",
+        "evidence_json": json.dumps({
+            "application": {"alias": "double dozen", "expression": "12 * 2"}
+        }),
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    api = TaskAPI(
+        manager, LessonAwareArithmeticExecutor(), Evaluator(),
+        LearningMemory(), None, None,
+    )
+    response = api.run_task(task.id)
+
+    assert response["status"] == "passed"
+    assert response["result"]["value"] == 24
+    events = _events(task.id)
+    assert len(events) == 1
+    assert events[0]["lesson_id"] == "lesson-real-double-dozen"
+    assert events[0]["task_id"] == task.id
