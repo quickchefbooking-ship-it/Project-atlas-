@@ -108,3 +108,49 @@ def test_database_composite_foreign_key_rejects_cross_tenant_child(connection):
                VALUES (?, ?, ?)""",
             ("tenant-b", task_a, "invalid child"),
         )
+
+
+def test_update_is_limited_to_the_owning_tenant(connection):
+    repo_a = TenantTaskRepository(connection, principal("tenant-a"))
+    repo_b = TenantTaskRepository(connection, principal("tenant-b"))
+    task_b = repo_b.create_task("Original B title")
+
+    with pytest.raises(TenantTaskNotFound):
+        repo_a.update_task(task_b, "Attempted takeover")
+    assert repo_b.get_task(task_b)["title"] == "Original B title"
+
+    task_a = repo_a.create_task("Original A title")
+    assert repo_a.update_task(task_a, "Updated A title")["title"] == "Updated A title"
+
+
+def test_delete_is_limited_to_the_owning_tenant_and_cascades_children(connection):
+    repo_a = TenantTaskRepository(connection, principal("tenant-a"))
+    repo_b = TenantTaskRepository(connection, principal("tenant-b"))
+    task_b = repo_b.create_task("B protected")
+    attempt_b = repo_b.create_attempt(task_b, "B attempt")
+
+    with pytest.raises(TenantTaskNotFound):
+        repo_a.delete_task(task_b)
+    assert repo_b.get_task(task_b)["title"] == "B protected"
+    assert repo_b.list_attempts(task_b)[0]["attempt_id"] == attempt_b
+
+    repo_b.delete_task(task_b)
+    with pytest.raises(TenantTaskNotFound):
+        repo_b.get_task(task_b)
+    assert connection.execute(
+        "SELECT COUNT(*) FROM tenant_task_attempts WHERE tenant_id = ? AND task_id = ?",
+        ("tenant-b", task_b),
+    ).fetchone()[0] == 0
+
+
+def test_update_and_delete_require_write_scope(connection):
+    reader = TenantTaskRepository(
+        connection, principal("tenant-a", scopes=frozenset({"tasks:read"}))
+    )
+    writer = TenantTaskRepository(connection, principal("tenant-a"))
+    task_id = writer.create_task("Protected")
+    with pytest.raises(AuthorizationDenied):
+        reader.update_task(task_id, "No permission")
+    with pytest.raises(AuthorizationDenied):
+        reader.delete_task(task_id)
+    assert writer.get_task(task_id)["title"] == "Protected"
