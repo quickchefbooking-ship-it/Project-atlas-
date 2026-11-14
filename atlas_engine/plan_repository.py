@@ -66,6 +66,7 @@ def _encode_plan(plan: ProfessorPlan) -> str:
                 "expected_output": step.expected_output,
                 "timeout_seconds": step.timeout_seconds,
                 "resource_budget": step.resource_budget,
+                "capability_version": step.capability_version,
             }
             for step in plan.steps
         ],
@@ -86,6 +87,7 @@ def _decode_plan(raw: str) -> ProfessorPlan:
             expected_output=item["expected_output"],
             timeout_seconds=item["timeout_seconds"],
             resource_budget=item["resource_budget"],
+            capability_version=item.get("capability_version"),
         )
         for item in payload["steps"]
     )
