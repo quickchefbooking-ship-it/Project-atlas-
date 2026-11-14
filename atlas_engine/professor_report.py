@@ -74,6 +74,7 @@ def build_professor_report(bundle: dict[str, Any], evaluation: dict[str, Any]) -
             "challenging_sources": [source_id for source_id in item.get("challenging_source_ids", [])],
             "mentioning_sources": [source_id for source_id in item.get("mentioning_source_ids", [])],
             "source_references": refs,
+            "annotation_audit": item.get("annotation_audit", []),
             "confidence": "not_scored",
             "interpretation": item.get("interpretation", ""),
         }
