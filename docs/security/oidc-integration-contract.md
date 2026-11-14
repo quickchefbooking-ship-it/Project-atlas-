@@ -252,3 +252,30 @@ a deliberate proving-ground capability, not yet a general natural-language
 planner or research executor. External-side-effect and privileged capabilities
 remain blocked; no approval bypass, arbitrary plugin loader, network handler,
 production identity provider or deployment is introduced.
+
+
+## First source-attributed research capability
+
+The trusted capability catalogue now also includes
+\`research.crossref.search@1.0.0\`. It uses the existing Crossref public
+bibliographic metadata adapter, which performs bounded HTTPS GET requests to
+Crossref's fixed API host. It retrieves at most three scholarly records per
+step and returns each record's title, DOI URL, publisher, retrieval timestamp
+and available abstract. It does not fetch full text, access private material,
+write to the knowledge library or invoke a paid AI service.
+
+A plan step uses its objective as the search query and must declare the
+\`research:public\` scope. The runtime supplies the result limit itself; the
+plan cannot raise it. The response schema validates the returned shape and
+bounds each field. Retrieved abstracts and metadata are explicitly labelled
+untrusted source material. A citation URL records provenance; it is not a
+claim that the paper's findings have been independently validated.
+
+The normal Professor execution route is reused: the plan must pass readiness
+checks, a verified tenant principal must have \`plans:execute\` and the
+capability's required scope, one dependency-ready step is claimed, and its
+source-attributed result is stored in the tenant step record. No arbitrary URL
+fetching, summarisation claim, source approval, external write or automatic
+retry is introduced. The next research increment should add evidence
+normalisation and cross-source comparison while preserving per-claim source
+links and uncertainty.
