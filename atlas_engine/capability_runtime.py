@@ -16,6 +16,7 @@ from .capability_registry import CapabilityDefinition, CapabilityRegistry
 from .executor import safe_execute_local
 from .evidence_engine import build_evidence_bundle
 from .evidence_evaluation import evaluate_evidence_bundle
+from .professor_report import build_professor_report
 from .public_research_adapters import PublicSourceError, search_crossref_works
 
 
@@ -72,6 +73,21 @@ class CapabilityRuntime:
                 if isinstance(output, Mapping) and output.get("schema_version") == 1 and isinstance(output.get("claims"), list) and isinstance(output.get("sources"), list):
                     return {"bundle": dict(output)}
             raise CapabilityExecutionError("No completed evidence bundle was available from direct dependencies.")
+        if capability == "research.professor.report":
+            if "bundle" not in required or "evaluation" not in required or not isinstance(dependency_outputs, Mapping):
+                raise CapabilityExecutionError("Professor reporting requires completed bundle and evaluation dependencies.")
+            bundle = None
+            evaluation_result = None
+            for output in dependency_outputs.values():
+                if not isinstance(output, Mapping) or output.get("schema_version") != 1:
+                    continue
+                if isinstance(output.get("sources"), list) and isinstance(output.get("claims"), list):
+                    bundle = dict(output)
+                if isinstance(output.get("evaluations"), list):
+                    evaluation_result = dict(output)
+            if bundle is None or evaluation_result is None:
+                raise CapabilityExecutionError("Completed evidence bundle and evaluation outputs were not both available.")
+            return {"bundle": bundle, "evaluation": evaluation_result}
         string_fields = [
             field for field in required
             if field in properties and properties[field].get("type") == "string"
@@ -138,6 +154,15 @@ def _evidence_evaluate(payload: dict[str, Any], deadline: float) -> dict[str, An
     result = evaluate_evidence_bundle(payload["bundle"])
     if time.monotonic() >= deadline:
         raise TimeoutError("Evidence evaluation deadline exceeded.")
+    return result
+
+
+def _professor_report(payload: dict[str, Any], deadline: float) -> dict[str, Any]:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Professor report deadline exceeded.")
+    result = build_professor_report(payload["bundle"], payload["evaluation"])
+    if time.monotonic() >= deadline:
+        raise TimeoutError("Professor report deadline exceeded.")
     return result
 
 
@@ -325,7 +350,44 @@ def build_default_capability_runtime() -> CapabilityRuntime:
         timeout_seconds=10,
         approval_required=False,
     )
-    registry = CapabilityRegistry((math, research, evidence, evaluation))
+    report = CapabilityDefinition(
+        name="research.professor.report",
+        version="1.0.0",
+        risk_class="read_only",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "bundle": {"type": "object"},
+                "evaluation": {"type": "object"},
+            },
+            "required": ["bundle", "evaluation"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "report_type": {"type": "string", "const": "professor_evidence_report"},
+                "title": {"type": "string"},
+                "executive_summary": {"type": "object"},
+                "findings": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "challenges": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "disagreements": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "evidence_gaps": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
+                "sources": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                "duplicate_records": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                "limitations": {"type": "array", "maxItems": 8, "items": {"type": "string"}},
+                "review_note": {"type": "string"},
+            },
+            "required": ["schema_version", "report_type", "title", "executive_summary", "findings", "challenges", "disagreements", "evidence_gaps", "sources", "duplicate_records", "limitations", "review_note"],
+            "additionalProperties": False,
+        },
+        required_scopes=("research:public",),
+        side_effects=False,
+        timeout_seconds=10,
+        approval_required=False,
+    )
+    registry = CapabilityRegistry((math, research, evidence, evaluation, report))
     return CapabilityRuntime(
         registry,
         {
@@ -333,5 +395,6 @@ def build_default_capability_runtime() -> CapabilityRuntime:
             research.identity: _crossref_search,
             evidence.identity: _evidence_bundle,
             evaluation.identity: _evidence_evaluate,
+            report.identity: _professor_report,
         },
     )
