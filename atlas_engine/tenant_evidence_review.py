@@ -7,10 +7,12 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .http_identity import require_verified_principal
@@ -221,3 +223,10 @@ def get_evidence_review(
         raise HTTPException(status_code=503, detail="Tenant review storage is temporarily unavailable.") from None
     finally:
         connection.close()
+
+
+@router.get("/professor/evidence-review", include_in_schema=False)
+def professor_evidence_review_ui():
+    """Serve the browser evidence-review interface; all evidence data stays behind OIDC."""
+    page = Path(__file__).resolve().parent.parent / "static" / "professor_evidence_review.html"
+    return FileResponse(page, media_type="text/html")
