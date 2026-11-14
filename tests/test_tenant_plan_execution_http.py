@@ -51,6 +51,7 @@ def setup(monkeypatch, tmp_path):
         "compute:local",
     }
     memberships.provision_membership(ISSUER, "operator", "tenant-a", scopes)
+    memberships.provision_membership(ISSUER, "viewer", "tenant-a", scopes - {"plans:execute"})
     client_context = TestClient(app_module.app)
     client_context.__enter__()
     verifier = SubjectVerifier()
