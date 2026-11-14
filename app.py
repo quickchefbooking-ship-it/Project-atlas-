@@ -3,6 +3,7 @@ import json
 from contextlib import asynccontextmanager
 import os
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Optional, Any
 
@@ -34,6 +35,7 @@ from atlas_engine.capability_registry import CapabilityRegistry
 from atlas_engine.tenant_plan_repository import TenantPlanRepository, TenantPlanNotFound, initialize_tenant_plan_schema
 from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository, TenantStepNotFound, initialize_tenant_step_schema
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
+from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,27 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
 app.state.tenant_data_path = None
+
+
+class TenantPlanStepInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    step_id: str = Field(min_length=1, max_length=2000)
+    capability: str = Field(min_length=1, max_length=2000)
+    objective: str = Field(min_length=1, max_length=2000)
+    risk: RiskClass
+    depends_on: list[str] = Field(default_factory=list, max_length=16)
+    required_scopes: list[str] = Field(default_factory=list, max_length=64)
+    expected_output: str = Field(default="", max_length=2000)
+    timeout_seconds: int = Field(default=30, ge=1, le=900)
+    resource_budget: int = Field(default=1, ge=1, le=100)
+    capability_version: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+class TenantPlanCreateInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    objective: str = Field(min_length=1, max_length=2000)
+    acceptance_criteria: list[str] = Field(min_length=1, max_length=64)
+    steps: list[TenantPlanStepInput] = Field(min_length=1, max_length=64)
 
 
 def _initialize_tenant_data_store() -> Optional[str]:
@@ -261,6 +284,68 @@ def identity_me(principal=Depends(require_verified_principal)):
         "tenant_id": principal.tenant_id,
         "scopes": sorted(principal.scopes),
     }
+
+
+
+@app.post("/professor/tenant/plans", status_code=201)
+def create_tenant_professor_plan(
+    payload: TenantPlanCreateInput,
+    principal=Depends(require_verified_principal),
+):
+    """Persist a tenant-owned DRAFT plan; creation never approves or executes it."""
+    database_path = getattr(app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tenant plan storage is not configured.",
+        )
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plan = ProfessorPlan(
+            plan_id=uuid.uuid4().hex,
+            objective=payload.objective,
+            acceptance_criteria=tuple(payload.acceptance_criteria),
+            steps=tuple(
+                PlanStep(
+                    step_id=item.step_id,
+                    capability=item.capability,
+                    objective=item.objective,
+                    risk=item.risk,
+                    depends_on=tuple(item.depends_on),
+                    required_scopes=tuple(item.required_scopes),
+                    expected_output=item.expected_output,
+                    timeout_seconds=item.timeout_seconds,
+                    resource_budget=item.resource_budget,
+                    capability_version=item.capability_version,
+                )
+                for item in payload.steps
+            ),
+        )
+        repository = TenantPlanRepository(connection, principal)
+        repository.create(plan)
+        return {
+            "plan_id": plan.plan_id,
+            "tenant_id": principal.tenant_id,
+            "state": plan.state.value,
+            "objective": plan.objective,
+            "acceptance_criteria": list(plan.acceptance_criteria),
+            "step_count": len(plan.steps),
+            "execution_enabled": False,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan creation denied.") from None
+    except PlanValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Tenant plan could not be created.") from None
+    except sqlite3.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Tenant plan storage is temporarily unavailable.",
+        ) from None
+    finally:
+        connection.close()
 
 
 @app.get("/professor/tenant/plans/{plan_id}")
