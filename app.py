@@ -2,6 +2,7 @@ import hmac
 import json
 from contextlib import asynccontextmanager
 import os
+import sqlite3
 from pathlib import Path
 from typing import Optional, Any
 
@@ -28,6 +29,11 @@ from atlas_engine.http_identity import VerifiedIdentityService, require_verified
 from atlas_engine.oidc_contract import OIDCProviderConfig
 from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
+from atlas_engine.identity_policy import AuthorizationDenied
+from atlas_engine.capability_registry import CapabilityRegistry
+from atlas_engine.tenant_plan_repository import TenantPlanRepository, TenantPlanNotFound, initialize_tenant_plan_schema
+from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository, TenantStepNotFound, initialize_tenant_step_schema
+from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
 
 logger = logging.getLogger(__name__)
 
@@ -71,15 +77,38 @@ async def lifespan(app: FastAPI):
         if identity_service is not None:
             logger.info("Verified identity boundary configured from deployment settings")
     except Exception:
-        # Do not start a partially configured identity service. The dependency
-        # remains unavailable (503) until all trusted settings are corrected.
         app.state.identity_service = None
         logger.error("OIDC identity configuration is invalid; verified identity remains disabled")
+    try:
+        app.state.tenant_data_path = _initialize_tenant_data_store()
+    except Exception:
+        app.state.tenant_data_path = None
+        logger.error("Tenant plan storage initialization failed; tenant plan routes remain disabled")
     yield
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
+app.state.tenant_data_path = None
+
+
+def _initialize_tenant_data_store() -> Optional[str]:
+    """Initialize only the isolated tenant-plan prototype database."""
+    database_path = os.getenv("ATLAS_TENANT_DATA_DB_PATH")
+    if not database_path:
+        return None
+    membership_path = os.getenv("ATLAS_MEMBERSHIP_DB_PATH")
+    if membership_path and os.path.abspath(database_path) == os.path.abspath(membership_path):
+        raise ValueError("Tenant plan data and membership data must use separate databases.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    try:
+        connection.row_factory = sqlite3.Row
+        initialize_tenant_plan_schema(connection)
+        initialize_tenant_step_schema(connection)
+        connection.commit()
+    finally:
+        connection.close()
+    return os.path.abspath(database_path)
 
 
 def _identity_service_from_environment() -> Optional[VerifiedIdentityService]:
@@ -225,6 +254,125 @@ def identity_me(principal=Depends(require_verified_principal)):
         "tenant_id": principal.tenant_id,
         "scopes": sorted(principal.scopes),
     }
+
+
+@app.get("/professor/tenant/plans/{plan_id}")
+def inspect_tenant_professor_plan(
+    plan_id: str,
+    event_limit_per_step: int = 20,
+    principal=Depends(require_verified_principal),
+):
+    """Inspect one tenant-owned Professor plan without dispatching any work."""
+    database_path = getattr(app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tenant plan storage is not configured.",
+        )
+    if not 1 <= event_limit_per_step <= 100:
+        raise HTTPException(status_code=422, detail="event_limit_per_step must be between 1 and 100.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plans = TenantPlanRepository(connection, principal)
+        steps = TenantStepExecutionRepository(connection, principal)
+        service = TenantProfessorOrchestrationService(
+            principal, plans, steps, CapabilityRegistry()
+        )
+        report = service.inspect_plan(
+            plan_id, event_limit_per_step=event_limit_per_step
+        )
+        readiness = None
+        if report.readiness is not None:
+            readiness = {
+                "plan_state": report.readiness.plan_state.value,
+                "ordered_step_ids": list(report.readiness.ordered_step_ids),
+                "structurally_ready_step_ids": list(report.readiness.structurally_ready_step_ids),
+                "blocked_step_ids": list(report.readiness.blocked_step_ids),
+                "execution_enabled": report.readiness.execution_enabled,
+                "steps": [
+                    {
+                        "step_id": item.step_id,
+                        "capability": item.capability,
+                        "capability_version": item.capability_version,
+                        "readiness": item.readiness.value,
+                        "reasons": list(item.reasons),
+                    }
+                    for item in report.readiness.steps
+                ],
+            }
+        return {
+            "tenant_id": report.tenant_id,
+            "plan": {
+                "plan_id": report.plan.plan_id,
+                "objective": report.plan.objective,
+                "state": report.plan.state.value,
+                "acceptance_criteria": list(report.plan.acceptance_criteria),
+                "steps": [
+                    {
+                        "step_id": item.step_id,
+                        "capability": item.capability,
+                        "objective": item.objective,
+                        "risk": item.risk.value,
+                        "depends_on": list(item.depends_on),
+                        "required_scopes": list(item.required_scopes),
+                        "capability_version": item.capability_version,
+                    }
+                    for item in report.plan.steps
+                ],
+            },
+            "transitions": [
+                {
+                    "from_state": item.from_state.value if item.from_state else None,
+                    "to_state": item.to_state.value,
+                    "actor_issuer": item.actor_issuer,
+                    "actor_subject": item.actor_subject,
+                    "created_at": item.created_at,
+                }
+                for item in report.transitions
+            ],
+            "step_runs": [
+                {
+                    "step_id": item.step_id,
+                    "state": item.state,
+                    "attempt_number": item.attempt_number,
+                    "worker_id": item.worker_id,
+                    "fencing_token": item.fencing_token,
+                    "lease_expires_at": item.lease_expires_at,
+                    "result": item.result,
+                    "error_code": item.error_code,
+                }
+                for item in report.steps
+            ],
+            "recent_events": [
+                {
+                    "step_id": item.step_id,
+                    "event_type": item.event_type,
+                    "attempt_number": item.attempt_number,
+                    "worker_id": item.worker_id,
+                    "fencing_token": item.fencing_token,
+                    "details": item.details,
+                    "created_at": item.created_at,
+                }
+                for item in report.recent_events
+            ],
+            "readiness": readiness,
+            "execution_enabled": report.execution_enabled,
+            "execution_block_reason": report.execution_block_reason,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan access denied.") from None
+    except (TenantPlanNotFound, TenantStepNotFound):
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Tenant plan storage is temporarily unavailable.",
+        ) from None
+    finally:
+        connection.close()
 
 
 @app.get("/sources", dependencies=[Depends(require_api_key)])
