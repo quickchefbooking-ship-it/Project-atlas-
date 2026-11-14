@@ -346,6 +346,47 @@ class TenantStepExecutionRepository:
             if self.db.in_transaction: self.db.rollback()
             raise
 
+    def dependency_results(self, plan_id: str, step_id: str) -> dict[str, Any]:
+        """Return only completed direct-dependency outputs for this tenant and step.
+
+        Plan dependencies are read from the persisted immutable plan contract;
+        callers cannot nominate arbitrary source steps. All dependencies must
+        have succeeded, and the combined hand-off is capped at 64 KiB.
+        """
+        tenant_id = self._auth("steps:read")
+        if not isinstance(plan_id, str) or not plan_id.strip() or len(plan_id) > 128:
+            raise ValueError("plan_id must be a non-empty bounded string.")
+        if not isinstance(step_id, str) or not step_id.strip() or len(step_id) > 128:
+            raise ValueError("step_id must be a non-empty bounded string.")
+        plan = self.db.execute(
+            "SELECT plan_json FROM tenant_professor_plans WHERE tenant_id=? AND plan_id=?",
+            (tenant_id, plan_id),
+        ).fetchone()
+        if plan is None:
+            raise TenantStepNotFound("Plan step was not found.")
+        contract = json.loads(plan["plan_json"])
+        step = next((item for item in contract["steps"] if item["step_id"] == step_id), None)
+        if step is None:
+            raise TenantStepNotFound("Plan step was not found.")
+        dependencies = tuple(step.get("depends_on", ()))
+        if not dependencies:
+            return {}
+        placeholders = ",".join("?" for _ in dependencies)
+        rows = self.db.execute(
+            f"""SELECT step_id,state,result_json FROM tenant_professor_step_runs
+                WHERE tenant_id=? AND plan_id=? AND step_id IN ({placeholders})""",
+            (tenant_id, plan_id, *dependencies),
+        ).fetchall()
+        by_id = {row["step_id"]: row for row in rows}
+        if len(by_id) != len(dependencies) or any(
+            by_id[item]["state"] != "succeeded" or by_id[item]["result_json"] is None
+            for item in dependencies
+        ):
+            raise TenantStepConflict("Every direct dependency must succeed before outputs can be handed off.")
+        results = {item: json.loads(by_id[item]["result_json"]) for item in dependencies}
+        _json_payload(results, max_bytes=65_536)
+        return results
+
     def get_step(self, plan_id: str, step_id: str) -> TenantStepRecord:
         tenant_id = self._auth("steps:read")
         row = self.db.execute("""
