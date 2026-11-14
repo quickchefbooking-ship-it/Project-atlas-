@@ -62,9 +62,17 @@ Plan readiness is risk-aware: read-only/local/draft plans can be marked ready; a
 
 The typed plan model is persisted by `atlas_engine/plan_repository.py` in the configured SQLite database. It creates a dedicated `professor_plans` table and an append-only `professor_plan_transitions` history table. Creation and every state change write their history event in the same SQLite transaction as the plan record. Approval transitions require a bounded, non-empty reference; that opaque reference is retained in the plan JSON and corresponding transition event, and remains attached as the plan moves into later states. New plans can only be inserted in `draft`, preventing callers from creating a plan directly in an approved or running state. Approval references supplied for unrelated transitions are rejected. Older plan records without an approval-reference field remain readable; their historical approvals are not retroactively treated as verified. The reference is still only an audit pointer, not proof of verified identity or a valid action-bound approval. The application must bind approval to a verified actor, exact action/target/parameters and expiry before execution can ever be enabled. Approval alone does not execute or deploy anything. Per-step execution records, idempotency, cancellation and recovery remain future work. The plan repository does not execute steps and must not be represented as a live autonomous planner or worker.
 
+### 3B. Non-executing orchestration coordinator
+
+`atlas_engine/orchestration_coordinator.py` now provides a deterministic preview of a saved plan against the trusted, application-owned capability registry. It walks the validated dependency graph in topological order and reports each step as structurally ready or blocked. It checks that the capability exists, resolves an exact capability version (or a single unambiguous legacy version), that the plan's risk is at least as restrictive as the registered capability, that the plan declares all capability scopes, and that the caller has every requested scope. A blocked dependency blocks its downstream steps.
+
+External-write, privileged and otherwise approval-gated capabilities remain marked `approval_unverified`, even if the plan has an approval reference. That is deliberate: the current reference is not verified identity or action-bound authorisation. The preview always returns `execution_enabled=false`; it does not invoke handlers, perform I/O, or claim that a task has run. Per-step durable execution state and an authorised executor are still not implemented.
+
+Plan steps can now pin `capability_version`. Older plan JSON without that field remains readable, but the coordinator refuses to guess when more than one version is registered.
+
 ## 4. Capability contract
 
-A future capability registry should require each arm to declare:
+The repository includes an immutable, application-owned capability registry in `atlas_engine/capability_registry.py`. Each registered arm declares:
 
 | Contract field | Purpose |
 | --- | --- |
