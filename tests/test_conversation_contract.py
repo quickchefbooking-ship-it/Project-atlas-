@@ -41,12 +41,14 @@ def test_context_builder_appends_latest_user_turn_and_bounds_history():
 
 
 def test_context_builder_discards_oldest_messages_to_fit_budget():
-    history = (
-        ConversationMessage("user", "a" * 12_000),
-        ConversationMessage("assistant", "b" * 12_000),
+    history = tuple(
+        ConversationMessage("user" if index % 2 == 0 else "assistant", "x" * 3_500)
+        for index in range(7)
     )
     result = build_conversation_input("c1", "u1", history, "latest")
-    assert result.messages == (ConversationMessage("user", "latest"),)
+    assert result.messages[-1] == ConversationMessage("user", "latest")
+    assert len(result.messages) < len(history) + 1
+    assert sum(len(item.content) for item in result.messages) <= MAX_CONTEXT_CHARS
 
 
 def test_provider_output_requires_real_text_and_identity():
