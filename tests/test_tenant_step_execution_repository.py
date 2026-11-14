@@ -190,7 +190,6 @@ def test_worker_must_hold_each_steps_declared_scopes():
     plans.transition(p.plan_id, expected_state=PlanState.READY, new_state=PlanState.RUNNING)
     with pytest.raises(TenantStepError, match="lacks required step scopes"):
         steps.claim_next_step(p.plan_id, "worker-a")
-    assert steps.get_step(p.plan_id, "read") if False else True
     row = db.execute("""SELECT state FROM tenant_professor_step_runs
         WHERE tenant_id='tenant-a' AND plan_id='scoped' AND step_id='read'""").fetchone()
     assert row is not None and row["state"] == "pending"
