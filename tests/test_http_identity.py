@@ -1,3 +1,4 @@
+import sqlite3
 import time
 from types import SimpleNamespace
 
@@ -124,3 +125,16 @@ def test_ambiguous_membership_is_rejected_not_selected(tmp_path):
     with pytest.raises(HTTPException) as exc:
         require_verified_principal(_request(service), "Bearer signed.token.value")
     assert exc.value.status_code == 401
+
+
+
+def test_membership_store_outage_returns_503(tmp_path):
+    class BrokenMembershipStore:
+        def resolve_membership(self, *_args, **_kwargs):
+            raise sqlite3.OperationalError("private database details")
+
+    service = VerifiedIdentityService(CONFIG, FakeVerifier(_claims()), BrokenMembershipStore())
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(_request(service), "Bearer signed.token.value")
+    assert exc.value.status_code == 503
+    assert "private database details" not in exc.value.detail
