@@ -257,3 +257,111 @@ def test_professor_hands_crossref_sources_into_evidence_bundle_capability(monkey
         assert result["summary"]["confidence"] == "not_scored"
     finally:
         client.__exit__(None, None, None)
+
+
+
+def test_professor_executes_full_research_evidence_evaluation_report_chain(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        metadata = {
+            "doi": "10.1234/atlas.fullchain",
+            "publisher": "Example Academic Press",
+            "retrieved_at": "2026-11-14T12:00:00+00:00",
+            "abstract": "A source abstract retained as untrusted material.",
+        }
+        document = SourceDocument(
+            title="Full Professor workflow study",
+            uri="https://doi.org/10.1234/atlas.fullchain",
+            content="Crossref scholarly metadata\n" + json.dumps(metadata),
+            metadata=metadata,
+        )
+        calls = []
+
+        def fake_search(query, limit=5):
+            calls.append((query, limit))
+            return [document]
+
+        monkeypatch.setattr(
+            "atlas_engine.capability_runtime.search_crossref_works", fake_search
+        )
+        tenant_path = str(tmp_path / "tenant.sqlite")
+        connection = sqlite3.connect(tenant_path)
+        connection.row_factory = sqlite3.Row
+        scopes = frozenset({
+            "plans:read", "plans:write", "plans:execute",
+            "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+            "compute:local", "research:public",
+        })
+        principal = RequestPrincipal(ISSUER, "operator", "tenant-a", True, scopes)
+        plans = TenantPlanRepository(connection, principal)
+        plans.create(ProfessorPlan(
+            "professor-full-chain",
+            "Research a topic, organise its sources, evaluate annotations and report",
+            ("Preserve source provenance and report limitations honestly",),
+            (
+                PlanStep(
+                    "search", "research.crossref.search", "safe AI orchestration",
+                    RiskClass.READ_ONLY, required_scopes=("research:public",),
+                    capability_version="1.0.0",
+                ),
+                PlanStep(
+                    "bundle", "research.evidence.bundle", "Organise retrieved sources",
+                    RiskClass.READ_ONLY, depends_on=("search",),
+                    required_scopes=("research:public",), capability_version="1.0.0",
+                ),
+                PlanStep(
+                    "evaluate", "research.evidence.evaluate", "Evaluate supplied annotations",
+                    RiskClass.READ_ONLY, depends_on=("bundle",),
+                    required_scopes=("research:public",), capability_version="1.0.0",
+                ),
+                PlanStep(
+                    "report", "research.professor.report", "Produce a source-linked report",
+                    RiskClass.READ_ONLY, depends_on=("bundle", "evaluate"),
+                    required_scopes=("research:public",), capability_version="1.0.0",
+                ),
+            ),
+        ))
+        connection.close()
+
+        prepared = client.post(
+            "/professor/tenant/plans/professor-full-chain/prepare", headers=headers
+        )
+        assert prepared.status_code == 200
+        assert prepared.json()["state"] == "ready"
+
+        step_results = []
+        for _ in range(4):
+            response = client.post(
+                "/professor/tenant/plans/professor-full-chain/execute-next",
+                headers=headers,
+            )
+            assert response.status_code == 200
+            step_results.append(response.json())
+
+        assert [item["step_id"] for item in step_results] == [
+            "search", "bundle", "evaluate", "report"
+        ]
+        assert [item["status"] for item in step_results] == [
+            "step_succeeded", "step_succeeded", "step_succeeded", "completed"
+        ]
+        assert step_results[-1]["plan_state"] == "succeeded"
+
+        report = step_results[-1]["result"]
+        assert report["report_type"] == "professor_evidence_report"
+        assert report["executive_summary"]["source_count"] == 1
+        assert report["executive_summary"]["claim_count"] == 0
+        assert report["executive_summary"]["confidence"] == "not_scored"
+        assert report["executive_summary"]["overall_conclusion"] == (
+            "No overall truth conclusion is drawn from annotation labels alone."
+        )
+        assert report["findings"] == []
+        assert report["challenges"] == []
+        assert report["disagreements"] == []
+        assert report["evidence_gaps"] == []
+        assert report["sources"][0]["uri"] == "https://doi.org/10.1234/atlas.fullchain"
+        assert report["sources"][0]["publisher"] == "Example Academic Press"
+        assert any("reviewer" in item.lower() or "annotation" in item.lower()
+                   for item in report["limitations"])
+        assert calls == [("safe AI orchestration", 3)]
+    finally:
+        client.__exit__(None, None, None)
