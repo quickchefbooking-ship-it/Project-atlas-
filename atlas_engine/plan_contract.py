@@ -88,6 +88,8 @@ class ProfessorPlan:
     acceptance_criteria: tuple[str, ...]
     steps: tuple[PlanStep, ...]
     state: PlanState = PlanState.DRAFT
+    # Opaque audit pointer only; this is not proof of verified identity or approval.
+    approval_reference: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.plan_id, str) or not self.plan_id.strip() or len(self.plan_id) > 128:
@@ -102,6 +104,15 @@ class ProfessorPlan:
             raise PlanValidationError(f"A plan must contain between 1 and {MAX_PLAN_STEPS} steps.")
         if not isinstance(self.state, PlanState):
             raise PlanValidationError("state must be a recognized PlanState.")
+        if self.approval_reference is not None:
+            if (
+                not isinstance(self.approval_reference, str)
+                or not self.approval_reference.strip()
+                or len(self.approval_reference) > 256
+            ):
+                raise PlanValidationError("approval_reference must be a non-empty string of at most 256 characters.")
+            if self.state in {PlanState.DRAFT, PlanState.READY, PlanState.AWAITING_APPROVAL}:
+                raise PlanValidationError("An approval reference cannot exist before approval.")
         ids = [step.step_id for step in self.steps]
         if len(set(ids)) != len(ids):
             raise PlanValidationError("Step identifiers must be unique.")
@@ -159,4 +170,5 @@ class ProfessorPlan:
             acceptance_criteria=self.acceptance_criteria,
             steps=self.steps,
             state=PlanState.APPROVED,
+            approval_reference=approval_reference,
         )
