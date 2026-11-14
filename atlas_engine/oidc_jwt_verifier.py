@@ -7,7 +7,7 @@ from typing import Any
 
 import jwt
 from jwt import PyJWKClient
-from jwt.exceptions import PyJWKClientError, PyJWTError
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError, PyJWTError
 
 from .oidc_contract import OIDCProviderConfig, VerifiedTokenClaims
 
@@ -33,12 +33,11 @@ class PyJWTTokenVerifier:
             raise ValueError("Bearer token is missing or exceeds the permitted size.")
         try:
             signing_key = self._jwks_client.get_signing_key_from_jwt(bearer_token)
+        except PyJWKClientConnectionError as exc:
+            raise OIDCVerifierUnavailable("Issuer signing keys are unavailable.") from exc
         except PyJWKClientError:
-            # Do not turn unknown kid / malformed key responses into an outage
-            # unless the underlying JWKS transport itself failed.
             raise ValueError("Token signing key was not accepted.") from None
         except Exception as exc:
-            # Network/transport errors are surfaced as unavailable, not accepted.
             raise OIDCVerifierUnavailable("Issuer signing keys are unavailable.") from exc
 
         try:
