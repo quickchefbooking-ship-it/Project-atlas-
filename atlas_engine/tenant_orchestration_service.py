@@ -53,6 +53,8 @@ class TenantProfessorOrchestrationService:
             raise TypeError("A trusted CapabilityRegistry is required.")
         if plans.principal != principal or steps.principal != principal:
             raise ValueError("All repositories must use the same immutable request principal.")
+        if plans.db is not steps.db:
+            raise ValueError("Tenant plan and step repositories must share one database connection.")
         self.principal = principal
         self.plans = plans
         self.steps = steps
