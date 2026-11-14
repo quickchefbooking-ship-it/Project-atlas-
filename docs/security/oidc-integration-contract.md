@@ -309,3 +309,15 @@ The Professor runtime now includes `research.evidence.evaluate@1.0.0`. It accept
 Each result preserves the claim text and source IDs grouped by supplied relation. Duplicate DOI/URI records are treated as one record group for the reported annotation count, so duplicate metadata cannot appear as independent corroboration. The result carries an explicit interpretation and limitations, and confidence remains `not_scored`.
 
 This is a transparent classification of supplied reviewer annotations, not an AI truth judgement. It does not assess journal quality, study design, sample size, bias, causality, source recency or factual accuracy. Crossref search currently returns bibliographic records and abstracts without claim annotations, so an ordinary Crossref-to-bundle-to-evaluation plan will correctly report insufficient evidence until a reviewer or separately validated extraction step supplies claim annotations. The capability is read-only, bounded to the existing plan dependency hand-off, and requires `research:public`.
+
+
+## Professor source-linked report capability
+
+The runtime includes `research.professor.report@1.0.0`. It accepts a completed evidence bundle and its completed evaluation as direct plan dependencies, then produces a structured report with:
+
+- An executive summary with counts for claims, findings, challenges, disagreements, evidence gaps, source records and duplicate-record groups.
+- Separate sections for supported-by-annotation findings, challenged claims, conflicting annotations and insufficient-evidence gaps.
+- Source IDs on every claim record and a source register containing title, URI, DOI, publisher and retrieval timestamp.
+- Duplicate-record notices, combined limitations and a reviewer note.
+
+The report builder rejects evaluation references to sources absent from the supplied bundle and rejects unknown evaluation statuses. It does not generate a new overall truth conclusion, confidence score or unsupported source-quality judgement. The capability is read-only and requires both completed dependencies from the same tenant-scoped plan hand-off.
