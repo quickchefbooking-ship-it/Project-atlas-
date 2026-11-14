@@ -247,6 +247,9 @@ class StepExecutionRepository:
                 conn.commit()
                 return None
             if row["risk"] in {"external_side_effect", "privileged"}:
+                # Preserve any lease-expiry recovery transitions made earlier in
+                # this transaction even though this requested claim is refused.
+                conn.commit()
                 raise StepExecutionError(
                     "External and privileged steps remain blocked until verified, "
                     "action-bound authorisation is implemented."
