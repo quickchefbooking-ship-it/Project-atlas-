@@ -88,8 +88,55 @@ class SQLiteMembershipRegistry:
                 );
                 CREATE INDEX IF NOT EXISTS idx_memberships_identity_active
                     ON tenant_memberships(issuer, subject, active);
+                CREATE TABLE IF NOT EXISTS membership_audit_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    issuer TEXT,
+                    subject TEXT,
+                    details_json TEXT NOT NULL,
+                    actor_issuer TEXT,
+                    actor_subject TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_membership_audit_tenant_time
+                    ON membership_audit_events(tenant_id, event_id);
             """)
             conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _record_audit(conn, event_type, tenant_id, issuer=None, subject=None, details=None):
+        """Append a minimal event in the same transaction as the mutation.
+
+        Actor identity is intentionally NULL until a verified admin principal
+        exists. Never treat caller-supplied actor labels as authenticated.
+        """
+        conn.execute(
+            """INSERT INTO membership_audit_events
+               (event_type, tenant_id, issuer, subject, details_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (event_type, tenant_id, issuer, subject,
+             json.dumps(details or {}, sort_keys=True, separators=(",", ":"))),
+        )
+
+    def list_audit_events(self, tenant_id: str):
+        """Return minimal audit events for a tenant, oldest first."""
+        tenant_id = _required_text(tenant_id, "tenant_id")
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """SELECT event_id, event_type, tenant_id, issuer, subject,
+                          details_json, actor_issuer, actor_subject, created_at
+                   FROM membership_audit_events WHERE tenant_id = ?
+                   ORDER BY event_id""",
+                (tenant_id,),
+            ).fetchall()
+            return [
+                {**dict(row), "details": json.loads(row["details_json"])}
+                for row in rows
+            ]
         finally:
             conn.close()
 
@@ -102,6 +149,8 @@ class SQLiteMembershipRegistry:
                 "INSERT INTO tenant_registry(tenant_id, display_name, active) VALUES (?, ?, 1)",
                 (tenant_id, display_name),
             )
+            self._record_audit(conn, "tenant.created", tenant_id,
+                               details={"display_name": display_name})
             conn.commit()
         finally:
             conn.close()
@@ -118,6 +167,8 @@ class SQLiteMembershipRegistry:
             )
             if cur.rowcount != 1:
                 raise MembershipNotFoundError("Tenant was not found.")
+            self._record_audit(conn, "tenant.activated" if active else "tenant.deactivated",
+                               tenant_id, details={"active": active})
             conn.commit()
         finally:
             conn.close()
@@ -146,6 +197,8 @@ class SQLiteMembershipRegistry:
                      updated_at = CURRENT_TIMESTAMP""",
                 (issuer, subject, tenant_id, scopes_json),
             )
+            self._record_audit(conn, "membership.provisioned", tenant_id, issuer, subject,
+                               {"scopes": sorted(validated_scopes)})
             conn.commit()
         finally:
             conn.close()
@@ -161,6 +214,8 @@ class SQLiteMembershipRegistry:
                    WHERE issuer = ? AND subject = ? AND tenant_id = ? AND active = 1""",
                 (issuer, subject, tenant_id),
             )
+            if cur.rowcount == 1:
+                self._record_audit(conn, "membership.revoked", tenant_id, issuer, subject)
             conn.commit()
             return cur.rowcount == 1
         finally:
