@@ -203,3 +203,84 @@ def test_downstream_dependency_handoff_uses_latest_review_revision(monkeypatch, 
         db.close()
     finally:
         client.__exit__(None, None, None)
+
+
+
+def test_ask_professor_answers_only_from_completed_tenant_report(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    try:
+        report = {
+            "schema_version": 1,
+            "report_type": "professor_evidence_report",
+            "executive_summary": {
+                "claim_count": 1, "finding_count": 1, "challenge_count": 0,
+                "disagreement_count": 0, "evidence_gap_count": 0,
+                "source_count": 1, "overall_conclusion":
+                    "No overall truth conclusion is drawn from annotation labels alone.",
+            },
+            "findings": [{
+                "claim_id": "claim-1", "claim": "The source supports kitchen temperature checks",
+                "status": "supported_by_supplied_annotations",
+                "supporting_sources": ["source-1"], "challenging_sources": [],
+                "mentioning_sources": [], "interpretation": "Reviewer annotation supports checks.",
+            }],
+            "challenges": [], "disagreements": [], "evidence_gaps": [],
+            "limitations": ["Supplied annotations are not independently verified."],
+        }
+        tenant_path = str(tmp_path / "tenant.sqlite")
+        db = sqlite3.connect(tenant_path)
+        db.execute("""
+          UPDATE tenant_professor_step_runs
+          SET state='succeeded',result_json=?
+          WHERE tenant_id='tenant-a' AND plan_id='review-plan' AND step_id='report'
+        """, (json.dumps(report),))
+        db.commit()
+        db.close()
+
+        response = client.post(
+            "/professor/tenant/plans/review-plan/ask",
+            headers=headers,
+            json={"question": "What does the report say about kitchen temperature checks?"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["answer_type"] == "matched_report_records"
+        assert body["mode"] == "deterministic_report_lookup"
+        assert body["matches"][0]["claim_id"] == "claim-1"
+        assert body["matches"][0]["supporting_sources"] == ["source-1"]
+        assert "not independent verification" in body["answer"]
+        assert body["limitations"] == ["Supplied annotations are not independently verified."]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_ask_professor_refuses_when_report_is_not_complete(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    try:
+        response = client.post(
+            "/professor/tenant/plans/review-plan/ask",
+            headers=headers,
+            json={"question": "Give me the summary"},
+        )
+        assert response.status_code == 409
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_ask_professor_rejects_unexpected_fields_and_oversized_question(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    try:
+        unexpected = client.post(
+            "/professor/tenant/plans/review-plan/ask",
+            headers=headers,
+            json={"question": "Summary", "tenant_id": "tenant-b"},
+        )
+        oversized = client.post(
+            "/professor/tenant/plans/review-plan/ask",
+            headers=headers,
+            json={"question": "x" * 1001},
+        )
+        assert unexpected.status_code == 422
+        assert oversized.status_code == 422
+    finally:
+        client.__exit__(None, None, None)
