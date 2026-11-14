@@ -60,7 +60,7 @@ def test_authorizes_allowlisted_demo_read_principal():
         ({"audience": "another-api"}, {}, "audience"),
         ({"subject": "unknown-service"}, {}, "allowlist"),
         ({"scopes": ("finance:portfolio:write",)}, {}, "allowlist"),
-        ({"expires_at": STAMP - 60}, {}, "expired"),
+        ({"issued_at": STAMP - 120, "not_before": STAMP - 120, "expires_at": STAMP - 60}, {}, "expired"),
         ({"not_before": STAMP + 60}, {}, "not active"),
         ({"issued_at": STAMP + 60}, {}, "future"),
         ({"expires_at": STAMP + 600}, {}, "lifetime"),
