@@ -198,3 +198,28 @@ Professor plan contract (dependency graph, risk classes, scopes, timeouts and
 resource budgets). The server generates the plan ID and persists only a
 `DRAFT`. The request cannot supply a tenant ID, state, approval reference,
 worker identity or execution result. Creation never approves or executes work.
+
+
+## Policy-gated tenant plan preparation
+
+`POST /professor/tenant/plans/{plan_id}/prepare` is the next lifecycle boundary.
+It accepts only a verified tenant principal and a plan currently in `DRAFT`.
+The server loads the tenant-owned plan, constructs a temporary `READY` candidate,
+and runs the central non-executing Professor policy preview against the trusted,
+application-owned capability catalogue and the principal's server-assigned
+scopes. The persisted plan transitions to `READY` only when every step is
+structurally eligible. Missing/ambiguous capabilities, risk mismatches,
+missing scopes, blocked dependencies and unverified approval requirements
+leave the plan in `DRAFT` and return bounded readiness reasons.
+
+The capability catalogue is currently empty by default. Until trusted
+application-owned capability definitions are deliberately registered, plans
+will remain drafts with unknown capabilities blocked. Client plan payloads
+cannot register capabilities or change the catalogue. The same configured
+catalogue is used by plan inspection so the report agrees with preparation.
+
+This route does not approve a plan, issue a worker lease, dispatch a handler,
+execute local or external work, or enable retries. External-side-effect and
+privileged steps remain blocked because action-bound verified human approval
+has not yet been implemented. A `READY` state means only that the current
+metadata and policy checks passed; it is not permission to execute.
