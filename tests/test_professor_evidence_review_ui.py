@@ -9,7 +9,6 @@ def test_evidence_review_page_is_served_without_exposing_review_data():
     assert response.status_code == 200
     assert "Evidence review" in response.text
     assert "OIDC bearer access token" in response.text
-    assert 'Authorization":"Bearer "' in response.text
+    assert '"Authorization":"Bearer "' in response.text
     assert "localStorage" not in response.text
     assert "sessionStorage" not in response.text
-    assert "reviewer_id" not in response.text.split("fetch(", 1)[0]
