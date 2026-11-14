@@ -1,8 +1,8 @@
-"""One-step-at-a-time execution for Professor's safe local capability slice.
+"""One-step-at-a-time execution for Professor's bounded capability slice.
 
-This route deliberately supports only trusted local computation. External
-writes, privileged actions, arbitrary plugins, network calls and task-supplied
-handlers remain unavailable.
+Only trusted application-owned handlers are callable. Public research is
+read-only and source-attributed; external writes, privileged actions, arbitrary
+plugins and task-supplied handlers remain unavailable.
 """
 from __future__ import annotations
 
@@ -103,10 +103,13 @@ def execute_next_tenant_professor_step(
             raise HTTPException(status_code=409, detail="The planned capability is not installed.")
 
         try:
-            # The first vertical slice accepts a plain arithmetic expression as
-            # the step objective; no shell, Python, network or arbitrary code.
+            # Capability-specific input mapping is derived from the trusted
+            # registered schema. The plan objective is data, never executable code.
+            capability_input = runtime.input_for_objective(
+                step.capability, version, step.objective
+            )
             result = runtime.execute(
-                step.capability, version, {"expression": step.objective},
+                step.capability, version, capability_input,
                 timeout_seconds=step.timeout_seconds,
             )
             record = steps.complete(lease, result=result)
