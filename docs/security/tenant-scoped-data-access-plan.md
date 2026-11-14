@@ -161,3 +161,20 @@ The branch now contains a server-side membership administration façade in `atla
 This is an internal authorization seam only. A `RequestPrincipal` remains constructible by trusted Python code and is not proof of a verified login. No OIDC verifier, HTTP principal dependency, tenant-admin endpoint, provider-backed lifecycle, or production activation exists. Low-level registry provisioning remains a bootstrap primitive; production administration must be routed exclusively through a reviewed trusted adapter and façade.
 
 The disposable migration rehearsal now also asserts exact preservation of task, attempt and evaluation values and relationships, not only row counts, and checks foreign-key integrity after the backfill. These are test-only fixtures; no production database was read or changed.
+
+
+## FastAPI integration boundary — design gate
+
+The existing FastAPI application continues to use the shared API-key dependency for its private routes. That credential is a coarse service gate, not a verified human identity and not a tenant membership. It must not be converted into a `RequestPrincipal`, used to populate an audit actor, or treated as a tenant selector.
+
+The safe integration sequence is:
+
+1. Select and configure an OIDC provider and exact issuer/audience/JWKS policy.
+2. Implement a verifier that returns a minimal verified identity only after signature, algorithm, issuer, audience, expiry, not-before and API-intent checks.
+3. Resolve that identity through the server-side membership registry and map only allowlisted provider roles to application scopes.
+4. Construct `RequestPrincipal` in a server-only FastAPI dependency. Never accept it, its tenant ID, its scopes or its actor identity from request JSON, headers, query parameters or path values.
+5. Introduce tenant-aware route handlers behind a separate dependency. Each handler must use tenant-aware repositories and must not call the existing unscoped `TaskManager`/storage methods.
+6. Keep existing routes either explicitly service-only or disabled for customer multi-tenancy until each has a reviewed tenant-aware implementation. Do not silently change the meaning of the existing API key.
+7. Preserve the proposal-review HTTP 503 guard until individual verified human identity, tenant scope, separation of duties and audit behavior are all implemented and tested.
+
+The current app intentionally has no tenant-principal dependency and no customer tenant route. This is safer than adding a dependency that accepts a fabricated principal or than partially tenant-filtering a route whose underlying storage is global. The next implementation should be a provider adapter and dependency only after provider selection, with test doubles confined to tests and no production bypass flag.
