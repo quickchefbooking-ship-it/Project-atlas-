@@ -20,6 +20,7 @@ from .retry_policy import CapabilityRetryContract
 
 _ALLOWED_RISK_CLASSES = frozenset({
     "read_only",
+    "local_computation",
     "local_write",
     "external_write",
     "privileged",
