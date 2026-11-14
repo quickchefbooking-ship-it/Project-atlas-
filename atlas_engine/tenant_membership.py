@@ -107,18 +107,19 @@ class SQLiteMembershipRegistry:
             conn.close()
 
     @staticmethod
-    def _record_audit(conn, event_type, tenant_id, issuer=None, subject=None, details=None):
+    def _record_audit(conn, event_type, tenant_id, issuer=None, subject=None, details=None, actor=None):
         """Append a minimal event in the same transaction as the mutation.
 
-        Actor identity is intentionally NULL until a verified admin principal
-        exists. Never treat caller-supplied actor labels as authenticated.
+        Actor is accepted only as an immutable RequestPrincipal by the trusted
+        administrative façade; this is not HTTP authentication.
         """
         conn.execute(
             """INSERT INTO membership_audit_events
-               (event_type, tenant_id, issuer, subject, details_json)
-               VALUES (?, ?, ?, ?, ?)""",
+               (event_type, tenant_id, issuer, subject, details_json, actor_issuer, actor_subject)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (event_type, tenant_id, issuer, subject,
-             json.dumps(details or {}, sort_keys=True, separators=(",", ":"))),
+             json.dumps(details or {}, sort_keys=True, separators=(",", ":")),
+             getattr(actor, "issuer", None), getattr(actor, "subject", None)),
         )
 
     def list_audit_events(self, tenant_id: str):
@@ -174,7 +175,7 @@ class SQLiteMembershipRegistry:
             conn.close()
 
     def provision_membership(
-        self, issuer: str, subject: str, tenant_id: str, scopes,
+        self, issuer: str, subject: str, tenant_id: str, scopes, *, _actor=None,
     ) -> None:
         issuer = _required_text(issuer, "issuer")
         subject = _required_text(subject, "subject")
@@ -198,12 +199,12 @@ class SQLiteMembershipRegistry:
                 (issuer, subject, tenant_id, scopes_json),
             )
             self._record_audit(conn, "membership.provisioned", tenant_id, issuer, subject,
-                               {"scopes": sorted(validated_scopes)})
+                               {"scopes": sorted(validated_scopes)}, actor=_actor)
             conn.commit()
         finally:
             conn.close()
 
-    def revoke_membership(self, issuer: str, subject: str, tenant_id: str) -> bool:
+    def revoke_membership(self, issuer: str, subject: str, tenant_id: str, *, _actor=None) -> bool:
         issuer = _required_text(issuer, "issuer")
         subject = _required_text(subject, "subject")
         tenant_id = _required_text(tenant_id, "tenant_id")
@@ -215,7 +216,7 @@ class SQLiteMembershipRegistry:
                 (issuer, subject, tenant_id),
             )
             if cur.rowcount == 1:
-                self._record_audit(conn, "membership.revoked", tenant_id, issuer, subject)
+                self._record_audit(conn, "membership.revoked", tenant_id, issuer, subject, actor=_actor)
             conn.commit()
             return cur.rowcount == 1
         finally:
