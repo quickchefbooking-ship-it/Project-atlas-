@@ -87,17 +87,24 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
         }
 
     matches = []
+    section_terms = {
+        "findings": {"finding", "findings", "supported"},
+        "challenges": {"challenge", "challenges", "challenged"},
+        "disagreements": {"disagreement", "disagreements", "conflict", "conflicts"},
+        "evidence_gaps": {"gap", "gaps", "insufficient"},
+    }
     for section in ("findings", "challenges", "disagreements", "evidence_gaps"):
         records = report.get(section, [])
         if not isinstance(records, list):
             continue
+        requested_section_terms = terms.intersection(section_terms[section])
         for record in records:
             if not isinstance(record, dict):
                 continue
             searchable = " ".join(str(record.get(key, "")) for key in
                                   ("claim_id", "claim", "status", "interpretation"))
             overlap = terms.intersection(_question_terms(searchable))
-            if overlap:
+            if overlap or requested_section_terms:
                 matches.append({
                     "section": section,
                     "claim_id": record.get("claim_id"),
@@ -107,7 +114,7 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
                     "supporting_sources": record.get("supporting_sources", []),
                     "challenging_sources": record.get("challenging_sources", []),
                     "mentioning_sources": record.get("mentioning_sources", []),
-                    "matched_terms": sorted(overlap),
+                    "matched_terms": sorted(overlap or requested_section_terms),
                 })
     matches.sort(key=lambda item: (-len(item["matched_terms"]), str(item["claim_id"])))
     matches = matches[:5]
