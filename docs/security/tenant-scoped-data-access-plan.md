@@ -191,3 +191,16 @@ The provider-neutral OIDC interface is now represented by:
 The contract is not a JWT implementation. It does not fetch keys, verify signatures, enforce token expiry against a live clock or provide an HTTP bearer dependency. Those are implementation gates for the selected provider adapter.
 
 The execution isolation tests have also been expanded to cover cross-tenant cancellation, retry-schedule and lesson-use writes, plus attempts to query execution records using another tenant's task ID. All changes remain isolated prototype/test code; the live FastAPI routes and global storage have not been switched to tenant mode.
+
+
+## Five-point execution programme — current milestone
+
+The current continuous work sequence is:
+
+1. **Stabilise the security foundation:** completed for this prototype milestone. Membership registry mutation now independently checks any supplied audit actor for principal type, active membership, tenant match and the dedicated membership-admin scope. Regression tests prove a read-only user and an administrator from another tenant cannot use the attributed mutation path.
+2. **Prepare identity-provider integration:** provider-neutral OIDC configuration and verifier contracts are implemented. The provider evaluation scorecard is documented; no vendor has been selected and no real token verifier exists.
+3. **Build Professor's verified identity interface:** a typed post-verification claims contract composes with server-side membership lookup. The membership registry remains the sole source of application permissions. No FastAPI dependency or HTTP route is enabled because cryptographic verification is not yet implemented.
+4. **Prove tenant isolation:** task, attempt, learning and execution lifecycle prototypes have cross-tenant tests. Execution tests now cover cancellation, retry and lesson-use writes as well as recovery, and cross-tenant task IDs are rejected in reads. The latest test commits are awaiting their final CI result.
+5. **Package the controlled milestone:** after point 4 CI completes, consolidate the acceptance evidence, outstanding provider decision and production blockers in the draft PR. No merge or deployment is authorised.
+
+This is a prototype milestone, not production multi-tenancy. The global application schema and existing FastAPI routes remain unchanged. The OIDC contract does not perform cryptographic verification or live token-expiry checks. The next real integration gate is provider selection followed by an independently reviewed verifier implementation and a fail-closed FastAPI dependency.
