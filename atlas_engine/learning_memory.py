@@ -158,7 +158,7 @@ class LearningMemory:
                 if not isinstance(application, dict):
                     raise ValueError("Validated arithmetic alias lesson requires application evidence.")
                 if set(application) != {"alias", "expression"}:
-                    raise ValueError("Arithmetic alias application must contain only alias and expression.")
+                    raise ValueError("Arithmetic alias application fields must contain only alias and expression.")
                 alias = application.get("alias")
                 expression = application.get("expression")
                 if (
