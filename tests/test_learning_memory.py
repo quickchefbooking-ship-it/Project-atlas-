@@ -231,3 +231,68 @@ def test_lesson_evidence_rejects_excessive_nesting(monkeypatch, tmp_path):
         )
 
     assert storage.list_lessons(limit=10) == []
+
+
+
+def test_retrieval_decodes_validated_arithmetic_alias_application(monkeypatch, tmp_path):
+    import json
+
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-arithmetic-alias",
+        "task_id": "task-learning-test",
+        "lesson_type": "arithmetic_alias",
+        "summary": "convert dozen eggs arithmetic alias",
+        "source": "reviewed arithmetic rule",
+        "evidence_json": json.dumps({
+            "application": {"alias": "a dozen eggs", "expression": "12"}
+        }),
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    lessons = LearningMemory.get_relevant_lessons("a dozen eggs", limit=5)
+
+    assert len(lessons) == 1
+    assert lessons[0]["validated"] is True
+    assert lessons[0]["application"] == {
+        "alias": "a dozen eggs",
+        "expression": "12",
+    }
+
+
+def test_retrieval_rejects_malformed_validated_arithmetic_alias(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-arithmetic-alias-invalid",
+        "task_id": "task-learning-test",
+        "lesson_type": "arithmetic_alias",
+        "summary": "convert dozen eggs arithmetic alias",
+        "source": "reviewed arithmetic rule",
+        "evidence_json": '{"application":{"alias":"a dozen eggs"}}',
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    with pytest.raises(ValueError, match="application fields"):
+        LearningMemory.get_relevant_lessons("a dozen eggs", limit=5)
+
+
+def test_retrieval_does_not_expose_application_for_other_lesson_types(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-general",
+        "task_id": "task-learning-test",
+        "lesson_type": "reviewed",
+        "summary": "general dozen eggs handling guidance",
+        "source": "human-reviewed",
+        "evidence_json": '{"application":{"alias":"a dozen eggs","expression":"12"}}',
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    lessons = LearningMemory.get_relevant_lessons("dozen eggs", limit=5)
+
+    assert len(lessons) == 1
+    assert lessons[0]["validated"] is True
+    assert "application" not in lessons[0]
