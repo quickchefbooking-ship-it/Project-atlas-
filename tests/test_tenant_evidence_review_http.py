@@ -11,6 +11,7 @@ from atlas_engine.oidc_contract import OIDCProviderConfig, VerifiedTokenClaims
 from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.tenant_plan_repository import TenantPlanRepository
+from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository
 
 
 ISSUER = "https://identity.evidence-review.test/"
@@ -62,11 +63,23 @@ def _client(monkeypatch, tmp_path, *, review_scope=True):
     TenantPlanRepository(db, principal).create(ProfessorPlan(
         "review-plan", "Review a completed evidence bundle",
         ("Retain explicit reviewer attribution",),
-        (PlanStep(
-            "bundle", "research.evidence.bundle", "Bundle the supplied source records",
-            RiskClass.READ_ONLY, required_scopes=("research:public",),
-            capability_version="1.0.0",
-        ),),
+        (
+            PlanStep(
+                "bundle", "research.evidence.bundle", "Bundle the supplied source records",
+                RiskClass.READ_ONLY, required_scopes=("research:public",),
+                capability_version="1.0.0",
+            ),
+            PlanStep(
+                "evaluate", "research.evidence.evaluate", "Evaluate reviewed annotations",
+                RiskClass.READ_ONLY, depends_on=("bundle",),
+                required_scopes=("research:public",), capability_version="1.0.0",
+            ),
+            PlanStep(
+                "report", "research.professor.report", "Create a source-linked report",
+                RiskClass.READ_ONLY, depends_on=("bundle", "evaluate"),
+                required_scopes=("research:public",), capability_version="1.0.0",
+            ),
+        ),
     ))
     bundle = {
         "schema_version": 1,
@@ -141,5 +154,54 @@ def test_review_endpoint_requires_explicit_review_scope(monkeypatch, tmp_path):
             headers=headers,
         )
         assert response.status_code == 403
+    finally:
+        client.__exit__(None, None, None)
+
+
+
+def test_downstream_dependency_handoff_uses_latest_review_revision(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    try:
+        submitted = client.post(
+            "/professor/tenant/plans/review-plan/evidence/bundle/review",
+            headers=headers,
+            json={"annotations": [{
+                "claim_id": "claim-1", "text": "The source explicitly supports this",
+                "source_id": "source-1", "relation": "supports",
+            }]},
+        )
+        assert submitted.status_code == 200
+
+        tenant_path = str(tmp_path / "tenant.sqlite")
+        db = sqlite3.connect(tenant_path)
+        db.row_factory = sqlite3.Row
+        principal = __import__(
+            "atlas_engine.identity_policy", fromlist=["RequestPrincipal"]
+        ).RequestPrincipal(
+            ISSUER, "reviewer-a", "tenant-a", True,
+            frozenset({"steps:read", "evidence:review"}),
+        )
+        dependencies = TenantStepExecutionRepository(db, principal).dependency_results(
+            "review-plan", "evaluate"
+        )
+        reviewed_bundle = dependencies["bundle"]
+        assert reviewed_bundle["claims"][0]["claim_id"] == "claim-1"
+        assert reviewed_bundle["claims"][0]["annotations"][0]["reviewer_id"].startswith("reviewer:")
+
+        runtime = app_module.build_default_capability_runtime()
+        capability_input = runtime.input_for_objective(
+            "research.evidence.evaluate", "1.0.0", "Evaluate reviewed annotations",
+            dependency_outputs=dependencies,
+        )
+        assert capability_input["bundle"] == reviewed_bundle
+        assert capability_input["bundle"]["claims"][0]["annotations"][0]["relation"] == "supports"
+
+        # The completed execution output remains the original, unreviewed bundle.
+        original = db.execute("""
+          SELECT result_json FROM tenant_professor_step_runs
+          WHERE tenant_id='tenant-a' AND plan_id='review-plan' AND step_id='bundle'
+        """).fetchone()
+        assert json.loads(original["result_json"])["claims"] == []
+        db.close()
     finally:
         client.__exit__(None, None, None)
