@@ -168,6 +168,21 @@ def init_db() -> None:
             ON lesson_usage_events(task_id, recorded_at)
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS lesson_experiment_runs (
+                experiment_id TEXT PRIMARY KEY,
+                criteria_version TEXT NOT NULL,
+                execution_mode TEXT NOT NULL CHECK(execution_mode = 'offline_in_process_only'),
+                arm_order_seed INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_lesson_experiment_runs_created
+            ON lesson_experiment_runs(created_at DESC)
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS proposals (
                 id TEXT PRIMARY KEY, task_id TEXT, problem TEXT NOT NULL,
                 evidence_json TEXT NOT NULL, proposed_change TEXT NOT NULL,
