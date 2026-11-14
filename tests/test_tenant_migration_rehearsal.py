@@ -193,3 +193,34 @@ def test_composite_foreign_keys_reject_cross_tenant_child_relationships(
             )
     finally:
         conn.close()
+
+
+def test_rehearsal_preserves_exact_legacy_values_and_relationships(tmp_path):
+    conn = _legacy_database(tmp_path / "legacy-values.sqlite")
+    try:
+        before_tasks = conn.execute(
+            "SELECT id, title FROM tasks ORDER BY id"
+        ).fetchall()
+        before_attempts = conn.execute(
+            "SELECT attempt_id, task_id, state FROM task_attempts ORDER BY attempt_id"
+        ).fetchall()
+        before_evaluations = conn.execute(
+            "SELECT evaluation_id, task_id, score FROM evaluations ORDER BY evaluation_id"
+        ).fetchall()
+
+        _rehearse_tenant_backfill(
+            conn, {"task-a": "tenant-one", "task-b": "tenant-two"}
+        )
+
+        assert conn.execute(
+            "SELECT id, title FROM tasks ORDER BY id"
+        ).fetchall() == before_tasks
+        assert conn.execute(
+            "SELECT attempt_id, task_id, state FROM task_attempts ORDER BY attempt_id"
+        ).fetchall() == before_attempts
+        assert conn.execute(
+            "SELECT evaluation_id, task_id, score FROM evaluations ORDER BY evaluation_id"
+        ).fetchall() == before_evaluations
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        conn.close()
