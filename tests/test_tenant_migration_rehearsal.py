@@ -164,17 +164,32 @@ def test_rehearsal_fails_closed_on_missing_or_invalid_owner_mapping(tmp_path, ow
         conn.close()
 
 
-def test_composite_foreign_key_rejects_cross_tenant_child_relationship(tmp_path):
-    conn = _legacy_database(tmp_path / "legacy-cross-tenant.sqlite")
+@pytest.mark.parametrize(
+    "table,columns,values",
+    [
+        (
+            "task_attempts",
+            "(attempt_id, tenant_id, task_id, state)",
+            "('forged-attempt', 'tenant-two', 'task-a', 'active')",
+        ),
+        (
+            "evaluations",
+            "(evaluation_id, tenant_id, task_id, score)",
+            "('forged-evaluation', 'tenant-two', 'task-a', 1.0)",
+        ),
+    ],
+)
+def test_composite_foreign_keys_reject_cross_tenant_child_relationships(
+    tmp_path, table, columns, values
+):
+    conn = _legacy_database(tmp_path / f"legacy-cross-tenant-{table}.sqlite")
     try:
         _rehearse_tenant_backfill(
             conn, {"task-a": "tenant-one", "task-b": "tenant-two"}
         )
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                """INSERT INTO task_attempts
-                   (attempt_id, tenant_id, task_id, state)
-                   VALUES ('forged', 'tenant-two', 'task-a', 'active')"""
+                f"INSERT INTO {table} {columns} VALUES {values}"
             )
     finally:
         conn.close()
