@@ -100,7 +100,7 @@ def _crossref_search(payload: dict[str, Any], deadline: float) -> dict[str, Any]
         # text as untrusted source material, never as executable instructions.
         metadata = {}
         try:
-            metadata = json.loads(document.content.split("\\n", 1)[1])
+            metadata = json.loads(document.content.split("\n", 1)[1])
         except (IndexError, json.JSONDecodeError, TypeError):
             metadata = {}
         abstract = metadata.get("abstract")
@@ -177,7 +177,7 @@ def build_default_capability_runtime() -> CapabilityRuntime:
                         "type": "object",
                         "properties": {
                             "title": {"type": "string", "maxLength": 500},
-                            "uri": {"type": "string", "pattern": "^https://doi\\\\.org/"},
+                            "uri": {"type": "string", "pattern": "^https://doi\\.org/"},
                             "doi": {"type": "string", "maxLength": 200},
                             "publisher": {"type": "string", "maxLength": 300},
                             "retrieved_at": {"type": "string", "maxLength": 64},
