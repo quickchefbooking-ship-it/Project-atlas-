@@ -50,3 +50,10 @@ Integration tests must additionally prove that a valid user from tenant A cannot
 Choose a provider only after comparing: OIDC standards support, UK/EU data residency and contractual terms, MFA/passkey support, tenant/organisation modelling, account recovery, audit logs, SCIM or lifecycle provisioning, pricing at expected user counts, developer ergonomics, availability, exportability and exit strategy.
 
 No vendor is selected by this document. Until selection and implementation are reviewed, proposal review remains HTTP 503 and the platform must not claim verified user identity or tenant isolation.
+
+
+## Implemented composition seam (not an authenticator)
+
+The branch now contains `atlas_engine/verified_identity.py` with a minimal immutable `VerifiedIdentity(issuer, subject)` value and `principal_from_verified_identity(...)`. The composition function resolves the identity through the isolated server-side membership registry and creates the immutable `RequestPrincipal` from the returned tenant and scopes. Unknown, revoked, inactive or ambiguous memberships fail closed.
+
+This is deliberately only the seam between a future token verifier and the registry. The value type can be instantiated by Python code, so it is not cryptographic proof and must never be populated from request data. Until the real verifier and server-only composition wiring exist, the proposal-review route remains disabled and no HTTP endpoint may accept this object from a client.
