@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>AtlasOnePro · Evidence Review</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e9edf5;background:#101722;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#1e3044 0,transparent 42%),#101722}
+header{padding:26px max(18px,calc((100vw - 1040px)/2));border-bottom:1px solid #2a3748;background:#111c2a}
+.eyebrow{color:#9ab8d9;text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;font-weight:700}
+h1{font-size:clamp(1.55rem,4vw,2.15rem);margin:.45rem 0}.sub{color:#aebbd0;max-width:760px;line-height:1.5}
+main{max-width:1040px;margin:24px auto;padding:0 16px 48px}.panel{background:#172333;border:1px solid #2a3a4e;border-radius:15px;padding:19px;margin-bottom:16px}
+h2{font-size:1.08rem;margin:0 0 12px}h3{font-size:.95rem;margin:0 0 7px}
+label{display:block;font-size:.83rem;color:#b9c7d9;margin:11px 0 6px}
+input,select,textarea{width:100%;border:1px solid #40536b;border-radius:9px;background:#0e1825;color:#f4f7fb;padding:10px 11px;font:inherit}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid #8cb8ee;outline-offset:2px}
+button{border:1px solid #6389b7;border-radius:9px;padding:10px 14px;background:#31577f;color:white;font:inherit;font-weight:650;cursor:pointer}
+button.secondary{background:#202f42;border-color:#465a72}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.row button{flex:0 0 auto}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.muted{color:#9eafc4;font-size:.85rem;line-height:1.5}.status{min-height:22px;color:#b7d6f7;margin-top:9px;font-size:.88rem}
+.warning{border-left:3px solid #d6a85b;padding:10px 12px;background:#342b1e;color:#f1d7a8;border-radius:5px;font-size:.83rem;line-height:1.45}
+.item{border-top:1px solid #2d3d51;padding:12px 0}.item:first-child{border-top:0}.item strong{display:block;margin-bottom:4px;overflow-wrap:anywhere}
+.meta{font-size:.79rem;color:#9eafc4;overflow-wrap:anywhere}.pill{display:inline-block;border:1px solid #647f9d;border-radius:99px;padding:2px 8px;font-size:.72rem;color:#c9dcf2;margin:4px 5px 0 0}
+a{color:#9dc9f8;overflow-wrap:anywhere}.hidden{display:none!important}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.panel{padding:15px}header{padding:22px 16px}.row>*{min-width:100%}.row button{width:100%}}
+</style>
+</head>
+<body>
+<header><div class="eyebrow">AtlasOnePro · The Professor</div><h1>Evidence review</h1><div class="sub">A human reviewer records explicit interpretations against the sources in a completed evidence bundle. The Professor does not invent claims or decide truth from these labels.</div></header>
+<main>
+<section class="panel">
+<h2>Secure connection</h2>
+<div class="warning">Use a short-lived OIDC access token issued for this Professor API. It remains in this page's memory only and is never saved to browser storage or placed in the URL. Do not use this page on a shared device. Browser login/session support is a separate deployment step.</div>
+<label for="token">OIDC bearer access token</label><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste access token">
+<div class="grid">
+<div><label for="plan">Plan ID</label><input id="plan" autocomplete="off" placeholder="Plan identifier"></div>
+<div><label for="step">Evidence bundle step ID</label><input id="step" autocomplete="off" placeholder="Completed bundle step"></div>
+</div>
+<div class="row" style="margin-top:12px"><button id="load">Load evidence bundle</button><button id="clear" class="secondary" type="button">Clear token and page</button></div>
+<div id="connection" class="status" role="status" aria-live="polite">Not connected.</div>
+</section>
+<section id="workspace" class="hidden">
+<section class="panel">
+<h2>Review record</h2><div id="revision" class="muted">No bundle loaded.</div>
+<div class="warning" style="margin-top:10px">Supports, challenges and mentions are reviewer-supplied labels. They are not proof, a confidence score, or an independent verification of the source.</div>
+</section>
+<section class="panel">
+<h2>Source register</h2><div id="sources" class="muted"></div>
+</section>
+<section class="panel">
+<h2>Existing claim annotations</h2><div id="claims" class="muted"></div>
+</section>
+<section class="panel">
+<h2>Add a reviewer annotation</h2>
+<label for="claimChoice">Claim</label><select id="claimChoice"><option value="__new">Create a new claim</option></select>
+<div class="grid">
+<div><label for="claimId">Claim ID</label><input id="claimId" maxlength="120" placeholder="e.g. claim-1"></div>
+<div><label for="relation">Relationship</label><select id="relation"><option value="supports">Supports</option><option value="challenges">Challenges</option><option value="mentions">Mentions</option></select></div>
+</div>
+<label for="claimText">Claim text (must be consistent for the same claim ID)</label><textarea id="claimText" rows="3" maxlength="2000" placeholder="Write the claim in your own words, based on the source."></textarea>
+<label for="sourceChoice">Source being annotated</label><select id="sourceChoice"></select>
+<div class="row" style="margin-top:12px"><button id="submit">Save annotation</button><span class="muted">Each save creates a new append-only review revision.</span></div>
+<div id="saveStatus" class="status" role="status" aria-live="polite"></div>
+</section>
+</section>
+<footer class="muted">Tenant-scoped API · Verified OIDC identity · Server-generated reviewer attribution and timestamp · Append-only review history.</footer>
+</main>
+<script>
+(() => {
+  let token = "";
+  let currentBundle = null;
+  const $ = id => document.getElementById(id);
+  const say = (id, value) => { $(id).textContent = value == null ? "" : String(value); };
+  const safe = value => value == null ? "" : String(value);
+  const api = async (method) => {
+    const plan = $("plan").value.trim(), step = $("step").value.trim();
+    if (!token || !plan || !step) throw new Error("Enter the access token, plan ID and evidence bundle step ID.");
+    const response = await fetch("/professor/tenant/plans/" + encodeURIComponent(plan) + "/evidence/" + encodeURIComponent(step) + "/review", {
+      method, headers: {"Authorization":"Bearer " + token, ...(method === "POST" ? {"Content-Type":"application/json"} : {})},
+      ...(method === "POST" ? {body: JSON.stringify({annotations:[{
+        claim_id:$("claimId").value.trim(), text:$("claimText").value.trim(),
+        source_id:$("sourceChoice").value, relation:$("relation").value
+      }]})} : {})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const messages = {401:"The access token was rejected or has expired.",403:"This account does not have evidence:review permission for this tenant.",404:"The plan or completed evidence bundle was not found.",422:"The annotation was invalid. Check the claim ID, text, source and relationship.",503:"Identity or tenant review storage is not configured or is temporarily unavailable."};
+      throw new Error(messages[response.status] || body.detail || ("Request failed (" + response.status + ")."));
+    }
+    return body;
+  };
+  const node = (tag, cls, content) => { const e=document.createElement(tag); if(cls)e.className=cls; e.textContent=safe(content); return e; };
+  function render(data) {
+    currentBundle = data.bundle;
+    $("workspace").classList.remove("hidden");
+    say("revision", data.status === "awaiting_review" ? "Awaiting first review · Revision 0" : "Reviewed · Revision " + data.revision + " · " + (data.reviewer_id || "Reviewer recorded") + " · " + (data.reviewed_at || ""));
+    const sources = $("sources"); sources.replaceChildren();
+    const sourceSelect = $("sourceChoice"); sourceSelect.replaceChildren();
+    (currentBundle.sources || []).forEach(source => {
+      const opt=node("option","",safe(source.title)+" · "+safe(source.source_id)); opt.value=source.source_id; sourceSelect.appendChild(opt);
+      const item=node("div","item"); item.appendChild(node("strong","",source.title || source.source_id));
+      const meta=node("div","meta",source.source_id+" · "+(source.publisher || "Publisher not supplied")); item.appendChild(meta);
+      if(source.uri){const link=node("a","",source.uri);link.href=source.uri;link.target="_blank";link.rel="noopener noreferrer";item.appendChild(link);}
+      if(source.doi)item.appendChild(node("div","meta","DOI: "+source.doi));
+      sources.appendChild(item);
+    });
+    if(!(currentBundle.sources || []).length) sources.textContent="No source records were supplied.";
+    const claims=$("claims"); claims.replaceChildren();
+    const choice=$("claimChoice"); choice.replaceChildren();
+    const newOpt=node("option","","Create a new claim");newOpt.value="__new";choice.appendChild(newOpt);
+    (currentBundle.claims || []).forEach(claim => {
+      const opt=node("option","",claim.claim_id+" · "+claim.text);opt.value=claim.claim_id;choice.appendChild(opt);
+      const item=node("div","item");item.appendChild(node("strong","",claim.claim_id+" · "+claim.text));
+      (claim.annotations || []).forEach(a => {
+        item.appendChild(node("div","meta",a.relation+" · "+a.source_id+" · "+(a.reviewer_id || "prior annotation")+" · "+(a.reviewed_at || "timestamp unavailable")));
+      });
+      claims.appendChild(item);
+    });
+    if(!(currentBundle.claims || []).length) claims.textContent="No claims annotated yet.";
+    $("claimId").value="";$("claimText").value="";
+  }
+  $("claimChoice").addEventListener("change", () => {
+    const id=$("claimChoice").value, claim=(currentBundle?.claims || []).find(item=>item.claim_id===id);
+    $("claimId").value=claim ? claim.claim_id : "";
+    $("claimText").value=claim ? claim.text : "";
+    $("claimId").readOnly=!!claim;$("claimText").readOnly=!!claim;
+  });
+  $("load").addEventListener("click", async () => {
+    token=$("token").value.trim(); $("load").disabled=true;say("connection","Loading evidence bundle…");
+    try { const data=await api("GET");render(data);say("connection","Connected. Evidence bundle loaded for review."); }
+    catch(error){$("workspace").classList.add("hidden");say("connection",error.message);}
+    finally{$("load").disabled=false;}
+  });
+  $("submit").addEventListener("click", async () => {
+    $("submit").disabled=true;say("saveStatus","Saving reviewer annotation…");
+    try { const data=await api("POST");render(data);say("saveStatus","Saved as review revision "+data.revision+". The original execution result remains unchanged."); }
+    catch(error){say("saveStatus",error.message);}
+    finally{$("submit").disabled=false;}
+  });
+  $("clear").addEventListener("click",()=>{token="";currentBundle=null;$("token").value="";$("workspace").classList.add("hidden");say("connection","Token cleared from page memory.");say("saveStatus","");});
+})();
+</script>
+</body>
+</html>
