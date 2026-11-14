@@ -96,6 +96,19 @@ class LearningMemory:
             raise ValueError("Lesson evidence must be an object.")
 
         _validate_json_value(evidence)
+        if lesson_type.strip() == "arithmetic_alias":
+            application = evidence.get("application")
+            if not isinstance(application, dict) or set(application) != {"alias", "expression"}:
+                raise ValueError(
+                    "Arithmetic alias lessons require application with only alias and expression."
+                )
+            alias = application.get("alias")
+            expression = application.get("expression")
+            if (
+                not isinstance(alias, str) or not alias.strip() or len(alias) > 80
+                or not isinstance(expression, str) or not expression.strip() or len(expression) > 256
+            ):
+                raise ValueError("Arithmetic alias application fields are invalid.")
         try:
             evidence_json = json.dumps(
                 evidence, sort_keys=True, allow_nan=False, separators=(",", ":")
