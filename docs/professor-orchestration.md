@@ -225,3 +225,12 @@ This separates the user-facing voice channel from the reasoning backend. The aut
 6. Add safety/policy checks and approval gates before any specialist arm or external action is invoked.
 
 No provider has been enabled. The voice interface can demonstrate device speech output and microphone capture, but it cannot yet answer general questions as a conversational Professor.
+
+
+## 6. Provider-neutral conversation boundary
+
+The first conversation seam is implemented in `atlas_engine/conversation_contract.py`. It defines immutable message, input and output contracts plus a provider protocol. The boundary is deliberately text-only: it does not grant tools, network access, credentials or permission to perform external actions.
+
+The input builder retains recent context within explicit limits (24 turns, 24,000 aggregate characters, 4,000 characters per message) and appends the latest user turn. The default locale is `en-GB`, matching the intended Professor voice. These are transport/context bounds, not a substitute for tenant-aware persistence, privacy controls or provider-side token limits.
+
+The provider protocol is not yet connected to an implementation. The voice endpoint therefore remains unavailable for general conversation until a provider is selected, configured and tested. Any provider adapter must preserve the approval boundary, avoid treating retrieved/user-supplied text as instructions, and return provenance identifying the provider and model. No paid provider is enabled by this contract.
