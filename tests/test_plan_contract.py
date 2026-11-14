@@ -59,7 +59,7 @@ def test_read_only_plan_can_be_marked_ready_without_approval():
 def test_external_side_effect_plan_waits_for_human_approval():
     waiting = plan(step("publish", risk=RiskClass.EXTERNAL_SIDE_EFFECT)).mark_ready()
     assert waiting.state is PlanState.AWAITING_APPROVAL
-    with pytest.raises(PlanValidationError, match="awaiting approval"):
+    with pytest.raises(PlanValidationError, match="approval reference"):
         waiting.approve(approval_reference=" ")
     approved = waiting.approve(approval_reference="approval-record-123")
     assert approved.state is PlanState.APPROVED
