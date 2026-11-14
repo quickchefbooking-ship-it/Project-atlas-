@@ -53,6 +53,7 @@ def evaluate_evidence_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Evidence bundle contains an invalid claim.")
         relations = set()
         supporting, challenging, mentioning = [], [], []
+        annotation_audit = []
         for annotation in claim["annotations"]:
             if not isinstance(annotation, dict):
                 raise ValueError("Claim annotation is invalid.")
@@ -62,6 +63,13 @@ def evaluate_evidence_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
             relations.add(relation)
             target = supporting if relation == "supports" else challenging if relation == "challenges" else mentioning
             target.append(source_id)
+            reviewer_id, reviewed_at = annotation.get("reviewer_id"), annotation.get("reviewed_at")
+            if (reviewer_id is None) != (reviewed_at is None):
+                raise ValueError("Reviewer attribution must include both reviewer_id and reviewed_at.")
+            if reviewer_id is not None:
+                if not isinstance(reviewer_id, str) or not reviewer_id or len(reviewer_id) > 128 or not isinstance(reviewed_at, str) or not reviewed_at or len(reviewed_at) > 64:
+                    raise ValueError("Reviewer attribution is invalid.")
+                annotation_audit.append({"source_id": source_id, "relation": relation, "reviewer_id": reviewer_id, "reviewed_at": reviewed_at})
 
         if "supports" in relations and "challenges" in relations:
             status = "conflicting_annotations"
@@ -85,6 +93,7 @@ def evaluate_evidence_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
             "mentioning_source_ids": mentioning,
             "annotated_source_count": len(set(annotated_ids)),
             "distinct_record_group_count": len(independent_groups),
+            "annotation_audit": annotation_audit,
             "confidence": "not_scored",
             "interpretation": (
                 "Classification reflects supplied relation labels only; it is not a finding that the claim is true or false."
