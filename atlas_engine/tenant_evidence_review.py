@@ -163,7 +163,7 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
         "basis": basis, "items": matches,
         "sources": [source_map[item] for item in source_ids if item in source_map],
         "limitations": report.get("limitations", []),
-        "mode": "deterministic_report_grounded",
+        "mode": "deterministic_report_lookup",
         "tools_invoked": False, "execution_performed": False,
     }
 
