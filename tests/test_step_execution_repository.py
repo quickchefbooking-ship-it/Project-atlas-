@@ -206,3 +206,16 @@ def test_external_side_effect_and_privileged_steps_cannot_be_claimed(repositorie
     with pytest.raises(StepExecutionError, match="action-bound authorisation"):
         steps.claim_next_step(plan.plan_id, "worker-a")
     assert steps.get_step(plan.plan_id, "publish").state == "pending"
+
+
+def test_step_event_history_reads_are_bounded(repositories):
+    plans, steps = repositories
+    plan = start_plan(plans)
+    lease = steps.claim_next_step(plan.plan_id, "worker-a")
+    assert lease is not None
+    for _ in range(3):
+        lease = steps.heartbeat(lease, lease_seconds=60)
+    steps.complete(lease, result={"done": True})
+    assert len(steps.list_events(plan.plan_id, "first", limit=2)) == 2
+    with pytest.raises(ValueError, match="limit"):
+        steps.list_events(plan.plan_id, "first", limit=0)
