@@ -57,6 +57,7 @@ class OfflineLessonExperimentRunner:
         criteria_version: str,
         validated_lessons: Sequence[Mapping[str, Any]],
         seed: int = 0,
+        persist: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(experiment_id, str) or not experiment_id.strip() or len(experiment_id) > 128:
             raise ValueError("experiment_id must be a non-empty string of at most 128 characters.")
@@ -105,6 +106,9 @@ class OfflineLessonExperimentRunner:
                 "task_input": copy.deepcopy(dict(task_input)),
                 "success_criteria": copy.deepcopy(criteria),
             })
+
+        if type(persist) is not bool:
+            raise ValueError("persist must be a boolean.")
 
         rng = random.Random(seed)
         observations: list[dict[str, Any]] = []
@@ -160,7 +164,7 @@ class OfflineLessonExperimentRunner:
             experiment_id=experiment_id,
             criteria_version=criteria_version,
         )
-        return {
+        result = {
             "report": report,
             "observations": observations,
             "evidence": evidence,
@@ -171,6 +175,14 @@ class OfflineLessonExperimentRunner:
                 "Seeded arm ordering is not blinding or full experimental randomisation.",
                 "Lesson receipts are executor declarations, not proof of semantic use.",
                 "Descriptive outcomes do not establish causality, statistical significance, or generalisation.",
-                "Results are returned in memory and are not durably persisted.",
+                "Raw task inputs, lesson text, and executor outputs are not included in durable records.",
             ],
         }
+        if persist:
+            from .lesson_experiment_store import save_lesson_experiment_run
+            result["stored_record"] = save_lesson_experiment_run(result)
+        else:
+            result["limitations"].append(
+                "Results remain in memory unless the caller explicitly sets persist=True."
+            )
+        return result
