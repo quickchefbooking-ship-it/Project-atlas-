@@ -145,3 +145,49 @@ def test_legacy_executor_without_receipt_keeps_existing_behavior(tmp_path, monke
 
     assert response["status"] == "passed"
     assert _events(task.id) == []
+
+
+def test_real_lesson_aware_arithmetic_specialist_records_consumption_in_task_pipeline(tmp_path, monkeypatch):
+    from atlas_engine.lesson_aware_arithmetic import LessonAwareArithmeticExecutor
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "lesson-specialist.db"))
+    storage.init_db()
+    manager = TaskManager(storage)
+    task = manager.create_task(
+        "Resolve a reviewed arithmetic alias",
+        "double dozen",
+        [{"field": "value", "operator": "==", "expected_value": 24}],
+    )
+    lesson = {
+        "id": "lesson-double-dozen",
+        "task_id": task.id,
+        "lesson_type": "arithmetic_alias",
+        "summary": "A reviewed exact-match alias.",
+        "source": "test-review",
+        "evidence_json": "{}",
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    }
+    storage.save_lesson(lesson)
+    supplied = {
+        "id": lesson["id"],
+        "validated": True,
+        "lesson_type": "arithmetic_alias",
+        "application": {"alias": "double dozen", "expression": "12 * 2"},
+    }
+
+    class Memory:
+        @staticmethod
+        def get_relevant_lessons(_description):
+            return [supplied]
+
+    api = TaskAPI(
+        manager, LessonAwareArithmeticExecutor(), Evaluator(), Memory(), None, None
+    )
+    response = api.run_task(task.id)
+
+    assert response["status"] == "passed"
+    assert response["result"]["value"] == 24
+    events = _events(task.id)
+    assert len(events) == 1
+    assert events[0]["lesson_id"] == "lesson-double-dozen"
