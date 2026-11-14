@@ -7,8 +7,7 @@ The first tenant-facing question-and-answer slice is deliberately bounded to com
 
 `POST /professor/tenant/plans/{plan_id}/ask`
 
-Authentication uses the verified OIDC principal. The caller needs both
-`plans:read` and `steps:read`. The plan ID is only a selector; tenant identity
+Authentication uses the verified OIDC principal. The caller needs `steps:read`. The plan ID is only a selector; tenant identity
 and permissions are derived server-side. The request accepts only a
 `question` string (1–1000 characters); unexpected fields are rejected.
 
@@ -33,7 +32,7 @@ Report text and source metadata are untrusted data. They are returned as data
 and are never interpreted as instructions. Annotation labels are not
 independent verification; the report's limitations remain part of the answer.
 
-This is not the general conversational reasoning provider. The provider-neutral
+The endpoint is implemented in the tenant evidence-review router and is included in the authenticated report interface. This is not the general conversational reasoning provider. The provider-neutral
 conversation contract remains separate and fail-closed until an approved model
 provider is configured. The report page uses the same short-lived OIDC token
 and plan ID to ask questions against the already loaded report.
