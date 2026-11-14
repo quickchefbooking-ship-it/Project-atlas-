@@ -1,0 +1,152 @@
+"""One-step-at-a-time execution for Professor's safe local capability slice.
+
+This route deliberately supports only trusted local computation. External
+writes, privileged actions, arbitrary plugins, network calls and task-supplied
+handlers remain unavailable.
+"""
+from __future__ import annotations
+
+import hashlib
+import sqlite3
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from .capability_runtime import CapabilityExecutionError, CapabilityRuntime
+from .http_identity import require_verified_principal
+from .identity_policy import AuthorizationDenied, authorize_tenant_resource
+from .orchestration_coordinator import preview_plan
+from .plan_contract import PlanState
+from .tenant_plan_repository import TenantPlanConflict, TenantPlanNotFound, TenantPlanRepository
+from .tenant_step_execution_repository import (
+    TenantStepError, TenantStepExecutionRepository,
+)
+
+router = APIRouter()
+
+
+def _worker_id(principal) -> str:
+    digest = hashlib.sha256(
+        (principal.issuer + "\\0" + principal.subject).encode("utf-8")
+    ).hexdigest()[:32]
+    return "http:" + digest
+
+
+@router.post("/professor/tenant/plans/{plan_id}/execute-next")
+def execute_next_tenant_professor_step(
+    plan_id: str,
+    request: Request,
+    principal=Depends(require_verified_principal),
+):
+    """Execute exactly one eligible local-computation step and persist its outcome."""
+    try:
+        authorize_tenant_resource(principal, principal.tenant_id, {"plans:execute"})
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Plan execution denied.") from None
+
+    database_path = getattr(request.app.state, "tenant_data_path", None)
+    runtime = getattr(request.app.state, "tenant_capability_runtime", None)
+    if not database_path or not isinstance(runtime, CapabilityRuntime):
+        raise HTTPException(status_code=503, detail="Professor execution is not configured.")
+
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plans = TenantPlanRepository(connection, principal)
+        steps = TenantStepExecutionRepository(connection, principal)
+        plan = plans.get(plan_id)
+        if plan.state is PlanState.READY:
+            preview = preview_plan(plan, runtime.registry, granted_scopes=principal.scopes)
+            if preview.blocked_step_ids:
+                raise HTTPException(status_code=409, detail="Plan is not eligible for execution.")
+            plan = plans.transition(
+                plan_id, expected_state=PlanState.READY, new_state=PlanState.RUNNING
+            )
+        elif plan.state is not PlanState.RUNNING:
+            raise HTTPException(status_code=409, detail="Plan is not in a runnable state.")
+
+        worker_id = _worker_id(principal)
+        lease = steps.claim_next_step(plan_id, worker_id, lease_seconds=60)
+        if lease is None:
+            records = steps.list_steps(plan_id)
+            states = {item.state for item in records}
+            if states == {"succeeded"}:
+                completed = plans.transition(
+                    plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
+                )
+                return {
+                    "status": "completed", "plan_id": plan_id,
+                    "plan_state": completed.state.value, "execution_enabled": True,
+                }
+            if states.intersection({"failed", "recovery_required", "cancelled"}):
+                return {
+                    "status": "blocked", "plan_id": plan_id,
+                    "plan_state": plan.state.value,
+                    "step_states": {item.step_id: item.state for item in records},
+                    "execution_enabled": True,
+                    "next_action": "Operator review is required; no automatic replay is performed.",
+                }
+            raise HTTPException(status_code=409, detail="No dependency-ready step is available.")
+
+        step = next(item for item in plan.steps if item.step_id == lease.step_id)
+        version = step.capability_version
+        if version is None:
+            matches = [
+                item.version for item in runtime.registry.list_definitions()
+                if item.name == step.capability
+            ]
+            version = matches[0] if len(matches) == 1 else None
+        if version is None:
+            steps.complete(lease, error_code="capability_not_found")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            raise HTTPException(status_code=409, detail="The planned capability is not installed.")
+
+        try:
+            # The first vertical slice accepts a plain arithmetic expression as
+            # the step objective; no shell, Python, network or arbitrary code.
+            result = runtime.execute(
+                step.capability, version, {"expression": step.objective},
+                timeout_seconds=step.timeout_seconds,
+            )
+            record = steps.complete(lease, result=result)
+        except CapabilityExecutionError:
+            steps.complete(lease, error_code="capability_execution_failed")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            return {
+                "status": "failed", "plan_id": plan_id, "step_id": lease.step_id,
+                "plan_state": PlanState.FAILED.value,
+                "error_code": "capability_execution_failed",
+                "execution_enabled": True,
+            }
+
+        records = steps.list_steps(plan_id)
+        all_succeeded = all(item.state == "succeeded" for item in records)
+        plan_state = PlanState.RUNNING.value
+        if all_succeeded:
+            completed = plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
+            )
+            plan_state = completed.state.value
+        return {
+            "status": "completed" if all_succeeded else "step_succeeded",
+            "plan_id": plan_id,
+            "step_id": record.step_id,
+            "step_state": record.state,
+            "result": record.result,
+            "plan_state": plan_state,
+            "execution_enabled": True,
+            "next_action": None if all_succeeded else "Call execute-next again for the next dependency-ready step.",
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant execution scope denied.") from None
+    except TenantPlanNotFound:
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except (TenantPlanConflict, TenantStepError):
+        raise HTTPException(status_code=409, detail="Plan or step ownership changed; inspect before retrying.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Tenant execution storage is temporarily unavailable.") from None
+    finally:
+        connection.close()
