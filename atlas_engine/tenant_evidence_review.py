@@ -82,6 +82,7 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
         )
         return {
             "answer_type": "report_summary", "answer": answer, "matches": [],
+            "basis": "summary", "items": [], "sources": [],
             "limitations": report.get("limitations", []),
             "mode": "deterministic_report_lookup",
         }
@@ -142,10 +143,28 @@ def answer_report_question(report: dict[str, Any], question: str) -> dict[str, A
             "classifications based on supplied annotations, not independent "
             "verification. Relevant records: " + "; ".join(references) + "."
         )
+    matched_sections = {item["section"] for item in matches}
+    basis = next(iter(matched_sections)) if len(matched_sections) == 1 else "matched_records"
+    source_ids = list(dict.fromkeys(
+        source_id
+        for item in matches
+        for source_id in (
+            item["supporting_sources"] + item["challenging_sources"] +
+            item["mentioning_sources"]
+        )
+    ))
+    source_records = report.get("sources", [])
+    source_map = {
+        item.get("source_id"): item for item in source_records
+        if isinstance(item, dict) and item.get("source_id") in source_ids
+    } if isinstance(source_records, list) else {}
     return {
         "answer_type": answer_type, "answer": answer, "matches": matches,
+        "basis": basis, "items": matches,
+        "sources": [source_map[item] for item in source_ids if item in source_map],
         "limitations": report.get("limitations", []),
-        "mode": "deterministic_report_lookup",
+        "mode": "deterministic_report_grounded",
+        "tools_invoked": False, "execution_performed": False,
     }
 
 
