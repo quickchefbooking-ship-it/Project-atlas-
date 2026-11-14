@@ -52,6 +52,16 @@ A task should move through explicit states such as **pending**, **planned**, **a
 
 The current task-creation boundary rejects blank titles/descriptions, limits titles to 200 characters and descriptions to 10,000 characters, and caps success criteria at 100 top-level entries and 16 KiB of UTF-8 JSON. Non-finite numeric values and criteria that cannot be serialized as finite JSON are rejected before persistence. These are application-level field bounds; they are not a substitute for an upstream HTTP request-body limit or a reverse-proxy rate/size policy.
 
+## 3A. Implemented planning contract
+
+The repository now includes `atlas_engine/plan_contract.py`, a provider-neutral typed plan model. A plan contains an objective, acceptance criteria and bounded steps. Each step declares a capability name, objective, risk class, dependencies, required scopes, expected output, timeout and resource budget.
+
+The model validates unique step IDs, known dependencies, acyclic dependency graphs, bounded inputs and a deterministic topological execution order. It does not execute a step, generate shell commands, or grant access to a capability.
+
+Plan readiness is risk-aware: read-only/local/draft plans can be marked ready; any plan containing an external side effect or privileged step moves to `awaiting_approval`. Approval requires an explicit reference and transitions the plan to `approved`. That reference is only a contract-level placeholder until the application binds approval to a verified actor, exact action/target/parameters and expiry. Approval alone does not execute or deploy anything.
+
+The plan contract is an in-memory model at this stage. Durable plan persistence, atomic state transitions, per-step execution records, idempotency, cancellation and recovery remain future work. It must not be represented as a live autonomous planner or worker.
+
 ## 4. Capability contract
 
 A future capability registry should require each arm to declare:
