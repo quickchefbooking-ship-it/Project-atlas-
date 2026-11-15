@@ -62,7 +62,7 @@ def _parse_blueprint(raw: str) -> tuple[ReasoningStep, ...]:
     for item in payload["steps"]:
         if not isinstance(item, dict) or set(item) - {"step_id", "objective", "depends_on"}:
             raise ReasoningPipelineError("A decomposition step contains unsupported fields.")
-        if set(item) < {"step_id", "objective"}:
+        if not {"step_id", "objective"} <= set(item):
             raise ReasoningPipelineError("A decomposition step is missing required fields.")
         dependencies = item.get("depends_on", [])
         if not isinstance(dependencies, list):
