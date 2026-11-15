@@ -59,17 +59,17 @@ class VerifiedIdentityService:
 
 def _cookie_principal(request: Request, csrf_token: Optional[str]) -> RequestPrincipal:
     """Authenticate an Atlas browser cookie without trusting browser identity data."""
-    service = getattr(request.app.state, "atlas_session_identity_service", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Verified user identity is not configured.",
-        )
     session_token = request.cookies.get(ATLAS_SESSION_COOKIE)
     if not isinstance(session_token, str) or not session_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Atlas browser authentication required.",
+        )
+    service = getattr(request.app.state, "atlas_session_identity_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verified user identity is not configured.",
         )
 
     # Origin is mandatory for unsafe cookie-authenticated requests. Exact
