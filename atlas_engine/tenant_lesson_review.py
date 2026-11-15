@@ -20,7 +20,7 @@ def initialize_tenant_lesson_review_schema(db: sqlite3.Connection) -> None:
       FOREIGN KEY(candidate_id) REFERENCES tenant_lesson_candidates(candidate_id)
     );
     CREATE INDEX IF NOT EXISTS idx_lesson_candidates_owner ON tenant_lesson_candidates(tenant_id,owner_key,candidate_id DESC);
-    CREATE INDEX IF NOT EXISTS idx_lesson_decisions_candidate ON tenant_lesson_candidate_decisions(candidate_id,decision_id DESC);
+    CREATE INDEX IF NOT EXISTS idx_lesson_decisions_candidate ON tenant_lesson_candidate_decisions(candidate_id,decision_id DESC);\n    CREATE UNIQUE INDEX IF NOT EXISTS idx_lesson_single_final_decision ON tenant_lesson_candidate_decisions(candidate_id);
     CREATE TRIGGER IF NOT EXISTS lesson_candidates_no_update BEFORE UPDATE ON tenant_lesson_candidates BEGIN SELECT RAISE(ABORT,'lesson candidates are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS lesson_candidates_no_delete BEFORE DELETE ON tenant_lesson_candidates BEGIN SELECT RAISE(ABORT,'lesson candidates are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS lesson_decisions_no_update BEFORE UPDATE ON tenant_lesson_candidate_decisions BEGIN SELECT RAISE(ABORT,'lesson decisions are append-only'); END;
