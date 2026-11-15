@@ -102,7 +102,7 @@ def frame_task(request: CognitiveRequest) -> CognitiveFrame:
         and not request.user_goal
         and task.casefold().strip(" !?.") not in conversational_greetings
         and not re.match(
-            r"^(explain|describe|summarize|define|compare|analyze|analyse|research|calculate|translate|review|outline)\\b",
+            r"^(explain|describe|summarize|define|compare|analyze|analyse|research|calculate|translate|review|outline)\b",
             task.casefold().strip(),
         )
     ):
