@@ -16,6 +16,7 @@ from .identity_policy import AuthorizationDenied, RequestPrincipal, authorize_te
 from .openai_compatible_provider import ReasoningProviderError
 from .plan_suggestion import PlanSuggestionError, parse_plan_suggestion
 from .tenant_plan_repository import TenantPlanConflict, TenantPlanRepository
+from .professor_reasoning_context import build_reasoning_evidence, format_evidence_context
 
 router = APIRouter()
 
@@ -74,10 +75,12 @@ def suggest_tenant_professor_plan(
         }
         for item in registry.list_definitions()
     ]
+    evidence = build_reasoning_evidence(payload.objective)
     system_message = (
         _PLAN_SYSTEM_PROMPT
         + "\nTrusted capability catalogue:\n"
         + json.dumps(catalogue, separators=(",", ":"))
+        + format_evidence_context(evidence)
     )
     if len(system_message) > 4000:
         raise HTTPException(
@@ -138,6 +141,16 @@ def suggest_tenant_professor_plan(
                     "expected_output": step.expected_output,
                 }
                 for step in plan.steps
+            ],
+            "evidence": [
+                {
+                    "document_id": item["document_id"],
+                    "title": item["title"],
+                    "url": item["url"],
+                    "trust_level": item["trust_level"],
+                    "content_sha256": item["content_sha256"],
+                }
+                for item in evidence
             ],
             "execution_enabled": False,
             "next_step": "Review this DRAFT, then use the separate prepare workflow. Nothing has been executed.",
