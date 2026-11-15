@@ -93,7 +93,15 @@ def frame_task(request: CognitiveRequest) -> CognitiveFrame:
         assumptions.append("No additional background context was supplied.")
     if not request.constraints:
         assumptions.append("No explicit constraints were supplied.")
-    if len(task.split()) <= 2 and not request.user_goal:
+    conversational_greetings = {
+        "hi", "hello", "hey", "good morning", "good afternoon",
+        "good evening", "thanks", "thank you", "cheers",
+    }
+    if (
+        len(task.split()) <= 2
+        and not request.user_goal
+        and task.casefold().strip(" !?.") not in conversational_greetings
+    ):
         questions.append("What outcome would you like to achieve?")
 
     if _SIDE_EFFECT_TERMS.search(task):
