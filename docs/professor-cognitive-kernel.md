@@ -36,7 +36,7 @@ The critique uses lexical coverage as a warning signal, not semantic proof. This
 
 ## Next composition stages
 
-1. Complete hosted sign-in with Authorization Code + PKCE, secure server-side sessions and CSRF/state/nonce protections.
+1. Complete hosted sign-in with secure server-side sessions and CSRF/state protections. The Atlas-owned session-to-principal composition now resolves tenant and scopes exclusively from explicit server-side membership; HTTP cookie routes and login abuse controls remain outstanding.
 2. Add browser-level tests for the memory review interface and verify owner-scoped permissions end to end.
 3. Improve retrieval quality only after the deterministic baseline has been evaluated against a representative test set.
 4. Keep all external actions in draft/approval states until action-bound authorisation is independently verified.
