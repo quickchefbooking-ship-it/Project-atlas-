@@ -125,3 +125,30 @@ def test_conversation_delete_removes_message_content(tmp_path):
     ).fetchone()[0]
     db.close()
     assert count == 0
+
+
+
+class FailingProvider:
+    name = "test-failure"
+
+    def respond(self, conversation):
+        from atlas_engine.openai_compatible_provider import ReasoningProviderError
+        raise ReasoningProviderError("private provider detail")
+
+
+def test_failed_reasoning_does_not_persist_partial_user_turn(tmp_path):
+    client, db_path = make_client(tmp_path)
+    client.app.state.conversation_service = ConversationService(FailingProvider())
+    response = client.post("/professor/conversation", json={"message": "Do not save on failure"})
+    assert response.status_code == 503
+
+    db = sqlite3.connect(db_path)
+    conversations = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversations"
+    ).fetchone()[0]
+    messages = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_messages"
+    ).fetchone()[0]
+    db.close()
+    assert conversations == 0
+    assert messages == 0
