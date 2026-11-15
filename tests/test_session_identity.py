@@ -76,6 +76,7 @@ def test_rotation_atomically_invalidates_old_token(identity):
     issued = sessions.issue_session(account.account_id)
     replacement = sessions.rotate_session(issued.token)
     assert replacement.account_id == account.account_id
+    assert replacement.absolute_expires_at == issued.absolute_expires_at
     assert sessions.validate_session(replacement.token).session_id == replacement.session_id
     with pytest.raises(InvalidSession):
         sessions.validate_session(issued.token)
