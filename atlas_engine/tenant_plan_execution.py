@@ -102,6 +102,29 @@ def execute_next_tenant_professor_step(
             )
             raise HTTPException(status_code=409, detail="The planned capability is not installed.")
 
+        # Membership scopes are resolved afresh for every HTTP request. A plan
+        # may span several execute-next calls, so re-check the exact step's
+        # declared and registry-required scopes after claiming it and before
+        # invoking its handler. If access was withdrawn, terminalise the
+        # claimed step and stop the plan rather than leaving a live lease.
+        definition = runtime.registry.get(step.capability, version)
+        if definition is None:
+            steps.complete(lease, error_code="capability_not_found")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            raise HTTPException(status_code=409, detail="The planned capability is not installed.")
+        required_scopes = set(step.required_scopes) | set(definition.required_scopes)
+        if not required_scopes.issubset(principal.scopes):
+            steps.complete(lease, error_code="capability_scope_revoked")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Required capability permissions are no longer available; the plan has been stopped.",
+            )
+
         try:
             # Capability-specific input mapping is derived from the trusted
             # registered schema. The plan objective is data, never executable code.
