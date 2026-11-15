@@ -23,7 +23,7 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - A memory proposal is created through an application-controlled repository method and approved using the separate `memory:approve` scope.
 - Retention defaults to 90 days and is bounded to 1–3,650 days. Expired records are excluded from retrieval; physical expiry cleanup remains a later maintenance task.
 - Owners can explicitly delete stored content. Associated decision details are deleted with it; there is no hidden content archive.
-- Retrieval is a simple bounded lexical baseline, not semantic memory, and is not yet connected to the live chat prompt.
+- Retrieval is a simple bounded lexical baseline, not semantic memory. The live chat retrieves at most five approved, unexpired memories only when the verified principal has the `memory:read` scope; otherwise it retrieves none. Memory is clearly labelled as reference data, never instructions, in both reasoning passes.
 - No raw hidden chain-of-thought is stored as memory or audit data.
 - Verified API routes now support proposal, explicit approval/rejection, bounded retrieval, listing and deletion. They are included in the app and use the separate `memory:propose`, `memory:approve`, `memory:read` and `memory:delete` scopes. A dedicated user-facing review interface and hosted sign-in still need to be completed.
 
