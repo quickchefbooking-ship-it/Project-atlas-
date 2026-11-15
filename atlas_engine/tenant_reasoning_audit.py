@@ -24,7 +24,7 @@ def initialize_reasoning_audit_schema(db: sqlite3.Connection) -> None:
       conversation_id TEXT NOT NULL,
       request_sha256 TEXT NOT NULL, response_sha256 TEXT NOT NULL,
       context_sha256 TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
-      evidence_json TEXT NOT NULL, previous_hash TEXT NOT NULL,
+      evidence_json TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', previous_hash TEXT NOT NULL,
       record_hash TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -39,6 +39,9 @@ def initialize_reasoning_audit_schema(db: sqlite3.Connection) -> None:
       SELECT RAISE(ABORT,'reasoning audit is append-only');
     END;
     """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(tenant_professor_reasoning_audit)")}
+    if "metadata_json" not in columns:
+        db.execute("ALTER TABLE tenant_professor_reasoning_audit ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}' ")
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,7 @@ class ReasoningAuditRecord:
     provider: str
     model: str
     evidence: tuple[dict, ...]
+    metadata: dict
     previous_hash: str
     record_hash: str
     created_at: str
@@ -79,7 +83,7 @@ class TenantReasoningAuditRepository:
 
     def append(self, *, conversation_id: str, request_text: str,
                response_text: str, context_text: str, provider: str,
-               model: str, evidence: list[dict]) -> ReasoningAuditRecord:
+               model: str, evidence: list[dict], metadata: dict | None = None) -> ReasoningAuditRecord:
         self._authorize()
         if not isinstance(conversation_id, str) or not conversation_id.strip() or len(conversation_id) > 128:
             raise ValueError("Invalid conversation identifier.")
@@ -96,6 +100,30 @@ class TenantReasoningAuditRepository:
             if any(not isinstance(value, str) or len(value) > 1000 for value in safe.values()):
                 raise ValueError("Invalid evidence provenance.")
             safe_evidence.append(safe)
+        safe_metadata = metadata or {}
+        allowed_metadata = {"status", "step_count", "critique_accepted", "goal_coverage", "action_boundary", "execution_enabled"}
+        if not isinstance(safe_metadata, dict) or set(safe_metadata) - allowed_metadata:
+            raise ValueError("Invalid reasoning trace metadata.")
+        if safe_metadata.get("status") not in {None, "ready", "held_for_review", "needs_clarification"}:
+            raise ValueError("Invalid reasoning status.")
+        if safe_metadata.get("action_boundary") not in {None, "information_only", "draft_only", "human_approval_required"}:
+            raise ValueError("Invalid action boundary.")
+        if safe_metadata.get("step_count") is not None and (
+            isinstance(safe_metadata["step_count"], bool) or not isinstance(safe_metadata["step_count"], int)
+            or not 0 <= safe_metadata["step_count"] <= 16
+        ):
+            raise ValueError("Invalid reasoning step count.")
+        if safe_metadata.get("critique_accepted") is not None and not isinstance(safe_metadata["critique_accepted"], bool):
+            raise ValueError("Invalid critique status.")
+        if safe_metadata.get("execution_enabled", False) is not False:
+            raise ValueError("Reasoning trace cannot enable execution.")
+        if safe_metadata.get("goal_coverage") is not None and (
+            isinstance(safe_metadata["goal_coverage"], bool)
+            or not isinstance(safe_metadata["goal_coverage"], (int, float))
+            or not 0 <= safe_metadata["goal_coverage"] <= 1
+        ):
+            raise ValueError("Invalid goal coverage score.")
+        metadata_encoded = json.dumps(safe_metadata, sort_keys=True, separators=(",", ":"), allow_nan=False)
         request_hash = self.digest(request_text)
         response_hash = self.digest(response_text)
         context_hash = self.digest(context_text)
@@ -116,17 +144,17 @@ class TenantReasoningAuditRepository:
                 "response_sha256": response_hash,
                 "context_sha256": context_hash,
                 "provider": provider, "model": model,
-                "evidence": safe_evidence, "previous_hash": previous_hash,
+                "evidence": safe_evidence, "metadata": safe_metadata, "previous_hash": previous_hash,
             }, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
             record_hash = self.digest(canonical)
             cur = self.db.execute(
                 """INSERT INTO tenant_professor_reasoning_audit
                 (tenant_id,owner_key,conversation_id,request_sha256,response_sha256,
-                 context_sha256,provider,model,evidence_json,previous_hash,record_hash)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                 context_sha256,provider,model,evidence_json,metadata_json,previous_hash,record_hash)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (self.principal.tenant_id, self.owner_key, conversation_id,
                  request_hash, response_hash, context_hash, provider, model,
-                 encoded, previous_hash, record_hash),
+                 encoded, metadata_encoded, previous_hash, record_hash),
             )
             row = self.db.execute(
                 "SELECT * FROM tenant_professor_reasoning_audit WHERE audit_id=?",
@@ -140,7 +168,7 @@ class TenantReasoningAuditRepository:
             row["audit_id"], row["conversation_id"], row["request_sha256"],
             row["response_sha256"], row["context_sha256"], row["provider"],
             row["model"], tuple(json.loads(row["evidence_json"])),
-            row["previous_hash"], row["record_hash"], row["created_at"],
+            json.loads(row["metadata_json"]), row["previous_hash"], row["record_hash"], row["created_at"],
         )
 
     def list(self, conversation_id: str, *, limit: int = 50):
@@ -175,6 +203,7 @@ class TenantReasoningAuditRepository:
         for row in rows:
             try:
                 evidence = json.loads(row["evidence_json"])
+                metadata = json.loads(row["metadata_json"])
                 canonical = json.dumps({
                     "tenant_id": row["tenant_id"],
                     "owner_key": row["owner_key"],
@@ -183,7 +212,7 @@ class TenantReasoningAuditRepository:
                     "response_sha256": row["response_sha256"],
                     "context_sha256": row["context_sha256"],
                     "provider": row["provider"], "model": row["model"],
-                    "evidence": evidence, "previous_hash": row["previous_hash"],
+                    "evidence": evidence, "metadata": metadata, "previous_hash": row["previous_hash"],
                 }, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
                 calculated = self.digest(canonical)
                 valid = (
