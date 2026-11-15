@@ -12,7 +12,7 @@ from .capability_registry import CapabilityRegistry
 from .conversation_contract import ConversationInput, ConversationMessage
 from .conversation_service import ConversationNotConfigured
 from .http_identity import require_verified_principal
-from .identity_policy import AuthorizationDenied, RequestPrincipal
+from .identity_policy import AuthorizationDenied, RequestPrincipal, authorize_tenant_resource
 from .openai_compatible_provider import ReasoningProviderError
 from .plan_suggestion import PlanSuggestionError, parse_plan_suggestion
 from .tenant_plan_repository import TenantPlanConflict, TenantPlanRepository
@@ -43,6 +43,10 @@ def suggest_tenant_professor_plan(
     principal: RequestPrincipal = Depends(require_verified_principal),
 ):
     """Generate, validate and persist a DRAFT only; never prepare or execute."""
+    try:
+        authorize_tenant_resource(principal, principal.tenant_id, {"plans:write"})
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan creation denied.") from None
     provider = getattr(request.app.state, "conversation_service", None)
     if provider is None or not provider.is_configured:
         raise HTTPException(
