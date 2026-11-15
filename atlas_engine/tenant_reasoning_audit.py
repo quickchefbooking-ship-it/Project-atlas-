@@ -100,7 +100,7 @@ class TenantReasoningAuditRepository:
             if any(not isinstance(value, str) or len(value) > 1000 for value in safe.values()):
                 raise ValueError("Invalid evidence provenance.")
             safe_evidence.append(safe)
-        safe_metadata = metadata or {}
+        safe_metadata = {} if metadata is None else metadata
         allowed_metadata = {"status", "step_count", "critique_accepted", "goal_coverage", "action_boundary", "execution_enabled", "memory_proposal_ids"}
         if not isinstance(safe_metadata, dict) or set(safe_metadata) - allowed_metadata:
             raise ValueError("Invalid reasoning trace metadata.")
