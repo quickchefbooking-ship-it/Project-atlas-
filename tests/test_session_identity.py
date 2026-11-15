@@ -133,3 +133,53 @@ def test_suspending_account_revokes_sessions_in_storage(identity):
         assert revoked_at is not None
     finally:
         conn.close()
+
+
+def test_csrf_token_is_session_bound_and_only_digest_is_stored(identity):
+    _, sessions, account = identity
+    first = sessions.issue_session(account.account_id)
+    second = sessions.issue_session(account.account_id)
+    csrf = sessions.issue_csrf_token(first.token)
+    assert sessions.validate_csrf_token(first.token, csrf) is True
+    assert sessions.validate_csrf_token(second.token, csrf) is False
+    assert sessions.validate_csrf_token(first.token, "x" * 48) is False
+    conn = sqlite3.connect(sessions.database_path)
+    try:
+        stored = conn.execute(
+            "SELECT csrf_token_hash FROM atlas_sessions WHERE session_id=?",
+            (first.session_id,),
+        ).fetchone()[0]
+        assert stored == hashlib.sha256(csrf.encode()).hexdigest()
+        assert stored != csrf
+    finally:
+        conn.close()
+
+
+def test_csrf_token_is_invalidated_when_session_is_revoked_or_rotated(identity):
+    _, sessions, account = identity
+    issued = sessions.issue_session(account.account_id)
+    csrf = sessions.issue_csrf_token(issued.token)
+    replacement = sessions.rotate_session(issued.token)
+    assert sessions.validate_csrf_token(issued.token, csrf) is False
+    assert sessions.validate_csrf_token(replacement.token, csrf) is False
+    replacement_csrf = sessions.issue_csrf_token(replacement.token)
+    assert sessions.validate_csrf_token(replacement.token, replacement_csrf) is True
+    sessions.revoke_session(replacement.token)
+    assert sessions.validate_csrf_token(replacement.token, replacement_csrf) is False
+
+
+def test_session_schema_migrates_existing_database_for_csrf_binding(identity):
+    _, sessions, account = identity
+    conn = sqlite3.connect(sessions.database_path)
+    try:
+        conn.execute("ALTER TABLE atlas_sessions DROP COLUMN csrf_token_hash")
+        conn.commit()
+    finally:
+        conn.close()
+    sessions.initialize()
+    conn = sqlite3.connect(sessions.database_path)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(atlas_sessions)")}
+        assert "csrf_token_hash" in columns
+    finally:
+        conn.close()
