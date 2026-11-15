@@ -35,6 +35,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
+        ("/professor/chat", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
@@ -190,9 +191,8 @@ def test_identity_introspection_does_not_accept_shared_api_key_as_human_identity
     monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
     monkeypatch.setattr(app_module, "API_KEY", "test-secret")
     monkeypatch.delenv("ATLAS_API_KEY", raising=False)
-    client = TestClient(app_module.app)
 
-    response = client.get("/identity/me", headers={"X-API-Key": "test-secret"})
+    response = TestClient(app_module.app).get("/identity/me", headers={"X-API-Key": "test-secret"})
 
     assert response.status_code == 503
     assert "Verified user identity is not configured" in response.json()["detail"]
