@@ -135,3 +135,12 @@ These records are a reviewable evidence trail, not an autonomous learning
 mechanism. They do not rewrite prompts, policies, capability permissions,
 provider settings or model weights. Any future lesson promotion must be a
 separate human-reviewed workflow with provenance and a reversible change log.
+
+
+## Aggregate feedback review
+
+- `GET /professor/tenant/evaluations/summary` returns owner-scoped counts by
+  outcome, number of rated records and average rating.
+- The summary deliberately excludes free-text notes and evidence payloads.
+- It is descriptive feedback, not a correctness score or an autonomous learning
+  signal. Human review remains required before any lesson is proposed or adopted.
