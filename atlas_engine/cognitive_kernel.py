@@ -93,7 +93,7 @@ def frame_task(request: CognitiveRequest) -> CognitiveFrame:
         assumptions.append("No additional background context was supplied.")
     if not request.constraints:
         assumptions.append("No explicit constraints were supplied.")
-    if len(task.split()) <= 3 and not request.user_goal:
+    if len(task.split()) <= 2 and not request.user_goal:
         questions.append("What outcome would you like to achieve?")
 
     if _SIDE_EFFECT_TERMS.search(task):
