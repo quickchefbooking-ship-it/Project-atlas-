@@ -12,7 +12,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from .conversation_contract import ConversationInput, ConversationMessage, ConversationProvider
+from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS)
 from .cognitive_kernel import (
     ActionBoundary,
     CognitivePreparation,
