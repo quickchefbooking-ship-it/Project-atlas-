@@ -44,6 +44,7 @@ def setup(monkeypatch, tmp_path):
     for name in ("ATLAS_OIDC_ISSUER", "ATLAS_OIDC_AUDIENCE",
                  "ATLAS_OIDC_JWKS_URI", "ATLAS_OIDC_ALLOWED_ALGORITHMS"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "true")
     memberships = SQLiteMembershipRegistry(membership_path)
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
@@ -97,6 +98,38 @@ def test_execute_next_runs_one_bounded_step_then_completes_plan(monkeypatch, tmp
         assert second.json()["plan_state"] == "succeeded"
     finally:
         client.__exit__(None, None, None)
+
+
+def test_execute_next_global_kill_switch_blocks_before_handler_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        app_module.app.state.capability_execution_enabled = False
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Capability execution is globally disabled."
+        assert calls == []
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_capability_execution_configuration_defaults_off(monkeypatch):
+    monkeypatch.delenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", raising=False)
+    assert app_module._capability_execution_enabled_from_environment() is False
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "yes")
+    assert app_module._capability_execution_enabled_from_environment() is False
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "true")
+    assert app_module._capability_execution_enabled_from_environment() is True
 
 
 def test_execute_next_rejects_missing_execution_scope(monkeypatch, tmp_path):
