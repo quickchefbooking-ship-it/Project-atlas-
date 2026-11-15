@@ -242,3 +242,33 @@ class TenantProfessorMemoryRepository:
                    WHERE tenant_id=? AND owner_key=? AND proposal_id=?""",
                 (self.principal.tenant_id, self.owner_key, proposal_id),
             )
+
+    def purge_expired(self, *, limit: int = 100) -> int:
+        """Permanently remove this owner's expired memories and decision details."""
+        self._authorize("memory:delete")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("Expiry cleanup limit must be between 1 and 500.")
+        now = _utc_now().isoformat()
+        with self.db:
+            rows = self.db.execute(
+                """SELECT proposal_id FROM tenant_professor_memory_proposals
+                   WHERE tenant_id=? AND owner_key=? AND expires_at<=?
+                   ORDER BY expires_at,proposal_id LIMIT ?""",
+                (self.principal.tenant_id, self.owner_key, now, limit),
+            ).fetchall()
+            proposal_ids = [row["proposal_id"] for row in rows]
+            if not proposal_ids:
+                return 0
+            placeholders = ",".join("?" for _ in proposal_ids)
+            scoped = (self.principal.tenant_id, self.owner_key, *proposal_ids)
+            self.db.execute(
+                f"""DELETE FROM tenant_professor_memory_decisions
+                    WHERE tenant_id=? AND owner_key=? AND proposal_id IN ({placeholders})""",
+                scoped,
+            )
+            self.db.execute(
+                f"""DELETE FROM tenant_professor_memory_proposals
+                    WHERE tenant_id=? AND owner_key=? AND proposal_id IN ({placeholders})""",
+                scoped,
+            )
+        return len(proposal_ids)
