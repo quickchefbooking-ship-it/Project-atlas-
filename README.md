@@ -60,7 +60,11 @@ See [the Professor orchestration blueprint](docs/professor-orchestration.md) for
 
 Open `/professor/voice` in the running AtlasOnePro instance for the browser voice interface. It provides typed conversation input, browser speech recognition where supported, device speech synthesis, voice selection and a connection check for Professor Core. Speech recognition and playback run in the browser; microphone access depends on browser support, permission and a secure context.
 
-The interface is a voice-channel prototype, not a connected conversational AI. `POST /professor/conversation` is authenticated and deliberately returns HTTP 503 until a real reasoning backend is selected, configured and tested. The local executor still supports basic arithmetic only. No fake conversational replies are generated, and paid AI remains disabled by default.
+The interface uses the same verified bearer-token identity boundary and conversation contract as Professor chat. Device speech recognition converts speech to text; device speech synthesis reads the Professor's actual response aloud. The conversation endpoint remains fail-closed until a reasoning backend is explicitly configured. For a £0 self-hosted-first setup, see [the local reasoning provider guide](docs/local-reasoning-provider-setup.md). No fake conversational replies are generated, and no paid AI provider is enabled by default.
+
+## Local Professor reasoning provider
+
+The reasoning adapter supports an OpenAI-compatible Chat Completions endpoint, including local Ollama when it runs on the same machine as the Atlas application. Provider configuration is opt-in and disabled by default. Follow [the local reasoning provider setup guide](docs/local-reasoning-provider-setup.md); do not expose an unauthenticated local model server to the public internet.
 
 ## Professor Source Division interface
 
