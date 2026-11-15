@@ -107,12 +107,11 @@ def test_plain_text_or_unknown_content_type_is_not_treated_as_html(monkeypatch, 
         )
 
 
-def test_oversized_html_and_excerpt_are_rejected():
+def test_oversized_html_and_excerpt_are_rejected(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="1 MB"):
         extract_html_blocks("x" * 1_000_001)
+    document = _approved_html(monkeypatch, tmp_path)
     with pytest.raises(ValueError, match="2,000"):
-        extract_html_blocks("<p>Small source.</p>")
-        # The excerpt limit is checked by the public resolver; use a minimal
-        # database-free guard by passing a malformed document ID after the size check.
-        from atlas_engine.evidence_locators import MAX_EXCERPT_CHARS
-        assert MAX_EXCERPT_CHARS == 2_000
+        resolve_approved_html_excerpt(
+            source_document_id=document["id"], excerpt="x" * 2_001
+        )
