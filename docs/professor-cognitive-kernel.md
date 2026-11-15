@@ -25,7 +25,7 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - Owners can explicitly delete stored content. Associated decision details are deleted with it; there is no hidden content archive.
 - Retrieval is a bounded lexical baseline with normalized token matching and weighted title/category relevance, not semantic memory. The live chat retrieves at most five approved, unexpired memories only when the verified principal has the `memory:read` scope; otherwise it retrieves none. Memory is clearly labelled as reference data, never instructions, in both reasoning passes.
 - No raw hidden chain-of-thought is stored as memory or audit data.
-- Verified API routes now support proposal, explicit approval/rejection, bounded retrieval, listing and deletion. They are included in the app and use the separate `memory:propose`, `memory:approve`, `memory:read` and `memory:delete` scopes. A dedicated user-facing review interface and hosted sign-in still need to be completed.
+- Verified API routes now support proposal, explicit approval/rejection, bounded retrieval, listing and deletion. They are included in the app and use the separate `memory:propose`, `memory:approve`, `memory:read` and `memory:delete` scopes. The Professor chat page now includes an owner-facing memory review panel with pending/approved/rejected/all filters, explicit approve/reject actions, and permanent deletion. The panel is available only after verified identity and the relevant memory scopes are present. Hosted sign-in remains incomplete; the existing token bridge is for controlled testing only.
 
 ## Important limitations
 
@@ -33,7 +33,7 @@ The critique uses lexical coverage as a warning signal, not semantic proof. This
 
 ## Next composition stages
 
-1. Add authenticated API routes and a review interface for memory proposals, approvals, retrieval and deletion.
-2. Build the authenticated memory review interface so owners can inspect pending/approved items, approve/reject, and delete them.
-3. Add expiry cleanup and adversarial tests for memory poisoning and prompt injection.
+1. Add expiry cleanup and adversarial tests for memory poisoning and prompt injection.
+2. Complete hosted sign-in with Authorization Code + PKCE, secure server-side sessions and CSRF/state/nonce protections.
+3. Improve retrieval quality only after the deterministic baseline has been evaluated against a representative test set.
 4. Keep all external actions in draft/approval states until action-bound authorisation is independently verified.
