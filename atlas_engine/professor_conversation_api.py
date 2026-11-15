@@ -76,10 +76,12 @@ def professor_conversation(
             latest_user_message=payload.message,
         )
         result = service.respond(conversation)
-        if is_new_conversation:
-            repository.create(conversation_id)
-        repository.append(conversation_id, "user", payload.message)
-        repository.append(conversation_id, "assistant", result.text)
+        repository.append_turn(
+            conversation_id,
+            payload.message,
+            result.text,
+            create_if_missing=is_new_conversation,
+        )
         return {
             "conversation_id": conversation_id,
             "response": result.text,
