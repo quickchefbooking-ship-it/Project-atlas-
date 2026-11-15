@@ -152,3 +152,31 @@ def test_failed_reasoning_does_not_persist_partial_user_turn(tmp_path):
     db.close()
     assert conversations == 0
     assert messages == 0
+
+
+def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp_path):
+    class LongProvider:
+        name = "test-long"
+
+        def respond(self, conversation):
+            return ConversationOutput(
+                text="x" * 4001,
+                provider="test-long",
+                model="fixture-v1",
+            )
+
+    client, db_path = make_client(tmp_path)
+    client.app.state.conversation_service = ConversationService(LongProvider())
+    response = client.post("/professor/conversation", json={"message": "Hello"})
+    assert response.status_code == 503
+
+    db = sqlite3.connect(db_path)
+    conversations = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversations"
+    ).fetchone()[0]
+    messages = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_messages"
+    ).fetchone()[0]
+    db.close()
+    assert conversations == 0
+    assert messages == 0
