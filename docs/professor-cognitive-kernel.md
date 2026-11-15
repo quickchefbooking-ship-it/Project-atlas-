@@ -17,6 +17,9 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - **Working memory** is bounded recent conversation history. It is not automatically treated as durable user knowledge.
 - **Durable memory foundation** is separate: records begin as pending proposals, require an explicit approval decision, are tenant- and owner-scoped, expire after a bounded retention period, and are retrieved only while approved and unexpired. Rejected or pending records are never retrieved.
 
+- The two-turn conversation integration test verifies that prior user and assistant turns are included in the next answer-stage context and that the audit chain remains valid.
+- `GET /launch/readiness` reports non-secret configuration checks for verified API identity, hosted-login settings, tenant storage and provider configuration. It always keeps live provider verification false until a real end-to-end provider round trip is confirmed; it never treats configuration presence as proof of live operation.
+
 ## Memory boundaries
 
 - Models cannot write or promote durable memory directly.
