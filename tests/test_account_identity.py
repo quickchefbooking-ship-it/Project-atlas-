@@ -95,3 +95,87 @@ def test_account_schema_is_separate_and_does_not_store_plaintext_password(accoun
         assert "sufficiently long password" not in row[0]
     finally:
         conn.close()
+
+
+from datetime import timedelta
+
+
+def test_email_verification_token_is_hashed_single_use_and_activates_account(account_store):
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    token = account_store.issue_email_verification_token(account.account_id)
+    conn = sqlite3.connect(account_store.database_path)
+    try:
+        stored_hash = conn.execute(
+            "SELECT token_hash FROM atlas_account_tokens WHERE account_id=?",
+            (account.account_id,),
+        ).fetchone()[0]
+        assert stored_hash != token
+        assert len(stored_hash) == 64
+    finally:
+        conn.close()
+
+    activated = account_store.verify_email(token)
+    assert activated.status == "active"
+    assert account_store.verify_password("alice@example.com", "a sufficiently long password").account_id == account.account_id
+    with pytest.raises(InvalidCredential):
+        account_store.verify_email(token)
+
+
+def test_reissuing_verification_invalidates_previous_token(account_store):
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    first = account_store.issue_email_verification_token(account.account_id)
+    second = account_store.issue_email_verification_token(account.account_id)
+    with pytest.raises(InvalidCredential):
+        account_store.verify_email(first)
+    assert account_store.verify_email(second).status == "active"
+
+
+def test_expired_email_verification_token_is_rejected(account_store):
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    with pytest.raises(ValueError):
+        account_store.issue_email_verification_token(account.account_id, lifetime=timedelta(seconds=0))
+    token = account_store.issue_email_verification_token(account.account_id, lifetime=timedelta(seconds=1))
+    conn = sqlite3.connect(account_store.database_path)
+    try:
+        conn.execute(
+            "UPDATE atlas_account_tokens SET expires_at='2000-01-01T00:00:00+00:00' WHERE token_hash=?",
+            (__import__("hashlib").sha256(token.encode()).hexdigest(),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    with pytest.raises(InvalidCredential):
+        account_store.verify_email(token)
+
+
+def test_password_recovery_is_generic_for_unknown_account_and_single_use(account_store):
+    assert account_store.issue_password_recovery_token("unknown@example.com") is None
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    verification = account_store.issue_email_verification_token(account.account_id)
+    account_store.verify_email(verification)
+    token = account_store.issue_password_recovery_token("ALICE@example.com")
+    assert token is not None
+    account_store.reset_password(token, "a completely new secure password")
+    assert account_store.verify_password("alice@example.com", "a completely new secure password").account_id == account.account_id
+    with pytest.raises(InvalidCredential):
+        account_store.verify_password("alice@example.com", "a sufficiently long password")
+    with pytest.raises(InvalidCredential):
+        account_store.reset_password(token, "yet another secure password")
+
+
+def test_password_reset_invalidates_all_outstanding_account_tokens(account_store):
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    account_store.verify_email(account_store.issue_email_verification_token(account.account_id))
+    first = account_store.issue_password_recovery_token("alice@example.com")
+    second = account_store.issue_password_recovery_token("alice@example.com")
+    assert first and second
+    account_store.reset_password(second, "a completely new secure password")
+    with pytest.raises(InvalidCredential):
+        account_store.reset_password(first, "another completely new password")
+
+
+def test_recovery_token_cannot_be_issued_for_suspended_account(account_store):
+    account = account_store.create_pending_account("alice@example.com", "a sufficiently long password")
+    account_store.verify_email(account_store.issue_email_verification_token(account.account_id))
+    account_store.set_account_status(account.account_id, "suspended")
+    assert account_store.issue_password_recovery_token("alice@example.com") is None
