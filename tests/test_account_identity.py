@@ -89,7 +89,7 @@ def test_account_schema_is_separate_and_does_not_store_plaintext_password(accoun
     conn = sqlite3.connect(account_store.database_path)
     try:
         names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert names == {"atlas_accounts"}
+        assert names == {"atlas_accounts", "atlas_account_tokens"}
         row = conn.execute("SELECT password_hash FROM atlas_accounts").fetchone()
         assert row[0].startswith("$argon2id$")
         assert "sufficiently long password" not in row[0]
