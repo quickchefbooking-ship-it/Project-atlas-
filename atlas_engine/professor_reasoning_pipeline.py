@@ -45,6 +45,7 @@ class ProfessorReasoningResult:
     provider: str | None
     model: str | None
     execution_enabled: bool = False
+    memory_proposal_ids: tuple[str, ...] = ()
 
 
 def _parse_blueprint(raw: str) -> tuple[ReasoningStep, ...]:
@@ -88,7 +89,20 @@ class ProfessorReasoningPipeline:
         request: CognitiveRequest,
         *,
         retrieve_evidence: bool = True,
+        approved_memory: tuple[dict, ...] = (),
     ) -> ProfessorReasoningResult:
+        if not isinstance(approved_memory, tuple) or len(approved_memory) > 5:
+            raise ValueError("Approved memory must be a tuple of at most five records.")
+        safe_memory = []
+        for item in approved_memory:
+            if not isinstance(item, dict) or set(item) - {"proposal_id", "category", "title", "content"}:
+                raise ValueError("Approved memory record has an invalid shape.")
+            bounds = {"proposal_id": 128, "category": 64, "title": 120, "content": 2000}
+            if any(not isinstance(item.get(key), str) or not item[key].strip()
+                   or len(item[key]) > maximum for key, maximum in bounds.items()):
+                raise ValueError("Approved memory record contains invalid or unbounded fields.")
+            safe_memory.append({key: item[key] for key in bounds})
+        memory_ids = tuple(item["proposal_id"] for item in safe_memory)
         preparation = prepare_for_reasoning(request, retrieve_evidence=retrieve_evidence)
         frame = preparation.frame
         if not frame.reasoning_ready:
@@ -96,10 +110,11 @@ class ProfessorReasoningPipeline:
             return ProfessorReasoningResult(
                 answer=answer, preparation=preparation, blueprint=None,
                 critique=None, status="needs_clarification",
-                provider=None, model=None,
+                provider=None, model=None, memory_proposal_ids=(),
             )
 
         evidence_context = preparation.evidence_context or "No approved evidence was retrieved."
+        memory_context = json.dumps(safe_memory, ensure_ascii=False) if safe_memory else "No approved user memories were retrieved."
         plan_prompt = (
             "You are THE PROFESSOR's planning stage. Return ONLY valid JSON with exactly "
             '{"steps":[{"step_id":"step_1","objective":"...","depends_on":[]}]} . '
@@ -151,10 +166,10 @@ class ProfessorReasoningPipeline:
                 + " ".join(critique.findings),
                 preparation=preparation, blueprint=blueprint, critique=critique,
                 status="held_for_review", provider=answer_output.provider,
-                model=answer_output.model,
+                model=answer_output.model, memory_proposal_ids=memory_ids,
             )
         return ProfessorReasoningResult(
             answer=answer, preparation=preparation, blueprint=blueprint,
             critique=critique, status="ready", provider=answer_output.provider,
-            model=answer_output.model,
+            model=answer_output.model, memory_proposal_ids=memory_ids,
         )
