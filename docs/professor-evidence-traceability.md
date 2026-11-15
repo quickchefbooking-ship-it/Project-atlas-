@@ -27,8 +27,8 @@ Traceability states:
 ## What it does not verify
 
 - It does not prove the excerpt supports or challenges the claim.
-- It does not independently resolve the locator to a PDF page, paragraph, table or section.
-- It does not authenticate the reviewer identity; reviewer ID is currently attributed data.
+- The standalone traceability helper does not independently resolve a locator to a PDF page, paragraph, table or section.
+- A reviewer ID passed directly to the standalone helper is attributed data, not authenticated identity. The existing authenticated tenant evidence-review HTTP route separately derives reviewer attribution from the verified principal and rejects client-supplied reviewer IDs.
 - It does not assess publisher/source credibility, peer review, methods, sample size, bias, causality, recency or conflicts of interest.
 - It does not establish independent corroboration. Two URLs or excerpts may refer to the same underlying study.
 - It does not automatically fetch or preserve a canonical provider snapshot. The caller must supply the source text obtained through an approved source adapter.
@@ -44,11 +44,24 @@ The same draft adds SQLite triggers that prevent source snapshot content/provena
 
 Tests cover approved-only lookup, pending/rejected rejection, missing IDs, digest linkage, caller attempts to inject source text/URI, and snapshot update/delete prevention. The work remains a draft and is not yet integrated into the authenticated Professor research/report route.
 
+
+## Verified reviewer attribution — existing authenticated workflow
+
+The existing `POST /professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review` route requires `require_verified_principal` and the `evidence:review` scope. It derives a stable pseudonymous reviewer ID from the verified issuer and subject; the request schema forbids extra fields, including a caller-supplied reviewer ID. Review records are tenant-scoped and append-only. A regression test now checks the exact digest-derived attribution rather than only checking its prefix.
+
+This identity gate already existed before the current locator work. It authenticates the reviewer at the tenant review endpoint; it does not yet bind source-document ingestion review to that same principal or connect the approved-source traceability helper to the tenant evidence-review route.
+
+## HTML locator resolution — draft implementation
+
+`atlas_engine/evidence_locators.py` adds a deterministic resolver for approved stored HTML snapshots. It accepts only source documents marked `content_type: text/html`, requires approved/reviewed status, recomputes the immutable snapshot digest, and extracts semantic text blocks such as headings, paragraphs, list items, quotations and table cells. It returns structural paths, excerpt fingerprints and explicit statuses for a unique match, no match or ambiguous matches. Script, style, SVG, template and noscript content are excluded. It never fetches a URL or runs a browser.
+
+The locator is relative to the stored HTML snapshot and may change in a later version. It does not resolve a live page, prove claim support, or authenticate the source publisher. PDF page-coordinate resolution remains outstanding; no PDF parser dependency has been added or selected. The resolver is not yet integrated into the authenticated Professor research/report route.
+
 ## Next verification gates
 
-1. Integrate approved-source binding with the authenticated tenant evidence-review workflow and bind reviewer attribution to the verified principal, not a free-form request field.
-2. Add PDF/HTML-aware locator resolution with deterministic page/section extraction and tests against source files.
-3. Authenticate reviewer IDs from the verified principal, never from a free-form request field.
+1. Integrate approved-source binding and HTML locator resolution into the authenticated tenant evidence-review workflow, with tenant ownership checks for every source document.
+2. Add PDF page/paragraph/table locator resolution after selecting and reviewing a maintained parser dependency and its security/supply-chain implications.
+3. Extend source-ingestion approval so reviewer identity is derived from the verified principal, not the current free-form source-ingestion reviewer label.
 4. Add independent reviewer workflow, disagreement/correction/supersession history and tenant scoping.
 5. Assess source type, publication status, retraction/correction state, study design, methodology and limitations with explicit evidence; do not collapse these into one opaque quality score.
 6. Add duplicate-work detection across DOI, canonical URL and provider identifiers before counting corroboration.
