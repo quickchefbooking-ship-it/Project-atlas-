@@ -26,9 +26,11 @@ class EchoProvider:
 
     def __init__(self):
         self.seen = None
+        self.calls = []
 
     def respond(self, conversation):
         self.seen = conversation
+        self.calls.append(conversation)
         last = conversation.messages[-1].content
         if "decomposition now" in last.lower():
             text = '{"steps":[{"step_id":"answer","objective":"Answer the user"}]}'
@@ -93,6 +95,55 @@ def test_authenticated_conversation_round_trip_persists_server_response(tmp_path
     assert audit.status_code == 200
     assert len(audit.json()["audit"]) == 2
     assert audit.json()["audit"][0]["raw_content_stored"] is False
+
+
+def test_two_turn_chat_passes_prior_messages_back_to_professor_and_verifies_audit(tmp_path):
+    client, _db_path = make_client(tmp_path)
+    provider = client.app.state.test_provider
+
+    first = client.post(
+        "/professor/conversation",
+        json={"message": "My project is called AtlasOnePro."},
+    )
+    assert first.status_code == 200
+    conversation_id = first.json()["conversation_id"]
+    assert first.json()["execution_enabled"] is False
+
+    second = client.post(
+        "/professor/conversation",
+        json={
+            "conversation_id": conversation_id,
+            "message": "What is the name of my project?",
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["conversation_id"] == conversation_id
+    assert second.json()["execution_enabled"] is False
+
+    # The pipeline makes a planning call and an answer call per turn.
+    # Inspect the answer call for turn two: it must receive the full bounded
+    # history, not just the latest message.
+    second_turn_answer = provider.calls[-1]
+    user_messages = [
+        (item.role, item.content)
+        for item in second_turn_answer.messages
+        if item.role in ("user", "assistant")
+    ]
+    assert user_messages == [
+        ("user", "My project is called AtlasOnePro."),
+        ("assistant", "Professor received: My project is called AtlasOnePro."),
+        ("user", "What is the name of my project?"),
+    ]
+
+    trace = client.get(f"/professor/conversations/{conversation_id}/trace")
+    assert trace.status_code == 200
+    payload = trace.json()
+    assert [item["role"] for item in payload["conversation"]["messages"]] == [
+        "user", "assistant", "user", "assistant"
+    ]
+    assert len(payload["reasoning_audit"]) == 2
+    assert payload["audit_verification"]["valid"] is True
+    assert payload["execution_enabled"] is False
 
 
 def test_conversation_cannot_be_read_by_another_owner(tmp_path):
