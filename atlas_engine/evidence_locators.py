@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from urllib.parse import urlparse
 from collections import defaultdict
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -136,6 +137,17 @@ def resolve_approved_html_excerpt(
         raise ValueError("Stored source metadata is invalid.") from exc
     if not isinstance(metadata, dict) or metadata.get("content_type") != "text/html":
         raise ValueError("Source document is not registered as text/html.")
+    parsed_uri = urlparse(document.get("uri") or "")
+    try:
+        valid_port = parsed_uri.port in (None, 443)
+    except ValueError:
+        valid_port = False
+    if (
+        parsed_uri.scheme != "https" or not parsed_uri.hostname
+        or parsed_uri.username is not None or parsed_uri.password is not None
+        or not valid_port
+    ):
+        raise ValueError("Stored HTML source URI must be an absolute HTTPS URI without credentials or alternate ports.")
     source_text = document.get("content")
     stored_digest = document.get("content_sha256")
     if not isinstance(source_text, str) or not isinstance(stored_digest, str):
