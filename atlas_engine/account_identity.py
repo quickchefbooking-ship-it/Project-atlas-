@@ -7,11 +7,13 @@ be enabled until the session, CSRF, verification and abuse-control stages land.
 """
 from __future__ import annotations
 
+import hashlib
 import re
+import secrets
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -130,6 +132,18 @@ class SQLiteAccountRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_atlas_accounts_status
                     ON atlas_accounts(status);
+                CREATE TABLE IF NOT EXISTS atlas_account_tokens (
+                    token_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    purpose TEXT NOT NULL CHECK(purpose IN ('email_verification','password_recovery')),
+                    token_hash TEXT NOT NULL UNIQUE,
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(account_id) REFERENCES atlas_accounts(account_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_atlas_account_tokens_account_purpose
+                    ON atlas_account_tokens(account_id, purpose, consumed_at);
             """)
             conn.commit()
         finally:
@@ -198,6 +212,161 @@ class SQLiteAccountRepository:
             if row is None or row["status"] != "active":
                 raise InvalidCredential("Credential verification failed.")
             return AccountRecord(row["account_id"], row["email_normalized"], row["status"], row["created_at"], row["updated_at"])
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _token_digest(token: str) -> str:
+        if not isinstance(token, str) or len(token) < 32 or len(token) > 256:
+            raise ValueError("A valid one-time token is required.")
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _issue_token(self, account_id: str, purpose: str, *, lifetime: timedelta) -> str:
+        if purpose not in {"email_verification", "password_recovery"}:
+            raise ValueError("Unsupported account-token purpose.")
+        if not isinstance(lifetime, timedelta) or lifetime <= timedelta(0) or lifetime > timedelta(days=7):
+            raise ValueError("Token lifetime must be positive and no longer than seven days.")
+        token = secrets.token_urlsafe(32)
+        digest = self._token_digest(token)
+        now = datetime.now(timezone.utc)
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            account = conn.execute(
+                "SELECT status FROM atlas_accounts WHERE account_id=?", (account_id,)
+            ).fetchone()
+            if account is None:
+                raise AccountNotFound("Account was not found.")
+            if purpose == "email_verification" and account["status"] != "pending_verification":
+                raise AccountStoreError("Only pending accounts can receive verification tokens.")
+            if purpose == "password_recovery" and account["status"] != "active":
+                raise AccountNotFound("Account was not found.")
+            conn.execute(
+                """UPDATE atlas_account_tokens SET consumed_at=?
+                   WHERE account_id=? AND purpose=? AND consumed_at IS NULL""",
+                (now.isoformat(timespec="seconds"), account_id, purpose),
+            )
+            conn.execute(
+                """INSERT INTO atlas_account_tokens
+                   (token_id,account_id,purpose,token_hash,expires_at,created_at)
+                   VALUES (?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), account_id, purpose, digest,
+                 (now + lifetime).isoformat(timespec="seconds"),
+                 now.isoformat(timespec="seconds")),
+            )
+            conn.commit()
+            return token
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def issue_email_verification_token(self, account_id: str, *, lifetime: timedelta = timedelta(hours=24)) -> str:
+        """Return a one-time token to trusted delivery code; persist only its hash."""
+        return self._issue_token(account_id, "email_verification", lifetime=lifetime)
+
+    def issue_password_recovery_token(self, email: str, *, lifetime: timedelta = timedelta(minutes=30)) -> Optional[str]:
+        """Return None for unknown/ineligible accounts to support generic HTTP responses."""
+        normalized = normalize_email(email)
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT account_id,status FROM atlas_accounts WHERE email_normalized=?",
+                (normalized,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None or row["status"] != "active":
+            return None
+        return self._issue_token(row["account_id"], "password_recovery", lifetime=lifetime)
+
+    def verify_email(self, token: str) -> AccountRecord:
+        """Consume a single-use verification token and activate its pending account."""
+        digest = self._token_digest(token)
+        now = datetime.now(timezone.utc)
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT t.token_id,t.account_id,t.expires_at,t.consumed_at,a.status
+                   FROM atlas_account_tokens t JOIN atlas_accounts a ON a.account_id=t.account_id
+                   WHERE t.token_hash=? AND t.purpose='email_verification'""",
+                (digest,),
+            ).fetchone()
+            if row is None or row["consumed_at"] is not None or row["status"] != "pending_verification":
+                raise InvalidCredential("One-time token is invalid or expired.")
+            try:
+                expiry = datetime.fromisoformat(row["expires_at"])
+            except (TypeError, ValueError):
+                raise InvalidCredential("One-time token is invalid or expired.") from None
+            if expiry.tzinfo is None or expiry <= now:
+                conn.execute(
+                    "UPDATE atlas_account_tokens SET consumed_at=? WHERE token_id=?",
+                    (now.isoformat(timespec="seconds"), row["token_id"]),
+                )
+                conn.commit()
+                raise InvalidCredential("One-time token is invalid or expired.")
+            now_text = now.isoformat(timespec="seconds")
+            conn.execute(
+                "UPDATE atlas_account_tokens SET consumed_at=? WHERE token_id=? AND consumed_at IS NULL",
+                (now_text, row["token_id"]),
+            )
+            conn.execute(
+                """UPDATE atlas_accounts SET status='active',updated_at=?
+                   WHERE account_id=? AND status='pending_verification'""",
+                (now_text, row["account_id"]),
+            )
+            conn.commit()
+            account = conn.execute(
+                """SELECT account_id,email_normalized,status,created_at,updated_at
+                   FROM atlas_accounts WHERE account_id=?""",
+                (row["account_id"],),
+            ).fetchone()
+            return AccountRecord(account["account_id"], account["email_normalized"], account["status"], account["created_at"], account["updated_at"])
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def reset_password(self, token: str, new_password: str) -> None:
+        """Consume recovery token, replace hash and invalidate all outstanding tokens."""
+        replacement = self.hasher.hash(new_password)
+        digest = self._token_digest(token)
+        now = datetime.now(timezone.utc)
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT t.token_id,t.account_id,t.expires_at,t.consumed_at,a.status
+                   FROM atlas_account_tokens t JOIN atlas_accounts a ON a.account_id=t.account_id
+                   WHERE t.token_hash=? AND t.purpose='password_recovery'""",
+                (digest,),
+            ).fetchone()
+            if row is None or row["consumed_at"] is not None or row["status"] != "active":
+                raise InvalidCredential("One-time token is invalid or expired.")
+            try:
+                expiry = datetime.fromisoformat(row["expires_at"])
+            except (TypeError, ValueError):
+                raise InvalidCredential("One-time token is invalid or expired.") from None
+            if expiry.tzinfo is None or expiry <= now:
+                raise InvalidCredential("One-time token is invalid or expired.")
+            now_text = now.isoformat(timespec="seconds")
+            conn.execute(
+                """UPDATE atlas_accounts SET password_hash=?,password_changed_at=?,updated_at=?
+                   WHERE account_id=? AND status='active'""",
+                (replacement, now_text, now_text, row["account_id"]),
+            )
+            conn.execute(
+                """UPDATE atlas_account_tokens SET consumed_at=?
+                   WHERE account_id=? AND consumed_at IS NULL""",
+                (now_text, row["account_id"]),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
