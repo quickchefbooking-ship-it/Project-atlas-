@@ -8,6 +8,7 @@ or write memory directly.
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -193,7 +194,7 @@ class TenantProfessorMemoryRepository:
         query = self._validate_text(query, "query", 1_000).casefold()
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_MEMORY_LIMIT:
             raise ValueError(f"Memory retrieval limit must be between 1 and {MAX_MEMORY_LIMIT}.")
-        terms = {word for word in query.split() if len(word) > 2}
+        terms = {word for word in re.findall(r"[a-z0-9]{3,}", query)}
         now = _utc_now().isoformat()
         rows = self.db.execute(
             """SELECT proposal_id,category,title,content,expires_at,created_at
@@ -204,17 +205,20 @@ class TenantProfessorMemoryRepository:
         ).fetchall()
         ranked = []
         for row in rows:
-            haystack = (row["category"] + " " + row["title"] + " " + row["content"]).casefold()
-            overlap = terms.intersection(set(haystack.split()))
-            if overlap:
-                ranked.append((len(overlap), row))
+            category_terms = set(re.findall(r"[a-z0-9]{3,}", row["category"].casefold()))
+            title_terms = set(re.findall(r"[a-z0-9]{3,}", row["title"].casefold()))
+            content_terms = set(re.findall(r"[a-z0-9]{3,}", row["content"].casefold()))
+            overlap = terms.intersection(category_terms | title_terms | content_terms)
+            score = (3 * len(terms.intersection(title_terms))
+                     + 2 * len(terms.intersection(category_terms))
+                     + len(terms.intersection(content_terms)))
+            if overlap and score:
+                ranked.append((score, row, overlap))
         ranked.sort(key=lambda item: (-item[0], item[1]["created_at"], item[1]["proposal_id"]))
         return tuple({
             **dict(row),
-            "matched_terms": sorted(terms.intersection(set(
-                (row["category"] + " " + row["title"] + " " + row["content"]).casefold().split()
-            )))
-        } for _score, row in ranked[:limit])
+            "matched_terms": sorted(overlap),
+        } for _score, row, overlap in ranked[:limit])
 
     def delete(self, proposal_id: str) -> None:
         """Delete an owner's memory content and linked decision details."""
