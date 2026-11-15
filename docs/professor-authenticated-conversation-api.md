@@ -144,3 +144,24 @@ separate human-reviewed workflow with provenance and a reversible change log.
 - The summary deliberately excludes free-text notes and evidence payloads.
 - It is descriptive feedback, not a correctness score or an autonomous learning
   signal. Human review remains required before any lesson is proposed or adopted.
+
+
+## Tenant lesson proposal and independent review
+
+- `POST /professor/tenant/lessons` creates a human-authored lesson candidate
+  linked to 1–20 evaluation IDs owned by the proposer.
+- `GET /professor/tenant/lessons` lists candidates and their latest review
+  status within the verified tenant.
+- `POST /professor/tenant/lessons/{candidate_id}/decision` records an
+  approval or rejection. The reviewer needs `lessons:approve` and must be a
+  different verified identity from the proposer.
+- Candidate content and decision history are immutable/append-only. A second
+  decision cannot silently overwrite the first.
+- Approval means only that a tenant reviewer accepted the text as a
+  tenant-local reference. It does not insert it into execution memory, the
+  system prompt, global learning, model training, capability permissions or
+  automation. Runtime promotion remains disabled pending a separately reviewed
+  attribution and retrieval design.
+- The proposer supplies the lesson text; the model does not autonomously
+  manufacture or approve lessons. Evaluation references are checked against
+  the proposer's own records.
