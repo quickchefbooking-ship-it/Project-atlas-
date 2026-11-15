@@ -59,7 +59,7 @@ class VerifiedIdentityService:
 
 def _cookie_principal(request: Request, csrf_token: Optional[str]) -> RequestPrincipal:
     """Authenticate an Atlas browser cookie without trusting browser identity data."""
-    session_token = request.cookies.get(ATLAS_SESSION_COOKIE)
+    session_token = getattr(request, "cookies", {}).get(ATLAS_SESSION_COOKIE)
     if not isinstance(session_token, str) or not session_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,7 +110,7 @@ def require_verified_principal(
 ) -> RequestPrincipal:
     """FastAPI dependency: bearer token or secure Atlas session cookie."""
     # Explicit bearer credentials retain the existing service-to-service path.
-    if authorization is not None:
+    if isinstance(authorization, str):
         service = getattr(request.app.state, "identity_service", None)
         if not isinstance(service, VerifiedIdentityService):
             raise HTTPException(
