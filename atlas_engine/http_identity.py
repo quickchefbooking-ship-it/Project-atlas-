@@ -1,9 +1,9 @@
-"""HTTP bearer authentication boundary for Professor.
+"""HTTP authentication boundary for Professor.
 
-No verifier is configured by default. A deployment must explicitly install an
-audited TokenVerifier and provider configuration on app.state.identity_service.
-Raw tokens are never logged or returned. Client tenant/role/scope fields are
-never read; membership and permissions come only from the server registry.
+Supports an explicitly configured OIDC bearer verifier and Atlas-owned opaque
+browser sessions. Browser permissions are resolved only through the server-side
+membership registry. Cookie requests require exact trusted-origin and CSRF checks
+for state-changing methods; bearer authentication remains available for services.
 """
 from dataclasses import dataclass
 import sqlite3
@@ -22,9 +22,13 @@ from .oidc_contract import (
 )
 from .tenant_membership import SQLiteMembershipRegistry
 from .oidc_jwt_verifier import OIDCVerifierUnavailable
+from .session_identity import InvalidSession
 
 MAX_BEARER_TOKEN_LENGTH = 8192
+ATLAS_SESSION_COOKIE = "__Host-atlas_session"
+ATLAS_CSRF_HEADER = "X-Atlas-CSRF"
 _BEARER_PATTERN = re.compile(r"^Bearer ([A-Za-z0-9._~+/=-]+)$")
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 class IdentityVerifierUnavailable(RuntimeError):
@@ -48,48 +52,89 @@ class VerifiedIdentityService:
             raise ValueError("Token has expired.")
         if claims.not_before > now + skew:
             raise ValueError("Token is not yet valid.")
-        # No tenant selector is accepted here. Multiple active memberships
-        # are intentionally rejected rather than selecting a tenant by guess.
         return principal_from_verified_claims(
             claims, self.config, self.memberships
         )
 
 
-def require_verified_principal(
-    request: Request,
-    authorization: Optional[str] = Header(default=None, alias="Authorization"),
-) -> RequestPrincipal:
-    """FastAPI dependency: bearer token -> verifier -> membership -> principal."""
-    service = getattr(request.app.state, "identity_service", None)
-    if not isinstance(service, VerifiedIdentityService):
+def _cookie_principal(request: Request, csrf_token: Optional[str]) -> RequestPrincipal:
+    """Authenticate an Atlas browser cookie without trusting browser identity data."""
+    service = getattr(request.app.state, "atlas_session_identity_service", None)
+    if service is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Verified user identity is not configured.",
         )
-    if not isinstance(authorization, str):
+    session_token = request.cookies.get(ATLAS_SESSION_COOKIE)
+    if not isinstance(session_token, str) or not session_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Bearer authentication required.",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Atlas browser authentication required.",
         )
-    match = _BEARER_PATTERN.fullmatch(authorization)
-    if not match or len(match.group(1)) > MAX_BEARER_TOKEN_LENGTH:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid bearer authentication.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+
+    # Origin is mandatory for unsafe cookie-authenticated requests. Exact
+    # scheme/host matching prevents wildcard and suffix-based trust mistakes.
+    if request.method.upper() not in _SAFE_METHODS:
+        trusted_origins = getattr(request.app.state, "atlas_trusted_origins", frozenset())
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
+        if (not isinstance(origin, str) or origin not in trusted_origins
+                or fetch_site == "cross-site"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Untrusted request origin.",
+            )
+        if not service.sessions.validate_csrf_token(session_token, csrf_token or ""):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF validation failed.",
+            )
     try:
-        return service.authenticate(match.group(1))
-    except (IdentityVerifierUnavailable, OIDCVerifierUnavailable, sqlite3.Error):
+        return service.authenticate(session_token)
+    except (sqlite3.Error, OSError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Identity verification or membership lookup is temporarily unavailable.",
         ) from None
     except Exception:
-        # Do not leak signature, issuer, membership or token parsing details.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid bearer authentication.",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Invalid Atlas browser authentication.",
         ) from None
+
+
+def require_verified_principal(
+    request: Request,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+    csrf_token: Optional[str] = Header(default=None, alias=ATLAS_CSRF_HEADER),
+) -> RequestPrincipal:
+    """FastAPI dependency: bearer token or secure Atlas session cookie."""
+    # Explicit bearer credentials retain the existing service-to-service path.
+    if authorization is not None:
+        service = getattr(request.app.state, "identity_service", None)
+        if not isinstance(service, VerifiedIdentityService):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Verified user identity is not configured.",
+            )
+        match = _BEARER_PATTERN.fullmatch(authorization) if isinstance(authorization, str) else None
+        if not match or len(match.group(1)) > MAX_BEARER_TOKEN_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid bearer authentication.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        try:
+            return service.authenticate(match.group(1))
+        except (IdentityVerifierUnavailable, OIDCVerifierUnavailable, sqlite3.Error):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Identity verification or membership lookup is temporarily unavailable.",
+            ) from None
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid bearer authentication.",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
+    return _cookie_principal(request, csrf_token)
