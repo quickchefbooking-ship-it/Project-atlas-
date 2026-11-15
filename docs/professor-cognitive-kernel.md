@@ -25,7 +25,7 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - Owners can explicitly delete stored content. Associated decision details are deleted with it; there is no hidden content archive.
 - Retrieval is a simple bounded lexical baseline, not semantic memory, and is not yet connected to the live chat prompt.
 - No raw hidden chain-of-thought is stored as memory or audit data.
-- API routes and UI controls for memory review are still to be added before this repository can be used by end users.
+- Verified API routes now support proposal, explicit approval/rejection, bounded retrieval, listing and deletion. They are included in the app and use the separate `memory:propose`, `memory:approve`, `memory:read` and `memory:delete` scopes. A dedicated user-facing review interface and hosted sign-in still need to be completed.
 
 ## Important limitations
 
