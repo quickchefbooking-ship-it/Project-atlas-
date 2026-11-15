@@ -58,7 +58,7 @@ def capability_registry():
     return CapabilityRegistry([definition])
 
 
-def make_client(tmp_path, provider_text):
+def make_client(tmp_path, provider_text, scopes=SCOPES):
     db_path = tmp_path / "tenant-plans.sqlite"
     db = sqlite3.connect(db_path)
     initialize_tenant_plan_schema(db)
@@ -70,7 +70,7 @@ def make_client(tmp_path, provider_text):
     provider = PlanProvider(provider_text)
     app.state.conversation_service = ConversationService(provider)
     principal = RequestPrincipal(
-        "https://issuer.example.test", "alice", "tenant-a", True, SCOPES
+        "https://issuer.example.test", "alice", "tenant-a", True, scopes
     )
     app.dependency_overrides[require_verified_principal] = lambda: principal
     app.include_router(router)
@@ -157,3 +157,16 @@ def test_invalid_provider_json_fails_closed_without_persisting(tmp_path):
     count = db.execute("SELECT COUNT(*) FROM tenant_professor_plans").fetchone()[0]
     db.close()
     assert count == 0
+
+
+
+def test_missing_plan_write_scope_blocks_provider_call(tmp_path):
+    client, _db_path, provider, _principal = make_client(
+        tmp_path, valid_proposal(), scopes=frozenset({"plans:read"})
+    )
+    response = client.post(
+        "/professor/tenant/plans/suggest",
+        json={"objective": "Research a topic"},
+    )
+    assert response.status_code == 403
+    assert provider.seen is None
