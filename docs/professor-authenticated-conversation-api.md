@@ -173,5 +173,6 @@ separate human-reviewed workflow with provenance and a reversible change log.
 - The record stores SHA-256 hashes of the user message, assistant response and effective system/evidence context; provider/model identifiers; bounded evidence provenance; and a per-owner hash-chain link.
 - Raw prompts, answers, credentials and retrieved excerpts are not duplicated in the audit table.
 - `GET /professor/conversations/{conversation_id}/audit` returns records only after verifying ownership of the conversation. The route is read-only and uses the verified identity boundary.
+- `GET /professor/conversations/{conversation_id}/audit/verify` recomputes the current tenant/owner hash chain and reports broken record IDs without returning raw content. Verification covers the full chain for that owner, across conversations.
 - SQLite triggers prevent updates and deletes. Hash chaining makes alteration detectable when the chain is independently verified; it is not a substitute for externally anchored tamper-evident storage, backups, or production-grade audit retention.
 - The trace records what the application supplied to the provider, not proof that a model internally attended to or correctly used each item. No automatic learning or execution authority is created.
