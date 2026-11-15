@@ -37,6 +37,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/voice", "GET"),
         ("/professor/chat", "GET"),
         ("/identity/login-readiness", "GET"),
+        ("/launch/readiness", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
@@ -203,3 +204,24 @@ def test_identity_introspection_does_not_accept_shared_api_key_as_human_identity
 
     assert response.status_code == 503
     assert "Verified user identity is not configured" in response.json()["detail"]
+
+def test_launch_readiness_is_non_secret_and_never_claims_live_provider_verification(monkeypatch):
+    monkeypatch.delenv("ATLAS_OIDC_CLIENT_ID", raising=False)
+    monkeypatch.delenv("ATLAS_OIDC_REDIRECT_URI", raising=False)
+    app_module.app.state.identity_service = None
+    app_module.app.state.tenant_data_path = None
+    app_module.app.state.conversation_service = app_module.ConversationService()
+
+    response = TestClient(app_module.app).get("/launch/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["checks"]["verified_api_identity"] is False
+    assert payload["checks"]["hosted_browser_login_configuration"] is False
+    assert payload["checks"]["tenant_data_storage"] is False
+    assert payload["checks"]["reasoning_provider_configured"] is False
+    assert payload["checks"]["live_provider_round_trip_verified"] is False
+    assert payload["execution_enabled"] is False
+    assert "ATLAS_OIDC_CLIENT_ID" not in response.text
+    assert "api_key" not in response.text.lower()
