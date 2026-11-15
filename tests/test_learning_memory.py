@@ -231,3 +231,105 @@ def test_lesson_evidence_rejects_excessive_nesting(monkeypatch, tmp_path):
         )
 
     assert storage.list_lessons(limit=10) == []
+
+
+
+def test_retrieval_decodes_validated_arithmetic_alias_application(monkeypatch, tmp_path):
+    import json
+
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-arithmetic-alias",
+        "task_id": "task-learning-test",
+        "lesson_type": "arithmetic_alias",
+        "summary": "convert dozen eggs arithmetic alias",
+        "source": "reviewed arithmetic rule",
+        "evidence_json": json.dumps({
+            "application": {"alias": "a dozen eggs", "expression": "12"}
+        }),
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    lessons = LearningMemory.get_relevant_lessons("a dozen eggs", limit=5)
+
+    assert len(lessons) == 1
+    assert lessons[0]["validated"] is True
+    assert lessons[0]["application"] == {
+        "alias": "a dozen eggs",
+        "expression": "12",
+    }
+
+
+def test_retrieval_rejects_malformed_validated_arithmetic_alias(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-arithmetic-alias-invalid",
+        "task_id": "task-learning-test",
+        "lesson_type": "arithmetic_alias",
+        "summary": "convert dozen eggs arithmetic alias",
+        "source": "reviewed arithmetic rule",
+        "evidence_json": '{"application":{"alias":"a dozen eggs"}}',
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    with pytest.raises(ValueError, match="application fields"):
+        LearningMemory.get_relevant_lessons("a dozen eggs", limit=5)
+
+
+def test_retrieval_does_not_expose_application_for_other_lesson_types(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    storage.save_lesson({
+        "id": "lesson-general",
+        "task_id": "task-learning-test",
+        "lesson_type": "reviewed",
+        "summary": "general dozen eggs handling guidance",
+        "source": "human-reviewed",
+        "evidence_json": '{"application":{"alias":"a dozen eggs","expression":"12"}}',
+        "validated": True,
+        "created_at": storage.now_isoformat(),
+    })
+
+    lessons = LearningMemory.get_relevant_lessons("dozen eggs", limit=5)
+
+    assert len(lessons) == 1
+    assert lessons[0]["validated"] is True
+    assert "application" not in lessons[0]
+
+
+
+def test_arithmetic_alias_creation_requires_exact_structured_application(monkeypatch, tmp_path):
+    _isolated_db(monkeypatch, tmp_path)
+    lesson = LearningMemory.save_lesson_for_task(
+        "task-learning-test",
+        "arithmetic_alias",
+        "A dozen eggs means twelve.",
+        "reviewed-test-fixture",
+        {"application": {"alias": "a dozen eggs", "expression": "12"}},
+    )
+
+    assert lesson["validated"] is False
+    assert storage.list_lessons(limit=10, validated_only=True) == []
+
+
+@pytest.mark.parametrize("application", [
+    None,
+    {"alias": "a dozen eggs"},
+    {"alias": "a dozen eggs", "expression": "12", "extra": "not allowed"},
+    {"alias": "", "expression": "12"},
+    {"alias": "a dozen eggs", "expression": "x" * 257},
+])
+def test_arithmetic_alias_creation_rejects_malformed_application(monkeypatch, tmp_path, application):
+    _isolated_db(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError):
+        LearningMemory.save_lesson_for_task(
+            "task-learning-test",
+            "arithmetic_alias",
+            "Malformed arithmetic alias lesson.",
+            "test",
+            {"application": application},
+        )
+
+    assert storage.list_lessons(limit=10) == []

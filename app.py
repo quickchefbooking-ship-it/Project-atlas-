@@ -2,6 +2,8 @@ import hmac
 import json
 from contextlib import asynccontextmanager
 import os
+import sqlite3
+import uuid
 from pathlib import Path
 from typing import Optional, Any
 
@@ -24,6 +26,23 @@ from atlas_engine.source_adapters import import_json_batch, stage_adapter_result
 from atlas_engine.public_research_adapters import fetch_github_repository, fetch_huggingface_resource, search_uk_legislation, search_crossref_works, PublicSourceError
 import logging
 from atlas_engine.public_web_retrieval import fetch_public_web_page
+from atlas_engine.http_identity import VerifiedIdentityService, require_verified_principal
+from atlas_engine.oidc_contract import OIDCProviderConfig
+from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
+from atlas_engine.tenant_membership import SQLiteMembershipRegistry
+from atlas_engine.identity_policy import AuthorizationDenied
+from atlas_engine.capability_registry import CapabilityRegistry
+from atlas_engine.capability_runtime import build_default_capability_runtime
+from atlas_engine.tenant_plan_execution import router as tenant_plan_execution_router
+from atlas_engine.tenant_plan_repository import TenantPlanRepository, TenantPlanNotFound, initialize_tenant_plan_schema
+from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository, TenantStepNotFound, initialize_tenant_step_schema
+from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
+from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
+from atlas_engine.tenant_plan_lifecycle import router as tenant_plan_lifecycle_router
+from atlas_engine.tenant_evidence_review import (
+    router as tenant_evidence_review_router,
+    initialize_tenant_evidence_review_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +80,109 @@ async def lifespan(app: FastAPI):
     if storage.get_source("public-web") is None:
         register_source("public-web", "Allowlisted Public Web Pages", "allowlisted_public_web", access_mode="read_only", metadata={"scope": "approved public HTTPS hosts; HTML/plain text only; pending review"})
     logger.info("Imported %s new curated knowledge documents", imported)
+    try:
+        identity_service = _identity_service_from_environment()
+        app.state.identity_service = identity_service
+        if identity_service is not None:
+            logger.info("Verified identity boundary configured from deployment settings")
+    except Exception:
+        app.state.identity_service = None
+        logger.error("OIDC identity configuration is invalid; verified identity remains disabled")
+    try:
+        app.state.tenant_data_path = _initialize_tenant_data_store()
+    except Exception:
+        app.state.tenant_data_path = None
+        logger.error("Tenant plan storage initialization failed; tenant plan routes remain disabled")
     yield
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
+app.state.identity_service = None
+app.state.tenant_data_path = None
+app.state.tenant_capability_runtime = build_default_capability_runtime()
+app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
+app.include_router(tenant_plan_lifecycle_router)
+app.include_router(tenant_plan_execution_router)
+app.include_router(tenant_evidence_review_router)
+
+
+class TenantPlanStepInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    step_id: str = Field(min_length=1, max_length=2000)
+    capability: str = Field(min_length=1, max_length=2000)
+    objective: str = Field(min_length=1, max_length=2000)
+    risk: RiskClass
+    depends_on: list[str] = Field(default_factory=list, max_length=16)
+    required_scopes: list[str] = Field(default_factory=list, max_length=64)
+    expected_output: str = Field(default="", max_length=2000)
+    timeout_seconds: int = Field(default=30, ge=1, le=900)
+    resource_budget: int = Field(default=1, ge=1, le=100)
+    capability_version: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+class TenantPlanCreateInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    objective: str = Field(min_length=1, max_length=2000)
+    acceptance_criteria: list[str] = Field(min_length=1, max_length=64)
+    steps: list[TenantPlanStepInput] = Field(min_length=1, max_length=64)
+
+
+def _initialize_tenant_data_store() -> Optional[str]:
+    """Initialize only the isolated tenant-plan prototype database."""
+    database_path = os.getenv("ATLAS_TENANT_DATA_DB_PATH")
+    if not database_path:
+        return None
+    membership_path = os.getenv("ATLAS_MEMBERSHIP_DB_PATH")
+    protected_paths = [getattr(storage, "DB_PATH", None), membership_path]
+    tenant_real_path = os.path.realpath(database_path)
+    if any(
+        path and tenant_real_path == os.path.realpath(path)
+        for path in protected_paths
+    ):
+        raise ValueError(
+            "Tenant plan data must use a database separate from core and membership storage."
+        )
+    connection = sqlite3.connect(database_path, timeout=5)
+    try:
+        connection.row_factory = sqlite3.Row
+        initialize_tenant_plan_schema(connection)
+        initialize_tenant_step_schema(connection)
+        initialize_tenant_evidence_review_schema(connection)
+        connection.commit()
+    finally:
+        connection.close()
+    return os.path.abspath(database_path)
+
+
+def _identity_service_from_environment() -> Optional[VerifiedIdentityService]:
+    """Build the verifier only from complete deployment-owned OIDC settings."""
+    required = (
+        "ATLAS_OIDC_ISSUER",
+        "ATLAS_OIDC_AUDIENCE",
+        "ATLAS_OIDC_JWKS_URI",
+        "ATLAS_OIDC_ALLOWED_ALGORITHMS",
+        "ATLAS_MEMBERSHIP_DB_PATH",
+    )
+    values = {name: os.getenv(name) for name in required}
+    if not all(values.values()):
+        return None
+    algorithms = frozenset(
+        item.strip() for item in values["ATLAS_OIDC_ALLOWED_ALGORITHMS"].split(",")
+        if item.strip()
+    )
+    config = OIDCProviderConfig(
+        issuer=values["ATLAS_OIDC_ISSUER"],
+        audience=values["ATLAS_OIDC_AUDIENCE"],
+        jwks_uri=values["ATLAS_OIDC_JWKS_URI"],
+        allowed_algorithms=algorithms,
+    )
+    memberships = SQLiteMembershipRegistry(values["ATLAS_MEMBERSHIP_DB_PATH"])
+    memberships.initialize()
+    return VerifiedIdentityService(
+        config=config,
+        verifier=PyJWTTokenVerifier(config),
+        memberships=memberships,
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -122,6 +240,10 @@ class TaskCancellationRequestInput(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class ConversationRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
 class GenerateImageRequest(BaseModel):
     prompt: str
     output_path: Optional[str] = None
@@ -133,6 +255,28 @@ class GenerateVideoRequest(BaseModel):
     output_path: Optional[str] = None
 
 
+@app.get("/professor/voice", include_in_schema=False)
+def professor_voice_ui():
+    """Serve the browser-based voice interface; speech runs on the user's device."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "professor_voice.html",
+        media_type="text/html",
+    )
+
+
+@app.post("/professor/conversation", dependencies=[Depends(require_api_key)])
+def professor_conversation(payload: ConversationRequest):
+    """Fail closed until a real conversational reasoning backend is configured."""
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Professor's conversational reasoning service is not configured yet. "
+            "The voice interface can capture speech and play spoken responses, "
+            "but general question answering is not enabled."
+        ),
+    )
+
+
 @app.get("/professor/sources", include_in_schema=False)
 def professor_sources_ui():
     """Serve the static Source Division operator interface; data remains API-key protected."""
@@ -142,6 +286,198 @@ def professor_sources_ui():
 @app.get("/health")
 def health():
     return api.health()
+
+
+@app.get("/identity/me")
+def identity_me(principal=Depends(require_verified_principal)):
+    """Return the authenticated tenant principal for integration diagnostics."""
+    return {
+        "issuer": principal.issuer,
+        "subject": principal.subject,
+        "tenant_id": principal.tenant_id,
+        "scopes": sorted(principal.scopes),
+    }
+
+
+
+@app.post("/professor/tenant/plans", status_code=201)
+def create_tenant_professor_plan(
+    payload: TenantPlanCreateInput,
+    principal=Depends(require_verified_principal),
+):
+    """Persist a tenant-owned DRAFT plan; creation never approves or executes it."""
+    database_path = getattr(app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tenant plan storage is not configured.",
+        )
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plan = ProfessorPlan(
+            plan_id=uuid.uuid4().hex,
+            objective=payload.objective,
+            acceptance_criteria=tuple(payload.acceptance_criteria),
+            steps=tuple(
+                PlanStep(
+                    step_id=item.step_id,
+                    capability=item.capability,
+                    objective=item.objective,
+                    risk=item.risk,
+                    depends_on=tuple(item.depends_on),
+                    required_scopes=tuple(item.required_scopes),
+                    expected_output=item.expected_output,
+                    timeout_seconds=item.timeout_seconds,
+                    resource_budget=item.resource_budget,
+                    capability_version=item.capability_version,
+                )
+                for item in payload.steps
+            ),
+        )
+        repository = TenantPlanRepository(connection, principal)
+        repository.create(plan)
+        return {
+            "plan_id": plan.plan_id,
+            "tenant_id": principal.tenant_id,
+            "state": plan.state.value,
+            "objective": plan.objective,
+            "acceptance_criteria": list(plan.acceptance_criteria),
+            "step_count": len(plan.steps),
+            "execution_enabled": False,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan creation denied.") from None
+    except PlanValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Tenant plan could not be created.") from None
+    except sqlite3.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Tenant plan storage is temporarily unavailable.",
+        ) from None
+    finally:
+        connection.close()
+
+
+@app.get("/professor/tenant/plans/{plan_id}")
+def inspect_tenant_professor_plan(
+    plan_id: str,
+    event_limit_per_step: int = 20,
+    principal=Depends(require_verified_principal),
+):
+    """Inspect one tenant-owned Professor plan without dispatching any work."""
+    database_path = getattr(app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tenant plan storage is not configured.",
+        )
+    if not 1 <= event_limit_per_step <= 100:
+        raise HTTPException(status_code=422, detail="event_limit_per_step must be between 1 and 100.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        plans = TenantPlanRepository(connection, principal)
+        steps = TenantStepExecutionRepository(connection, principal)
+        service = TenantProfessorOrchestrationService(
+            principal, plans, steps, getattr(app.state, "tenant_capability_registry", CapabilityRegistry())
+        )
+        report = service.inspect_plan(
+            plan_id, event_limit_per_step=event_limit_per_step
+        )
+        readiness = None
+        if report.readiness is not None:
+            readiness = {
+                "plan_state": report.readiness.plan_state.value,
+                "ordered_step_ids": list(report.readiness.ordered_step_ids),
+                "structurally_ready_step_ids": list(report.readiness.structurally_ready_step_ids),
+                "blocked_step_ids": list(report.readiness.blocked_step_ids),
+                "execution_enabled": report.readiness.execution_enabled,
+                "steps": [
+                    {
+                        "step_id": item.step_id,
+                        "capability": item.capability,
+                        "capability_version": item.capability_version,
+                        "readiness": item.readiness.value,
+                        "reasons": list(item.reasons),
+                    }
+                    for item in report.readiness.steps
+                ],
+            }
+        return {
+            "tenant_id": report.tenant_id,
+            "plan": {
+                "plan_id": report.plan.plan_id,
+                "objective": report.plan.objective,
+                "state": report.plan.state.value,
+                "acceptance_criteria": list(report.plan.acceptance_criteria),
+                "steps": [
+                    {
+                        "step_id": item.step_id,
+                        "capability": item.capability,
+                        "objective": item.objective,
+                        "risk": item.risk.value,
+                        "depends_on": list(item.depends_on),
+                        "required_scopes": list(item.required_scopes),
+                        "capability_version": item.capability_version,
+                    }
+                    for item in report.plan.steps
+                ],
+            },
+            "transitions": [
+                {
+                    "from_state": item.from_state.value if item.from_state else None,
+                    "to_state": item.to_state.value,
+                    "actor_issuer": item.actor_issuer,
+                    "actor_subject": item.actor_subject,
+                    "created_at": item.created_at,
+                }
+                for item in report.transitions
+            ],
+            "step_runs": [
+                {
+                    "step_id": item.step_id,
+                    "state": item.state,
+                    "attempt_number": item.attempt_number,
+                    "worker_id": item.worker_id,
+                    "fencing_token": item.fencing_token,
+                    "lease_expires_at": item.lease_expires_at,
+                    "result": item.result,
+                    "error_code": item.error_code,
+                }
+                for item in report.steps
+            ],
+            "recent_events": [
+                {
+                    "step_id": item.step_id,
+                    "event_type": item.event_type,
+                    "attempt_number": item.attempt_number,
+                    "worker_id": item.worker_id,
+                    "fencing_token": item.fencing_token,
+                    "details": item.details,
+                    "created_at": item.created_at,
+                }
+                for item in report.recent_events
+            ],
+            "readiness": readiness,
+            "execution_enabled": report.execution_enabled,
+            "execution_block_reason": report.execution_block_reason,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan access denied.") from None
+    except (TenantPlanNotFound, TenantStepNotFound):
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(
+            status_code=503,
+            detail="Tenant plan storage is temporarily unavailable.",
+        ) from None
+    finally:
+        connection.close()
 
 
 @app.get("/sources", dependencies=[Depends(require_api_key)])
@@ -491,7 +827,11 @@ def proposals():
 
 @app.post("/proposals/{proposal_id}/review", dependencies=[Depends(require_api_key)])
 def review_proposal(proposal_id: str, payload: ProposalReviewInput):
-    return api.review_proposal(proposal_id, payload)
+    """Keep review disabled until a trusted identity provider supplies a verified principal."""
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Proposal review is temporarily disabled until verified human identity and tenant authorization are configured.",
+    )
 
 
 

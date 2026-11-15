@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from .retry_policy import RetryPolicy
+from .lesson_contract import LessonAwareResult, validate_lesson_aware_result
 
 logger = logging.getLogger(__name__)
 
@@ -146,10 +147,12 @@ class TaskManager:
 
     def complete_with_evaluation(self, task_id: str, record: dict[str, Any],
                                  status: str, result: dict[str, Any],
-                                 attempt: dict[str, Any] | None = None) -> bool:
-        """Persist task, evaluation and lease completion in one transaction."""
+                                 attempt: dict[str, Any] | None = None,
+                                 consumed_lesson_ids: tuple[str, ...] = ()) -> bool:
+        """Persist task, evaluation, lease and lesson-use receipts atomically."""
         return self.storage_backend.complete_task_with_evaluation(
-            task_id, record, status, result, attempt=attempt
+            task_id, record, status, result, attempt=attempt,
+            consumed_lesson_ids=consumed_lesson_ids,
         )
 
     def get_task_cancellation(self, task_id: str, attempt_id: str | None = None):
@@ -281,6 +284,11 @@ class TaskAPI:
                 "source_documents": source_documents,
                 "_execution_deadline_monotonic": execution_deadline,
             })
+            consumed_lesson_ids: tuple[str, ...] = ()
+            if isinstance(result, LessonAwareResult):
+                checked_receipt = validate_lesson_aware_result(result, relevant_lessons)
+                result = dict(checked_receipt.output)
+                consumed_lesson_ids = checked_receipt.consumed_lesson_ids
             cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
             if cancellation is not None and cancellation["state"] == "requested":
                 return self._finish_cancelled(task_id, lease, cancellation)
@@ -300,7 +308,10 @@ class TaskAPI:
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
             phase = "persistence"
-            if not self.manager.complete_with_evaluation(task_id, evaluation_record, status, result, attempt=lease):
+            if not self.manager.complete_with_evaluation(
+                task_id, evaluation_record, status, result, attempt=lease,
+                consumed_lesson_ids=consumed_lesson_ids,
+            ):
                 cancellation = self.manager.get_task_cancellation(task_id, lease["attempt_id"])
                 if cancellation is not None and cancellation["state"] == "requested":
                     return self._finish_cancelled(task_id, lease, cancellation)

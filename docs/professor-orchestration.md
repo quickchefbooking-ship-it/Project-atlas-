@@ -52,9 +52,35 @@ A task should move through explicit states such as **pending**, **planned**, **a
 
 The current task-creation boundary rejects blank titles/descriptions, limits titles to 200 characters and descriptions to 10,000 characters, and caps success criteria at 100 top-level entries and 16 KiB of UTF-8 JSON. Non-finite numeric values and criteria that cannot be serialized as finite JSON are rejected before persistence. These are application-level field bounds; they are not a substitute for an upstream HTTP request-body limit or a reverse-proxy rate/size policy.
 
+## 3A. Implemented planning contract
+
+The repository now includes `atlas_engine/plan_contract.py`, a provider-neutral typed plan model. A plan contains an objective, acceptance criteria and bounded steps. Each step declares a capability name, objective, risk class, dependencies, required scopes, expected output, timeout and resource budget.
+
+The model validates unique step IDs, known dependencies, acyclic dependency graphs, bounded inputs and a deterministic topological execution order. It does not execute a step, generate shell commands, or grant access to a capability.
+
+Plan readiness is risk-aware: read-only/local/draft plans can be marked ready; any plan containing an external side effect or privileged step moves to `awaiting_approval`. Approval requires an explicit reference and transitions the plan to `approved`. That reference is only a contract-level placeholder until the application binds approval to a verified actor, exact action/target/parameters and expiry. Approval alone does not execute or deploy anything.
+
+The typed plan model is persisted by `atlas_engine/plan_repository.py` in the configured SQLite database. It creates a dedicated `professor_plans` table and an append-only `professor_plan_transitions` history table. Creation and every state change write their history event in the same SQLite transaction as the plan record. Approval transitions require a bounded, non-empty reference; that opaque reference is retained in the plan JSON and corresponding transition event, and remains attached as the plan moves into later states. New plans can only be inserted in `draft`, preventing callers from creating a plan directly in an approved or running state. Approval references supplied for unrelated transitions are rejected. Older plan records without an approval-reference field remain readable; their historical approvals are not retroactively treated as verified. The reference is still only an audit pointer, not proof of verified identity or a valid action-bound approval. The application must bind approval to a verified actor, exact action/target/parameters and expiry before execution can ever be enabled. Approval alone does not execute or deploy anything. Per-step durable records and fenced worker leases are now implemented in `atlas_engine/step_execution_repository.py`. Step rows are created atomically with their parent plan. A worker can claim only a pending step whose dependencies have succeeded, heartbeat only while it still owns an unexpired lease, and persist a bounded finite-JSON result or sanitised error code. Each claim increments a fencing token; stale or expired workers cannot commit. An expired lease moves the step to `recovery_required` and is never automatically replayed. Explicit, audited recovery decisions, idempotency policy and a real capability executor remain future work. The plan and step repositories do not invoke handlers and must not be represented as a live autonomous worker.
+
+### 3B. Non-executing orchestration coordinator
+
+`atlas_engine/orchestration_coordinator.py` now provides a deterministic preview of a saved plan against the trusted, application-owned capability registry. `atlas_engine/orchestration_service.py` connects this preview to `PlanRepository` through a read-only service seam that loads the persisted plan and returns its current readiness report. It walks the validated dependency graph in topological order and reports each step as structurally ready or blocked. It checks that the capability exists, resolves an exact capability version (or a single unambiguous legacy version), that the plan's risk is at least as restrictive as the registered capability, that the plan declares all capability scopes, and that the caller has every requested scope. A blocked dependency blocks its downstream steps.
+
+External-write, privileged and otherwise approval-gated capabilities remain marked `approval_unverified`, even if the plan has an approval reference. That is deliberate: the current reference is not verified identity or action-bound authorisation. The preview always returns `execution_enabled=false`; it does not invoke handlers, perform I/O, or claim that a task has run. The separate step repository records worker claims and outcomes, but it is not wired to an executor or exposed as an execution API. It independently refuses claims for external-side-effect and privileged steps, regardless of an opaque approval reference.
+
+Plan steps can now pin `capability_version`. Older plan JSON without that field remains readable, but the coordinator refuses to guess when more than one version is registered.
+
+### 3C. Durable step ownership and recovery boundary
+
+`atlas_engine/step_execution_repository.py` stores one durable row per plan step plus an append-only event history. The plan repository seeds those rows in the same transaction that creates the plan. The step repository permits claims only while the parent plan is in `running`, selects pending steps only after all dependencies are `succeeded`, and atomically records worker, attempt number, lease expiry and a monotonically increasing fencing token.
+
+Heartbeats and result commits must present the current worker, attempt and fencing token while the lease is still live. Results are finite JSON capped at 64 KiB; failures store a bounded error code rather than arbitrary exception text. External-side-effect and privileged steps cannot be claimed, even if the plan has an approval reference. This is a storage and ownership foundation only: it does not invoke a capability handler, authorise draft writes, or expose a worker endpoint.
+
+Lease expiry changes a claimed step to `recovery_required` and appends an event stating that automatic replay did not occur. There is deliberately no automatic retry or silent lease reclaim. A tenant-scoped recovery prototype now requires the dedicated `professor:recovery:decide` scope, records the operator issuer/subject in an append-only audit table, and refuses a retry unless both retry-safety and side-effect-reconciliation attestations are true. This prototype records a decision only; it does not reset a step, replay a task, or authorise the current global plan/step tables. A production recovery path still requires verified HTTP identity, tenant ownership on the plan/step records, action-bound evidence, and a separately reviewed state transition.
+
 ## 4. Capability contract
 
-A future capability registry should require each arm to declare:
+The repository includes an immutable, application-owned capability registry in `atlas_engine/capability_registry.py`. Each registered arm declares:
 
 | Contract field | Purpose |
 | --- | --- |
@@ -207,3 +233,54 @@ A tool connected to ChatGPT is not automatically connected to the AtlasOnePro ru
 The current recovery branch adds a local SQLite source registry and source-document store, content hashing, pending/approved/rejected review states, reviewer metadata, bounded document size and bounded metadata (16 KiB, 32 nesting levels, finite JSON only, credential-like keys rejected), and keyword retrieval limited to approved documents. Task execution now receives approved source documents as reference context.
 
 This is a foundation, not a live connector suite. No external source adapter, vector database, embedding model, background crawler, automatic account sync or production knowledge ingestion is enabled yet. The current reviewer field is audit metadata only; the shared API key is not verified human identity. Before private multi-user sources are connected, add identity-based review permissions, tenant isolation, encryption, audit history and retention/deletion controls.
+
+
+## Voice and conversational interface milestone
+
+The browser prototype is served at `/professor/voice`. It provides a text input, browser speech-recognition input where supported, selectable device speech voices, spoken output, stop controls and a health check against Professor Core. The client requests microphone permission only when the user starts listening. The selected speech language defaults to `en-GB`; available voice names are discovered from the device at runtime.
+
+This separates the user-facing voice channel from the reasoning backend. The authenticated `POST /professor/conversation` boundary currently returns HTTP 503 with an explicit not-configured message. It intentionally does not route arbitrary natural-language text into the restricted arithmetic executor or invent conversational answers.
+
+### Next steps to make Professor conversational
+
+1. Select and approve a conversational model/provider, including cost and data-processing terms.
+2. Implement a provider adapter behind a narrow interface, with timeouts, token/input/output limits, structured errors and safe logging.
+3. Define conversation context and memory policy: short-lived session context first; long-term memory only with provenance, retention and user controls.
+4. Add retrieval from approved knowledge sources with citations and untrusted-source isolation.
+5. Add a tested response endpoint and stream responses to the browser; connect text and speech playback.
+6. Add safety/policy checks and approval gates before any specialist arm or external action is invoked.
+
+No provider has been enabled. The voice interface can demonstrate device speech output and microphone capture, but it cannot yet answer general questions as a conversational Professor.
+
+
+## 6. Provider-neutral conversation boundary
+
+The first conversation seam is implemented in `atlas_engine/conversation_contract.py`. It defines immutable message, input and output contracts plus a provider protocol. The boundary is deliberately text-only: it does not grant tools, network access, credentials or permission to perform external actions.
+
+The input builder retains recent context within explicit limits (24 turns, 24,000 aggregate characters, 4,000 characters per message) and appends the latest user turn. The default locale is `en-GB`, matching the intended Professor voice. These are transport/context bounds, not a substitute for tenant-aware persistence, privacy controls or provider-side token limits.
+
+The provider protocol is not yet connected to an implementation. The voice endpoint therefore remains unavailable for general conversation until a provider is selected, configured and tested. Any provider adapter must preserve the approval boundary, avoid treating retrieved/user-supplied text as instructions, and return provenance identifying the provider and model. No paid provider is enabled by this contract.
+
+
+## Tenant-scoped Professor plan prototype
+
+An isolated `TenantPlanRepository` now stores tenant-owned plan metadata, plan-step metadata and actor-attributed transition history in separate `tenant_professor_*` tables. Every repository read and write includes the verified principal's tenant predicate. Composite keys prevent cross-tenant step-parent links, and identical plan IDs may exist in different tenants.
+
+Approval transitions are intentionally unavailable until action-bound verified approval exists. This repository is not wired to the global plan or step repositories, does not migrate live data and does not enable tenant HTTP routes. Tests cover cross-tenant read/list/transition denial, ID collision isolation, compare-and-swap state changes, scope and membership denial, and composite foreign-key enforcement.
+
+## Tenant-scoped Professor step execution prototype
+
+An isolated `TenantStepExecutionRepository` now adds tenant-owned step-run state and append-only event history on top of the separate tenant plan metadata tables. Composite foreign keys bind every run and event to the same tenant, plan and step. All reads, claims, heartbeats and completions are filtered by the immutable request principal's tenant and require dedicated `steps:read`, `steps:claim`, `steps:heartbeat` or `steps:complete` scopes.
+
+Claims are available only for running tenant plans and only after declared dependencies have succeeded. Worker ownership, attempt number, monotonically increasing fencing token and unexpired lease are required for heartbeat and completion. Expired leases become `recovery_required`, append an audit event and are never automatically replayed. External-side-effect and privileged steps remain blocked pending verified, action-bound authorisation. Result payloads are finite JSON capped at 64 KiB.
+
+This is a storage/ownership prototype only: it does not invoke capability handlers, perform external I/O, reset recovered steps, or expose worker HTTP routes. It uses separate tenant tables and is not wired to the global plan/step repositories; no live migration, deployment or production multi-tenant enablement has occurred. The request principal still depends on a future trusted identity provider integration. Tests cover tenant isolation, plan-state gating, dependency order, worker/fencing checks, lease expiry, risk blocking, bounded results, dedicated scopes and append-only events.
+## Tenant-aware Professor orchestration inspection facade
+
+The isolated `TenantProfessorOrchestrationService` composes the tenant plan repository, tenant step execution repository and the application-owned capability registry under one immutable `RequestPrincipal`. It rejects repository/principal mismatches and produces a tenant-filtered report containing plan metadata, actor-attributed transitions, persisted step state, bounded recent step events and (for READY plans only) the existing policy/readiness preview.
+
+The readiness preview reuses the central coordinator's version, risk and scope checks; missing caller scopes and unverified approvals remain blocked. A RUNNING plan is reported as persisted state only. The report always sets `execution_enabled=False`; the service has no dispatch, handler, resume, network or external-write method. This connects the Professor's central planning and policy view to tenant-owned state without silently turning the prototype into an executor.
+
+Tests cover the composed ready-plan preview, running-plan observational reporting, tenant isolation, principal consistency, missing capability scopes and bounded event limits. The service remains an internal prototype: no HTTP route, trusted token verifier, identity-provider integration, production database migration or deployment is enabled.
+
+The worker claim boundary also checks every step's declared capability scopes against the worker principal before a lease can be issued. The orchestration inspection facade requires the plan and step repositories to share the same SQLite connection as well as the exact same immutable principal, preventing a report from silently combining separate tenant stores. Regression tests cover both safeguards.

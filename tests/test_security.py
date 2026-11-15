@@ -34,6 +34,20 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/media/health", "GET"),
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
+        ("/professor/voice", "GET"),
+        ("/professor/evidence-review", "GET"),
+        ("/professor/report", "GET"),
+    }
+    verified_identity_routes = {
+        ("/identity/me", "GET"),
+        ("/professor/tenant/plans/{plan_id}", "GET"),
+        ("/professor/tenant/plans", "POST"),
+        ("/professor/tenant/plans/{plan_id}/prepare", "POST"),
+        ("/professor/tenant/plans/{plan_id}/execute-next", "POST"),
+        ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "POST"),
+        ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "GET"),
+        ("/professor/tenant/plans/{plan_id}/ask", "POST"),
+        ("/professor/tenant/plans/{plan_id}/ask", "POST"),
     }
     unprotected = []
     for route in app_module.app.routes:
@@ -42,11 +56,17 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         for method in route.methods or set():
             if (route.path, method) in intentionally_public:
                 continue
-            has_api_key_dependency = any(
-                dependency.call is app_module.require_api_key
-                for dependency in route.dependant.dependencies
-            )
-            if not has_api_key_dependency:
+            if (route.path, method) in verified_identity_routes:
+                protected = any(
+                    dependency.call is app_module.require_verified_principal
+                    for dependency in route.dependant.dependencies
+                )
+            else:
+                protected = any(
+                    dependency.call is app_module.require_api_key
+                    for dependency in route.dependant.dependencies
+                )
+            if not protected:
                 unprotected.append(f"{method} {route.path}")
 
     assert unprotected == []
@@ -132,3 +152,32 @@ def test_development_entrypoint_preserves_network_binding_when_authentication_is
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 8000
     assert captured["reload"] is False
+
+
+def test_proposal_review_is_disabled_even_with_shared_api_key_until_verified_identity_exists(monkeypatch):
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    client = TestClient(app_module.app)
+
+    response = client.post(
+        "/proposals/proposal-example/review",
+        headers={"X-API-Key": "test-secret"},
+        json={"action": "approve", "approved_by": "forged-admin"},
+    )
+
+    assert response.status_code == 503
+    assert "verified human identity" in response.json()["detail"]
+
+
+
+def test_identity_introspection_does_not_accept_shared_api_key_as_human_identity(monkeypatch):
+    monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
+    monkeypatch.setattr(app_module, "API_KEY", "test-secret")
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+    client = TestClient(app_module.app)
+
+    response = client.get("/identity/me", headers={"X-API-Key": "test-secret"})
+
+    assert response.status_code == 503
+    assert "Verified user identity is not configured" in response.json()["detail"]

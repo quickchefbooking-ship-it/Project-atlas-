@@ -56,6 +56,12 @@ Media output paths are constrained to ATLAS_MEDIA_OUTPUT_DIR. Path traversal and
 
 See [the Professor orchestration blueprint](docs/professor-orchestration.md) for the verified current boundaries, target octopus/capability model, staged delivery plan and release gates. It is design guidance, not a claim that the future orchestration or integrations are already implemented.
 
+## Professor Voice interface
+
+Open `/professor/voice` in the running AtlasOnePro instance for the browser voice interface. It provides typed conversation input, browser speech recognition where supported, device speech synthesis, voice selection and a connection check for Professor Core. Speech recognition and playback run in the browser; microphone access depends on browser support, permission and a secure context.
+
+The interface is a voice-channel prototype, not a connected conversational AI. `POST /professor/conversation` is authenticated and deliberately returns HTTP 503 until a real reasoning backend is selected, configured and tested. The local executor still supports basic arithmetic only. No fake conversational replies are generated, and paid AI remains disabled by default.
+
 ## Professor Source Division interface
 
 Open `/professor/sources` in the running AtlasOnePro instance to use the browser-based source catalogue, import queue and approved-knowledge search. Enter the configured API key in the page; it is held in page memory only and is not persisted in browser storage. The default `manual-paste`, `github-public`, `huggingface-public`, `uk-legislation`, `crossref-public` and `public-web` sources are registered at application startup. The page can fetch bounded GitHub repository metadata, Hugging Face model/dataset metadata, official UK legislation search results and XML text, Crossref scholarly bibliographic records, and individual public HTML/plain-text pages from an exact-host allowlist. Public-web retrieval is restricted to approved HTTPS hosts on port 443, revalidates redirects, rejects non-public DNS destinations, uses an eight-second timeout and a 1 MB cap, and excludes script/style/navigation/form content. Retrieved page text is marked untrusted and remains pending/unverified; it must be treated as data, never as instructions. This is not unrestricted crawling. No private resources, model weights, credentials, publisher full text or write actions are accessed. The interface does not approve documents. Source metadata is restricted to finite JSON, at most 16 KiB and 32 levels deep; credential-like field names are rejected.
