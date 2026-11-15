@@ -165,3 +165,16 @@ def test_retry_contract_must_match_registered_capability_identity():
             retry_contract=contract,
             idempotency_key_scope="tenant+request",
         )
+
+
+def test_capability_definition_validates_inputs_and_outputs():
+    definition = _definition()
+    definition.validate_input({"query": "latest policy"})
+    definition.validate_output({"title": "Policy result"})
+
+    with pytest.raises(ValueError, match="missing required"):
+        definition.validate_input({})
+    with pytest.raises(ValueError, match="undeclared properties"):
+        definition.validate_input({"query": "hello", "admin": True})
+    with pytest.raises(ValueError, match="expected string"):
+        definition.validate_output({"title": 42})
