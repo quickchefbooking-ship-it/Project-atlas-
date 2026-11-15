@@ -118,6 +118,9 @@ def test_source_snapshot_is_immutable_and_cannot_be_deleted(tmp_path):
     db = _db(tmp_path / "tenant.sqlite")
     try:
         staged = _stage(db)
+        # Persist the row before exercising the independent update/delete guards;
+        # otherwise rollback of the rejected UPDATE also removes the staged row.
+        db.commit()
         with pytest.raises(sqlite3.IntegrityError, match="snapshot is immutable"):
             db.execute(
                 "UPDATE tenant_approved_source_documents SET content='forged' "
