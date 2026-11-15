@@ -92,3 +92,24 @@ def test_memory_requires_verified_active_membership(memory_repos):
     )
     with pytest.raises(AuthorizationDenied):
         inactive.retrieve("anything")
+
+def test_memory_retrieval_normalizes_punctuation_and_weights_title_matches(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("title-hit", category="preference", title="Concise answer style",
+                  content="Use plain words.")
+    owner.decide("title-hit", decision="approved")
+    owner.propose("body-hit", category="context", title="General note",
+                  content="Concise answer style is sometimes useful.")
+    owner.decide("body-hit", decision="approved")
+    results = owner.retrieve("concise, answer!")
+    assert [item["proposal_id"] for item in results] == ["title-hit", "body-hit"]
+    assert results[0]["matched_terms"] == ["answer", "concise"]
+
+def test_expired_approved_memory_is_not_retrieved(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("expired", category="preference", title="Concise answers",
+                  content="Use concise answers.")
+    owner.decide("expired", decision="approved")
+    db.execute("UPDATE tenant_professor_memory_proposals SET expires_at=? WHERE proposal_id=?",
+               ("2000-01-01T00:00:00+00:00", "expired"))
+    assert owner.retrieve("concise answers") == ()
