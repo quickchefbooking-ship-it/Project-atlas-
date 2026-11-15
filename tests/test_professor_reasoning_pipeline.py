@@ -52,7 +52,6 @@ def test_user_context_reaches_both_passes_as_reference_data_not_instructions():
         CognitiveRequest(
             task="Explain the architecture",
             context=hostile_context,
-            constraints=("Keep the explanation accurate",),
         ),
         retrieve_evidence=False,
     )
