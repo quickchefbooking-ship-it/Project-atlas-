@@ -142,7 +142,18 @@ def preview_tenant_professor_plan(
         plan = repository.get(plan_id)
         if plan.state is not PlanState.DRAFT:
             raise HTTPException(status_code=409, detail="Only a DRAFT plan can be previewed.")
-        preview = preview_plan(plan, registry, granted_scopes=principal.scopes)
+        # Evaluate the DRAFT as a hypothetical READY plan without persisting
+        # any state transition. The preview engine intentionally blocks DRAFT
+        # plans, while this endpoint must report future readiness.
+        candidate = ProfessorPlan(
+            plan_id=plan.plan_id,
+            objective=plan.objective,
+            acceptance_criteria=plan.acceptance_criteria,
+            steps=plan.steps,
+            state=PlanState.READY,
+            approval_reference=None,
+        )
+        preview = preview_plan(candidate, registry, granted_scopes=principal.scopes)
         return {
             "status": "blocked" if preview.blocked_step_ids else "preview_ready",
             "readiness": _readiness_payload(preview),
