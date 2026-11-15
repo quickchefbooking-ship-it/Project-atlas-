@@ -52,3 +52,19 @@ def test_evaluation_api_rejects_unknown_or_unowned_conversation(tmp_path):
         "outcome": "helpful",
     })
     assert response.status_code == 404
+
+
+
+def test_evaluation_summary_returns_only_aggregate_feedback(tmp_path):
+    client = make_client(tmp_path)
+    client.post("/professor/tenant/evaluations", json={
+        "subject_type": "conversation", "subject_id": "conv-1",
+        "outcome": "helpful", "rating": 4, "note": "Do not expose this note",
+    })
+    response = client.get("/professor/tenant/evaluations/summary")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["outcomes"]["helpful"] == 1
+    assert payload["average_rating"] == 4.0
+    assert "Do not expose this note" not in response.text
