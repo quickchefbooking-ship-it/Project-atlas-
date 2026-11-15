@@ -216,3 +216,34 @@ Also required for conversation use:
 6. Before public rollout, replace or formally approve the SQLite prototype storage, add managed backups, TLS, rate limits, retention/deletion policy, monitoring, incident handling and a security review.
 
 The browser workspace now calls `GET /identity/me` before listing conversations and checks that the verified principal has `conversations:read` and `conversations:write`. This improves diagnostics; the server remains the security boundary. The page still uses a manually supplied short-lived token until a hosted OIDC authorization-code flow with PKCE and a registered redirect URI is implemented. Do not use manual token entry as the general-user sign-in experience.
+
+
+## Hosted sign-in readiness (Stage 1)
+
+The public `GET /identity/login-readiness` endpoint reports whether the
+server-side OIDC verifier and hosted-login client settings are present. It
+returns setting names that are missing, but never returns issuer URLs, client
+IDs, secrets, tokens, tenant memberships or permissions. It is a deployment
+diagnostic only; it does not authenticate users or start a login transaction.
+
+The hosted-login client settings reserved for the next implementation step are:
+
+- `ATLAS_OIDC_CLIENT_ID`: public OIDC client identifier registered for AtlasOnePro.
+- `ATLAS_OIDC_REDIRECT_URI`: exact HTTPS callback URL registered with the provider.
+
+The intended flow is Authorization Code with PKCE (S256), using a maintained
+OIDC client library and server-side token exchange/session handling. The
+browser must not receive a client secret or store access/refresh tokens in
+browser storage. State, nonce and PKCE verifier must be transaction-bound,
+single-use and protected against CSRF and replay. The callback must validate
+the issuer, audience, nonce and token response before issuing an opaque,
+HttpOnly, Secure, SameSite=Lax application session. Logout must revoke or
+invalidate the server session and clear the cookie.
+
+**Deployment dependency:** the actual provider issuer, registered client ID,
+exact callback URI, token/API audience and provider-supported signing
+algorithm must be supplied by the deployment owner. Until those values are
+known and the callback implementation has passed provider-backed tests, the
+manual short-lived bearer-token entry remains a restricted development bridge.
+Do not expose it as general-user sign-in. The readiness endpoint and chat
+indicator are diagnostic scaffolding, not a completed hosted login.
