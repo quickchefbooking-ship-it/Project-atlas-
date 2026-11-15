@@ -36,6 +36,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
         ("/professor/chat", "GET"),
+        ("/identity/login-readiness", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
