@@ -101,7 +101,7 @@ class TenantReasoningAuditRepository:
                 raise ValueError("Invalid evidence provenance.")
             safe_evidence.append(safe)
         safe_metadata = metadata or {}
-        allowed_metadata = {"status", "step_count", "critique_accepted", "goal_coverage", "action_boundary", "execution_enabled"}
+        allowed_metadata = {"status", "step_count", "critique_accepted", "goal_coverage", "action_boundary", "execution_enabled", "memory_proposal_ids"}
         if not isinstance(safe_metadata, dict) or set(safe_metadata) - allowed_metadata:
             raise ValueError("Invalid reasoning trace metadata.")
         if safe_metadata.get("status") not in {None, "ready", "held_for_review", "needs_clarification"}:
@@ -117,6 +117,12 @@ class TenantReasoningAuditRepository:
             raise ValueError("Invalid critique status.")
         if safe_metadata.get("execution_enabled", False) is not False:
             raise ValueError("Reasoning trace cannot enable execution.")
+        memory_ids = safe_metadata.get("memory_proposal_ids", [])
+        if (not isinstance(memory_ids, list) or len(memory_ids) > 5
+                or any(not isinstance(value, str) or not value.strip() or len(value) > 128
+                       for value in memory_ids)
+                or len(set(memory_ids)) != len(memory_ids)):
+            raise ValueError("Invalid approved-memory trace references.")
         if safe_metadata.get("goal_coverage") is not None and (
             isinstance(safe_metadata["goal_coverage"], bool)
             or not isinstance(safe_metadata["goal_coverage"], (int, float))
