@@ -107,7 +107,7 @@ class SQLiteSessionRepository:
         finally:
             conn.close()
 
-    def _insert(self, conn: sqlite3.Connection, account_id: str, now: datetime) -> IssuedSession:
+    def _insert(self, conn: sqlite3.Connection, account_id: str, now: datetime, *, absolute_expiry: datetime | None = None) -> IssuedSession:
         account = conn.execute(
             "SELECT status FROM atlas_accounts WHERE account_id=?", (account_id,)
         ).fetchone()
@@ -115,8 +115,10 @@ class SQLiteSessionRepository:
             raise InvalidSession("Session is invalid or expired.")
         token = secrets.token_urlsafe(48)
         session_id = str(uuid.uuid4())
-        idle_expiry = min(now + self.idle_timeout, now + self.absolute_timeout)
-        absolute_expiry = now + self.absolute_timeout
+        absolute_expiry = absolute_expiry or (now + self.absolute_timeout)
+        if absolute_expiry <= now:
+            raise InvalidSession("Session is invalid or expired.")
+        idle_expiry = min(now + self.idle_timeout, absolute_expiry)
         conn.execute(
             """INSERT INTO atlas_sessions
                (session_id,account_id,token_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at)
@@ -233,7 +235,7 @@ class SQLiteSessionRepository:
             if (idle_expiry.tzinfo is None or absolute_expiry.tzinfo is None
                     or idle_expiry <= now or absolute_expiry <= now):
                 raise InvalidSession("Session is invalid or expired.")
-            replacement = self._insert(conn, row["account_id"], now)
+            replacement = self._insert(conn, row["account_id"], now, absolute_expiry=absolute_expiry)
             conn.execute(
                 """UPDATE atlas_sessions SET revoked_at=?,rotated_to_session_id=?
                    WHERE session_id=? AND revoked_at IS NULL""",
