@@ -77,7 +77,7 @@ def verify_evidence_excerpt(
     source_locator = _required_text(locator, "locator", MAX_LOCATOR_CHARS)
     normalized_claim_id = _required_text(claim_id, "claim_id", 120)
     normalized_claim_text = _required_text(claim_text, "claim_text", MAX_CLAIM_CHARS)
-    if relation not in _RELATIONS:
+    if not isinstance(relation, str) or relation not in _RELATIONS:
         raise ValueError("relation must be supports, challenges or mentions.")
 
     source_digest = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
