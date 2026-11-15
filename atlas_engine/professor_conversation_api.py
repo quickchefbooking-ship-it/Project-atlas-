@@ -19,6 +19,7 @@ from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, RequestPrincipal
 from .openai_compatible_provider import ReasoningProviderError
 from .professor_reasoning_context import build_reasoning_evidence, format_evidence_context
+from .tenant_reasoning_audit import TenantReasoningAuditRepository
 from .tenant_conversation_repository import (
     ConversationNotFound,
     TenantConversationRepository,
@@ -102,7 +103,13 @@ def professor_conversation(
             result.text,
             create_if_missing=is_new_conversation,
         )
+        audit = TenantReasoningAuditRepository(db, principal).append(
+            conversation_id=conversation_id, request_text=payload.message,
+            response_text=result.text, context_text=system_context,
+            provider=result.provider, model=result.model, evidence=evidence,
+        )
         return {
+            "audit_id": audit.audit_id,
             "conversation_id": conversation_id,
             "response": result.text,
             "provider": result.provider,

@@ -46,6 +46,8 @@ from atlas_engine.openai_compatible_provider import (
 )
 from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
 from atlas_engine.tenant_evaluation_repository import initialize_tenant_evaluation_schema
+from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
+from atlas_engine.professor_reasoning_audit_api import router as professor_reasoning_audit_router
 from atlas_engine.professor_evaluation_api import router as professor_evaluation_router
 from atlas_engine.tenant_lesson_review import initialize_tenant_lesson_review_schema
 from atlas_engine.professor_lesson_review_api import router as professor_lesson_review_router
@@ -131,6 +133,7 @@ app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
 app.include_router(professor_conversation_router)
+app.include_router(professor_reasoning_audit_router)
 app.include_router(professor_evaluation_router)
 app.include_router(professor_lesson_review_router)
 app.include_router(professor_plan_suggestion_router)
@@ -182,6 +185,7 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_evidence_review_schema(connection)
         initialize_tenant_conversation_schema(connection)
         initialize_tenant_evaluation_schema(connection)
+        initialize_reasoning_audit_schema(connection)
         initialize_tenant_lesson_review_schema(connection)
         connection.commit()
     finally:

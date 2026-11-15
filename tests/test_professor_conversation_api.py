@@ -9,6 +9,7 @@ from atlas_engine.http_identity import require_verified_principal
 from atlas_engine.identity_policy import RequestPrincipal
 from atlas_engine.professor_conversation_api import router
 from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
+from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
 
 
 SCOPES = frozenset({
@@ -39,6 +40,7 @@ def make_client(tmp_path, principal=None, configured=True):
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
     initialize_tenant_conversation_schema(db)
+    initialize_reasoning_audit_schema(db)
     db.close()
 
     app = FastAPI()
@@ -63,6 +65,7 @@ def test_authenticated_conversation_round_trip_persists_server_response(tmp_path
     assert first.status_code == 200
     first_data = first.json()
     assert first_data["response"] == "Professor received: Hello"
+    assert isinstance(first_data["audit_id"], int)
     conversation_id = first_data["conversation_id"]
 
     second = client.post(
@@ -78,6 +81,10 @@ def test_authenticated_conversation_round_trip_persists_server_response(tmp_path
         "user", "assistant", "user", "assistant"
     ]
     assert history.json()["messages"][0]["content"] == "Hello"
+    audit = client.get(f"/professor/conversations/{conversation_id}/audit")
+    assert audit.status_code == 200
+    assert len(audit.json()["audit"]) == 2
+    assert audit.json()["audit"][0]["raw_content_stored"] is False
 
 
 def test_conversation_cannot_be_read_by_another_owner(tmp_path):
