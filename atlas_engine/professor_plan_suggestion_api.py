@@ -1,6 +1,7 @@
 """Authenticated, non-executing Professor plan suggestion endpoint."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 
@@ -65,7 +66,6 @@ def suggest_tenant_professor_plan(
         {
             "name": item.name,
             "version": item.version,
-            "description": item.description,
             "risk_class": item.risk_class,
         }
         for item in registry.list_definitions()
