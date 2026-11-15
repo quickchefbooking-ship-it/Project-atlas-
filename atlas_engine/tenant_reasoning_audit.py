@@ -156,3 +156,49 @@ class TenantReasoningAuditRepository:
             (self.principal.tenant_id, self.owner_key, conversation_id, limit),
         ).fetchall()
         return tuple(self._decode(row) for row in reversed(rows))
+
+    def verify_chain(self):
+        """Verify the complete tenant/owner hash chain without exposing raw content.
+
+        The chain spans all conversations for this tenant/owner because append()
+        links records at that scope. A valid result is tamper evidence, not proof
+        against an attacker who can rewrite the entire database and its anchors.
+        """
+        self._authorize()
+        rows = self.db.execute(
+            """SELECT * FROM tenant_professor_reasoning_audit
+               WHERE tenant_id=? AND owner_key=? ORDER BY audit_id ASC""",
+            (self.principal.tenant_id, self.owner_key),
+        ).fetchall()
+        expected_previous = "0" * 64
+        broken = []
+        for row in rows:
+            try:
+                evidence = json.loads(row["evidence_json"])
+                canonical = json.dumps({
+                    "tenant_id": row["tenant_id"],
+                    "owner_key": row["owner_key"],
+                    "conversation_id": row["conversation_id"],
+                    "request_sha256": row["request_sha256"],
+                    "response_sha256": row["response_sha256"],
+                    "context_sha256": row["context_sha256"],
+                    "provider": row["provider"], "model": row["model"],
+                    "evidence": evidence, "previous_hash": row["previous_hash"],
+                }, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+                calculated = self.digest(canonical)
+                valid = (
+                    row["previous_hash"] == expected_previous
+                    and row["record_hash"] == calculated
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                valid = False
+            if not valid:
+                broken.append(row["audit_id"])
+            expected_previous = row["record_hash"]
+        return {
+            "valid": not broken,
+            "records_checked": len(rows),
+            "broken_audit_ids": broken,
+            "scope": "current_tenant_and_owner",
+            "raw_content_checked": False,
+        }

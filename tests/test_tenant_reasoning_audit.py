@@ -73,3 +73,30 @@ def test_audit_rejects_unbounded_metadata(tmp_path):
     with pytest.raises(ValueError):
         repo.append(conversation_id="chat-1", request_text="q", response_text="a",
                     context_text="ctx", provider="p" * 65, model="v1", evidence=[])
+
+
+def test_chain_verifier_accepts_valid_chain_and_detects_tampering(tmp_path):
+    db = database(tmp_path)
+    repo = TenantReasoningAuditRepository(db, principal())
+    first = repo.append(
+        conversation_id="chat-1", request_text="q1", response_text="a1",
+        context_text="ctx", provider="fixture", model="v1", evidence=[],
+    )
+    repo.append(
+        conversation_id="chat-2", request_text="q2", response_text="a2",
+        context_text="ctx", provider="fixture", model="v1", evidence=[],
+    )
+    assert repo.verify_chain() == {
+        "valid": True, "records_checked": 2, "broken_audit_ids": [],
+        "scope": "current_tenant_and_owner", "raw_content_checked": False,
+    }
+    db.execute(
+        "DROP TRIGGER professor_reasoning_audit_no_update"
+    )
+    db.execute(
+        "UPDATE tenant_professor_reasoning_audit SET model='tampered' WHERE audit_id=?",
+        (first.audit_id,),
+    )
+    result = repo.verify_chain()
+    assert result["valid"] is False
+    assert result["broken_audit_ids"] == [first.audit_id, first.audit_id + 1]

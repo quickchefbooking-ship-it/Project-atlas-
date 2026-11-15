@@ -40,3 +40,25 @@ def list_professor_reasoning_audit(conversation_id: str, request: Request,
         raise HTTPException(status_code=503, detail="Reasoning audit storage is temporarily unavailable.") from None
     finally:
         db.close()
+
+
+@router.get("/professor/conversations/{conversation_id}/audit/verify")
+def verify_professor_reasoning_audit(conversation_id: str, request: Request,
+                                     principal=Depends(require_verified_principal)):
+    path = getattr(request.app.state, "tenant_data_path", None)
+    if not path:
+        raise HTTPException(status_code=503, detail="Reasoning audit storage is not configured.")
+    db = sqlite3.connect(path, timeout=5)
+    db.row_factory = sqlite3.Row
+    try:
+        TenantConversationRepository(db, principal).get(conversation_id, limit=1)
+        result = TenantReasoningAuditRepository(db, principal).verify_chain()
+        return {"verification": result}
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Reasoning audit access denied.") from None
+    except ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation was not found.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Reasoning audit storage is temporarily unavailable.") from None
+    finally:
+        db.close()
