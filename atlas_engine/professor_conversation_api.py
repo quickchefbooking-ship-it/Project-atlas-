@@ -127,6 +127,7 @@ def professor_conversation(
                 "goal_coverage": reasoning.critique.goal_coverage if reasoning.critique else 0.0,
                 "action_boundary": reasoning.preparation.frame.action_boundary.value,
                 "execution_enabled": False,
+                "memory_proposal_ids": list(reasoning.memory_proposal_ids),
             },
         )
         return {
