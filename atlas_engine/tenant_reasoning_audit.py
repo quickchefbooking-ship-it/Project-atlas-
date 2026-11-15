@@ -68,8 +68,8 @@ class TenantReasoningAuditRepository:
             (principal.issuer + "\0" + principal.subject).encode("utf-8")
         ).hexdigest()
 
-    def _authorize(self, scope: str):
-        authorize_tenant_resource(self.principal, self.principal.tenant_id, {scope})
+    def _authorize(self):
+        authorize_tenant_resource(self.principal, self.principal.tenant_id, {"conversations:read", "conversations:write"})
 
     @staticmethod
     def digest(value: str) -> str:
@@ -80,7 +80,7 @@ class TenantReasoningAuditRepository:
     def append(self, *, conversation_id: str, request_text: str,
                response_text: str, context_text: str, provider: str,
                model: str, evidence: list[dict]) -> ReasoningAuditRecord:
-        self._authorize("conversations:write")
+        self._authorize()
         if not isinstance(conversation_id, str) or not conversation_id.strip() or len(conversation_id) > 128:
             raise ValueError("Invalid conversation identifier.")
         for name, value, maximum in (("provider", provider, 64), ("model", model, 128)):
@@ -144,7 +144,7 @@ class TenantReasoningAuditRepository:
         )
 
     def list(self, conversation_id: str, *, limit: int = 50):
-        self._authorize("conversations:read")
+        self._authorize()
         if not isinstance(conversation_id, str) or not conversation_id.strip() or len(conversation_id) > 128:
             raise ValueError("Invalid conversation identifier.")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_TRACE_LIMIT:

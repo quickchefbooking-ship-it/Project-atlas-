@@ -8,6 +8,7 @@ from atlas_engine.conversation_service import ConversationService
 from atlas_engine.http_identity import require_verified_principal
 from atlas_engine.identity_policy import RequestPrincipal
 from atlas_engine.professor_conversation_api import router
+from atlas_engine.professor_reasoning_audit_api import router as audit_router
 from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
 from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
 
@@ -55,6 +56,7 @@ def make_client(tmp_path, principal=None, configured=True):
     )
     app.dependency_overrides[require_verified_principal] = lambda: identity
     app.include_router(router)
+    app.include_router(audit_router)
     return TestClient(app), db_path
 
 
