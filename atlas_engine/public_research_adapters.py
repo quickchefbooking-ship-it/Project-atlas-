@@ -61,17 +61,19 @@ def _validate_json_endpoint(url: str) -> None:
         raise PublicSourceError("Provider URL is outside the approved destination policy.")
 
     host = parsed.hostname.lower()
-    approved_paths = {
-        "api.github.com": ("/repos/",),
-        "huggingface.co": ("/api/models/", "/api/datasets/"),
-        "api.crossref.org": ("/works",),
-    }
-    prefixes = approved_paths.get(host, ())
-    if not any(
-        parsed.path.startswith(prefix)
-        and (prefix != "/works" or parsed.path == "/works")
-        for prefix in prefixes
-    ):
+    path = parsed.path
+    if "%" in path or "\\" in path:
+        raise PublicSourceError("Provider URL is outside the approved destination policy.")
+    approved_path = (
+        host == "api.github.com"
+        and re.fullmatch(r"/repos/[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}", path) is not None
+    ) or (
+        host == "huggingface.co"
+        and re.fullmatch(r"/api/(?:models|datasets)/[A-Za-z0-9_.-]{1,100}(?:/[A-Za-z0-9_.-]{1,100})?", path) is not None
+    ) or (
+        host == "api.crossref.org" and path == "/works"
+    )
+    if not approved_path:
         raise PublicSourceError("Provider URL is outside the approved destination policy.")
 
 
