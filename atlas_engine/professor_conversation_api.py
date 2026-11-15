@@ -55,7 +55,7 @@ def professor_conversation(
     if service is None or not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Professor's reasoning provider is not configured.",
+            detail="Professor's conversational reasoning service is not configured.",
         )
     db, repository = _repository(request, principal)
     conversation_id = payload.conversation_id or uuid.uuid4().hex
