@@ -37,7 +37,46 @@ def _open_without_redirect(request):
     return build_opener(_NoRedirect()).open(request, timeout=REQUEST_TIMEOUT_SECONDS)
 
 
+def _validate_json_endpoint(url: str) -> None:
+    """Allow only the exact public API origins and resource paths used below.
+
+    This is application-layer destination validation, not a substitute for
+    network-level egress filtering in the future isolated worker.
+    """
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except (TypeError, ValueError):
+        raise PublicSourceError("Provider URL is outside the approved destination policy.") from None
+
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+        or parsed.fragment
+        or any(segment in {".", ".."} for segment in parsed.path.split("/"))
+    ):
+        raise PublicSourceError("Provider URL is outside the approved destination policy.")
+
+    host = parsed.hostname.lower()
+    approved_paths = {
+        "api.github.com": ("/repos/",),
+        "huggingface.co": ("/api/models/", "/api/datasets/"),
+        "api.crossref.org": ("/works",),
+    }
+    prefixes = approved_paths.get(host, ())
+    if not any(
+        parsed.path.startswith(prefix)
+        and (prefix != "/works" or parsed.path == "/works")
+        for prefix in prefixes
+    ):
+        raise PublicSourceError("Provider URL is outside the approved destination policy.")
+
+
 def _get_json(url: str) -> dict[str, Any]:
+    _validate_json_endpoint(url)
     request = Request(url, headers={"Accept": "application/vnd.github+json, application/json", "User-Agent": USER_AGENT})
     try:
         with _open_without_redirect(request) as response:
