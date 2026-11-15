@@ -81,3 +81,21 @@ prepare workflow performs deterministic capability and scope checks, and
 external/privileged work remains blocked pending a future action-bound
 approval implementation. Model-produced text is never treated as proof of
 approval or capability authority.
+
+
+## Evidence-aware planning context
+
+Plan suggestions now retrieve a maximum of three short excerpts from approved
+shared reference material. The context builder admits only the explicitly
+listed public/curated source classes registered as read-only. Approval-gated
+manual imports and other source classes are excluded even if they are present
+in the general source index. Pending and rejected documents remain excluded by
+the underlying retrieval layer.
+
+Each returned evidence item carries its document ID, title, URL, trust label
+and content hash so a reviewer can trace the reference. Excerpts are capped and
+are explicitly labelled as untrusted data in the model context; embedded
+instructions are not to be followed. This is lexical retrieval over a bounded
+local index, not semantic search, a truth score, or a guarantee of completeness.
+The model's proposal still passes the same trusted capability validation and
+is saved only as a DRAFT. No evidence item grants permission to act.
