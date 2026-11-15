@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101a29"><title>AtlasOnePro · THE PROFESSOR</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#101a29;color:#edf3fb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -15%,#294664,transparent 50%),#101a29}
+header{padding:18px 16px;border-bottom:1px solid #29394d;text-align:center}header small{letter-spacing:.16em;color:#9bb7d5;font-weight:700}h1{font-size:1.45rem;margin:5px 0}.muted{color:#aebdd0;font-size:.84rem}
+main{width:min(960px,100%);margin:auto;padding:14px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:14px}
+.panel{background:#172537;border:1px solid #2b3d53;border-radius:16px;padding:14px;min-width:0}
+button,input,textarea{font:inherit}button{border:1px solid #668db6;border-radius:10px;background:#315a83;color:white;padding:10px 12px;font-weight:650;cursor:pointer}button.secondary{background:#1b2b3e;border-color:#425a75}button:disabled{opacity:.45;cursor:not-allowed}
+input,textarea{width:100%;border:1px solid #40566f;border-radius:10px;background:#0f1a28;color:#f3f7fc;padding:11px}textarea{min-height:64px;resize:vertical}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #a6cff8;outline-offset:2px}
+label{display:block;font-size:.78rem;color:#b7c7da;margin:10px 0 5px}
+#history{display:flex;flex-direction:column;gap:7px;margin-top:12px;max-height:50vh;overflow:auto}
+.history-item{display:flex;gap:5px}.history-item button:first-child{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#messages{height:min(58vh,620px);min-height:280px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:4px 1px}
+.bubble{max-width:90%;padding:11px 13px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.48}.user{align-self:flex-end;background:#31577c}.assistant{align-self:flex-start;background:#20364d;border:1px solid #36516d}
+.composer{display:flex;gap:8px;align-items:stretch}.composer textarea{flex:1;min-width:0}.composer button{flex:0 0 76px}
+.status{font-size:.8rem;color:#b7c8dc;margin:8px 0}.warning{padding:10px;border-left:3px solid #d3a75e;background:#332b20;color:#f0d9ad;border-radius:5px;font-size:.78rem;line-height:1.5;margin-top:12px}
+#trace{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem;color:#b9c9dc;max-height:240px;overflow:auto}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+@media(max-width:650px){main{grid-template-columns:1fr;padding:10px}.panel.sidebar{order:2}.panel.chat{order:1}#messages{height:48vh;min-height:240px}.history-item button{min-height:42px}}
+</style>
+</head>
+<body>
+<header><small>ATLASONEPRO</small><h1>THE PROFESSOR</h1><div class="muted">Private, tenant-scoped reasoning workspace</div></header>
+<main>
+<aside class="panel sidebar">
+<strong>Connection</strong>
+<div class="muted">Sign in through your organisation's identity provider and paste its short-lived access token below. It is held in page memory only.</div>
+<label for="token">OIDC access token</label><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer token">
+<div class="actions"><button id="connect">Connect</button><button id="disconnect" class="secondary">Disconnect</button></div>
+<div id="status" class="status" role="status" aria-live="polite">Not connected</div>
+<div class="actions"><button id="new">New conversation</button><button id="refresh" class="secondary">Refresh</button></div>
+<div id="history" aria-label="Previous conversations"></div>
+<div class="warning">No API key is requested here. The server verifies your bearer token and obtains tenant permissions from its trusted membership registry. Never paste a token into a shared or untrusted device.</div>
+</aside>
+<section class="panel chat">
+<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><strong>Conversation</strong><span class="muted" id="conversationLabel">New conversation</span></div>
+<div id="messages" aria-live="polite"><div class="bubble assistant">Hello. I’m THE PROFESSOR. Connect with your organisation’s verified identity to begin a private conversation.</div></div>
+<div class="composer"><textarea id="message" maxlength="4000" aria-label="Message to Professor" placeholder="Ask Professor a question…" disabled></textarea><button id="send" disabled>Send</button></div>
+<div class="actions"><button id="showTrace" class="secondary" disabled>View reasoning trace</button><button id="delete" class="secondary" disabled>Delete conversation</button></div>
+<details style="margin-top:12px"><summary class="muted">Audit and evidence trace</summary><pre id="trace">Select a conversation and request its read-only trace.</pre></details>
+<div class="warning">Honest status: this interface uses the authenticated Professor API. If identity, storage or the reasoning provider is not configured, the server will return an error; the page will not invent an answer or simulate a live model.</div>
+</section>
+</main>
+<script>
+(() => {
+ const $=id=>document.getElementById(id);let token="",conversationId=null,busy=false;
+ const setStatus=s=>$("status").textContent=s;
+ const auth=()=>({Authorization:"Bearer "+token});
+ async function request(path,options={}){const r=await fetch(path,{...options,headers:{...auth(),...(options.headers||{})}});if(r.status===204)return null;const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(typeof d.detail==="string"?d.detail:"Request failed ("+r.status+")");return d}
+ function setBusy(v){busy=v;$("send").disabled=v||!token;$("new").disabled=v;$("refresh").disabled=v}
+ function bubble(role,content){const n=document.createElement("div");n.className="bubble "+(role==="user"?"user":"assistant");n.textContent=content;$("messages").append(n);$("messages").scrollTop=$("messages").scrollHeight}
+ function clearChat(){ $("messages").replaceChildren();$("trace").textContent="Select a conversation and request its read-only trace."; }
+ function renderHistory(items){const root=$("history");root.replaceChildren();items.forEach(item=>{const row=document.createElement("div");row.className="history-item";const open=document.createElement("button");open.className="secondary";open.textContent=item.title||item.conversation_id;open.title=item.conversation_id;open.addEventListener("click",()=>loadConversation(item.conversation_id));row.append(open);root.append(row)});if(!items.length){const p=document.createElement("p");p.className="muted";p.textContent="No saved conversations yet.";root.append(p)}}
+ async function refresh(){const d=await request("/professor/conversations");renderHistory(d.conversations||[]);setStatus("Connected · "+(d.conversations||[]).length+" saved conversations")}
+ async function loadConversation(id){setBusy(true);try{const d=await request("/professor/conversations/"+encodeURIComponent(id));conversationId=id;clearChat();(d.messages||[]).forEach(m=>bubble(m.role,m.content));$("conversationLabel").textContent=id.slice(0,12);$("showTrace").disabled=false;$("delete").disabled=false;setStatus("Conversation loaded")}catch(e){setStatus(e.message)}finally{setBusy(false)}}
+ async function send(){const value=$("message").value.trim();if(!value||!token||busy)return;setBusy(true);$("message").value="";bubble("user",value);setStatus("Professor is thinking…");try{const d=await request("/professor/conversation",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:value,...(conversationId?{conversation_id:conversationId}:{})})});conversationId=d.conversation_id;$("conversationLabel").textContent=conversationId.slice(0,12);bubble("assistant",d.response);$("showTrace").disabled=false;$("delete").disabled=false;await refresh()}catch(e){bubble("assistant","I couldn't complete that response: "+e.message);setStatus(e.message)}finally{setBusy(false);$("message").focus()}}
+ $("connect").addEventListener("click",async()=>{token=$("token").value.trim();if(!token){setStatus("Paste a short-lived OIDC access token first.");return}try{await refresh();$("message").disabled=false;$("send").disabled=false;$("new").disabled=false}catch(e){token="";setStatus(e.message)}});
+ $("disconnect").addEventListener("click",()=>{token="";$("token").value="";conversationId=null;$("message").disabled=true;$("send").disabled=true;$("new").disabled=true;$("showTrace").disabled=true;$("delete").disabled=true;clearChat();$("conversationLabel").textContent="New conversation";$("history").replaceChildren();setStatus("Disconnected; token cleared from page memory")});
+ $("new").addEventListener("click",()=>{conversationId=null;clearChat();bubble("assistant","New private conversation. What would you like to work through?");$("conversationLabel").textContent="New conversation";$("showTrace").disabled=true;$("delete").disabled=true;$("message").focus()});
+ $("refresh").addEventListener("click",()=>refresh().catch(e=>setStatus(e.message)));
+ $("send").addEventListener("click",send);
+ $("message").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
+ $("showTrace").addEventListener("click",async()=>{if(!conversationId)return;try{const d=await request("/professor/conversations/"+encodeURIComponent(conversationId)+"/trace");$("trace").textContent=JSON.stringify(d,null,2)}catch(e){$("trace").textContent=e.message}});
+ $("delete").addEventListener("click",async()=>{if(!conversationId||!confirm("Delete this conversation and its message content?"))return;try{await request("/professor/conversations/"+encodeURIComponent(conversationId),{method:"DELETE"});conversationId=null;clearChat();$("conversationLabel").textContent="New conversation";$("showTrace").disabled=true;$("delete").disabled=true;await refresh()}catch(e){setStatus(e.message)}});
+})();
+</script>
+</body></html>
