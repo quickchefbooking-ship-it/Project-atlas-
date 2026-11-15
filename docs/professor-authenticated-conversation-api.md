@@ -118,3 +118,20 @@ than stored as user-authored chat content.
 - The response reports ordered steps, readiness, blocked steps and reasons.
 - Preview does not change plan state, prepare work, approve actions or execute
   capabilities. Preparation remains a separate explicit request.
+
+
+## Evaluation and lessons foundation
+
+Professor now has tenant/owner-isolated append-only evaluation records:
+
+- `POST /professor/tenant/evaluations` records explicit feedback or an observed
+  outcome for an owned conversation, plan or task.
+- `GET /professor/tenant/evaluations` lists only records belonging to the
+  verified tenant and owner, with bounded filtering and pagination.
+- Ratings, notes and evidence provenance are validated and size-bounded.
+- Update and delete are blocked at the SQLite schema layer to preserve history.
+
+These records are a reviewable evidence trail, not an autonomous learning
+mechanism. They do not rewrite prompts, policies, capability permissions,
+provider settings or model weights. Any future lesson promotion must be a
+separate human-reviewed workflow with provenance and a reversible change log.
