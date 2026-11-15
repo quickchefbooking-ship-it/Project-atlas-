@@ -81,3 +81,27 @@ def test_memory_api_delete_removes_content(tmp_path):
     proposal_id = created.json()["proposal_id"]
     assert client.delete(f"/professor/memory/{proposal_id}").status_code == 204
     assert client.get("/professor/memory/proposals?status=all").json()["proposals"] == []
+
+def test_memory_api_exposes_owner_scoped_expiry_cleanup(tmp_path):
+    client, _current = make_client(tmp_path)
+    created = client.post("/professor/memory/proposals", json={
+        "category": "context", "title": "Expired", "content": "Remove after expiry.",
+    })
+    proposal_id = created.json()["proposal_id"]
+    import sqlite3
+    db = sqlite3.connect(tmp_path / "memory-api.sqlite")
+    db.execute(
+        "UPDATE tenant_professor_memory_proposals SET expires_at=? WHERE proposal_id=?",
+        ("2000-01-01T00:00:00+00:00", proposal_id),
+    )
+    db.commit()
+    db.close()
+    response = client.post("/professor/memory/cleanup")
+    assert response.status_code == 200
+    assert response.json()["deleted"] == 1
+    assert client.get("/professor/memory/proposals?status=all").json()["proposals"] == []
+
+
+def test_memory_api_cleanup_rejects_unbounded_limits(tmp_path):
+    client, _current = make_client(tmp_path)
+    assert client.post("/professor/memory/cleanup?limit=501").status_code == 422
