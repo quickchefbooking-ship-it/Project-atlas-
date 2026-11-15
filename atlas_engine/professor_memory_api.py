@@ -138,3 +138,20 @@ def delete_memory(proposal_id: str, request: Request,
         raise HTTPException(status_code=503, detail="Professor memory storage is temporarily unavailable.") from None
     finally:
         db.close()
+
+@router.post("/professor/memory/cleanup")
+def cleanup_expired_memory(request: Request, limit: int = 100,
+                           principal=Depends(require_verified_principal)):
+    """Permanently purge a bounded number of expired records owned by this user."""
+    db, repository = _repository(request, principal)
+    try:
+        deleted = repository.purge_expired(limit=limit)
+        return {"deleted": deleted, "status": "expired_memory_cleanup_complete"}
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Memory cleanup access denied.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Professor memory storage is temporarily unavailable.") from None
+    finally:
+        db.close()
