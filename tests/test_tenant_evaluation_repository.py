@@ -80,3 +80,20 @@ def test_evaluation_history_is_append_only():
     with pytest.raises(sqlite3.IntegrityError):
         db.execute("DELETE FROM tenant_professor_evaluations WHERE evaluation_id=?",
                    (record.evaluation_id,))
+
+
+
+def test_summary_is_aggregate_only_and_owner_scoped():
+    db = make_db()
+    repository = TenantEvaluationRepository(db, principal())
+    repository.record(subject_type="task", subject_id="t1", outcome="successful", rating=5,
+                      note="private note must not appear")
+    repository.record(subject_type="task", subject_id="t2", outcome="not_helpful", rating=2)
+    summary = repository.summary()
+    assert summary["total"] == 2
+    assert summary["outcomes"]["successful"] == 1
+    assert summary["outcomes"]["not_helpful"] == 1
+    assert summary["rated_count"] == 2
+    assert summary["average_rating"] == 3.5
+    assert "private note must not appear" not in str(summary)
+    assert TenantEvaluationRepository(db, principal("bob")).summary()["total"] == 0
