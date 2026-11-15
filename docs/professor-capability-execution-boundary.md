@@ -120,9 +120,9 @@ Use fake handlers and deterministic test identities only. Tests must assert hand
 
 ## 9. Staged implementation plan
 
-**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The process-wide global kill switch is implemented and defaults off. The immutable execution envelope and durable audit reservation still need implementation and review.
+**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The process-wide global kill switch is implemented and defaults off. A tenant-scoped append-only audit reservation is now committed before `runtime.execute`; a failed reservation prevents dispatch. Handler success/failure is appended as a separate event. The full immutable execution envelope, approval binding and independent review remain outstanding.
 
-**Stage B — pure local pilot (implemented narrowly):** bounded local arithmetic is executable through the verified tenant route. A separate read-only Crossref adapter and evidence/report chain also exist, but Crossref currently runs in-process and is not an isolated worker.
+**Stage B — pure local pilot (implemented narrowly):** bounded local arithmetic is executable through the verified tenant route. A separate read-only Crossref adapter and evidence/report chain also exist, but Crossref currently runs in-process and is not an isolated worker. The route records a durable reservation before dispatch and appends a handler outcome; the audit stores principal/tenant/task/capability identifiers and input/output digests rather than raw content.
 
 **Stage C — isolated worker (not implemented):** prove process/container isolation, quotas, hard termination, network denial and secret separation before adding further network-capable or credential-bearing handlers.
 
@@ -136,5 +136,5 @@ A stage is not complete because code exists. It requires passing CI on the exact
 
 - The capability registry validates schema syntax at registration and payloads at runtime. The tenant execution route is included in the application and has HTTP tests for identity, tenant scopes, bounded arithmetic and the Crossref/evidence/report chain.
 - The route requires verified identity, `plans:execute`, the step's declared capability scopes, a prepared plan and an application-owned handler. The currently registered handlers do not include external writes or privileged operations.
-- A global kill switch, isolated worker, independently verified evidence references and full action-bound approval for future write handlers remain outstanding.
+- The global kill switch and pre-dispatch append-only audit reservation are implemented in draft PRs. The owner-facing emergency-stop/override control is not built; the current switch is configuration-based and does not cancel work already in flight. Isolated worker execution, independently verified evidence references and full action-bound approval for future write handlers remain outstanding.
 - Therefore only the narrow built-in vertical slice is executable. General capability execution and external writes remain unavailable; this is not a production release approval.
