@@ -443,3 +443,79 @@ def test_execute_next_rechecks_capability_scope_after_membership_change(monkeypa
         assert len(calls) == 1  # the second handler was never invoked
     finally:
         client.__exit__(None, None, None)
+
+
+def test_execution_audit_reservation_is_committed_before_handler_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        original_execute = runtime.execute
+        observed = []
+
+        def inspect_audit_then_execute(*args, **kwargs):
+            connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+            try:
+                rows = connection.execute(
+                    """SELECT event_type,tenant_id,actor_subject,plan_id,step_id,
+                              capability,capability_version,input_sha256
+                       FROM tenant_professor_execution_audit
+                       ORDER BY event_id"""
+                ).fetchall()
+            finally:
+                connection.close()
+            observed.extend(rows)
+            assert rows == [(
+                "execution_reserved", "tenant-a", "operator", "math-plan",
+                "first", "math.calculate", "1.0.0", rows[0][7],
+            )]
+            assert len(rows[0][7]) == 64
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", inspect_audit_then_execute)
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 200
+        assert observed and observed[0][0] == "execution_reserved"
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            events = connection.execute(
+                """SELECT event_type,reservation_event_id
+                   FROM tenant_professor_execution_audit ORDER BY event_id"""
+            ).fetchall()
+        finally:
+            connection.close()
+        assert events == [("execution_reserved", None), ("handler_succeeded", 1)]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_execution_audit_reservation_failure_blocks_handler_dispatch(monkeypatch, tmp_path):
+    from atlas_engine.tenant_execution_audit_repository import TenantExecutionAuditRepository
+
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        def fail_reservation(self, **kwargs):
+            raise sqlite3.OperationalError("simulated audit storage failure")
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        monkeypatch.setattr(TenantExecutionAuditRepository, "reserve", fail_reservation)
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == (
+            "Tenant execution storage is temporarily unavailable."
+        )
+        assert calls == []
+    finally:
+        client.__exit__(None, None, None)
