@@ -12,19 +12,28 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - Structured decomposition validates step IDs, dependencies and cycles. It is a proposal only; execution is always disabled.
 - Deterministic critique checks visible goal coverage, declared constraints, evidence-document citations and approval boundaries before delivery.
 - The two-pass reasoning pipeline asks the explicitly configured provider for a bounded JSON decomposition, validates its structure, then requests an answer and applies the critique gate.
-- The authenticated Professor chat endpoint now routes through this cognitive pipeline and includes bounded prior conversation context. Held answers are not represented as completed external actions.
-- Tenant-scoped audit records now include bounded decision metadata: pipeline status, step count, critique acceptance, lexical goal coverage, action boundary and the permanently disabled execution flag. Metadata is hash-chained with the audit record; legacy records remain verifiable.
+- The authenticated Professor chat endpoint routes through this cognitive pipeline and includes bounded prior conversation context.
+- Tenant-scoped audit records include bounded decision metadata and hash-chain verification.
+- **Working memory** is bounded recent conversation history. It is not automatically treated as durable user knowledge.
+- **Durable memory foundation** is separate: records begin as pending proposals, require an explicit approval decision, are tenant- and owner-scoped, expire after a bounded retention period, and are retrieved only while approved and unexpired. Rejected or pending records are never retrieved.
+
+## Memory boundaries
+
+- Models cannot write or promote durable memory directly.
+- A memory proposal is created through an application-controlled repository method and approved using the separate `memory:approve` scope.
+- Retention defaults to 90 days and is bounded to 1–3,650 days. Expired records are excluded from retrieval; physical expiry cleanup remains a later maintenance task.
+- Owners can explicitly delete stored content. Associated decision details are deleted with it; there is no hidden content archive.
+- Retrieval is a simple bounded lexical baseline, not semantic memory, and is not yet connected to the live chat prompt.
+- No raw hidden chain-of-thought is stored as memory or audit data.
+- API routes and UI controls for memory review are still to be added before this repository can be used by end users.
 
 ## Important limitations
 
-The critique uses lexical coverage as a warning signal, not semantic proof. A
-future model-based critic may add semantic review, but must not override
-application-owned policy, evidence provenance, approval or execution boundaries.
-This module does not claim human-like cognition and does not execute tools.
+The critique uses lexical coverage as a warning signal, not semantic proof. This module does not claim human-like cognition and does not execute tools. Memory retrieval is deterministic lexical matching, not a semantic memory system.
 
 ## Next composition stages
 
-1. Connect the validated decomposition to the existing model-provider adapter and capability registry, keeping capability metadata application-owned.
-2. Add an end-to-end conversation pipeline that records intake, evidence, plan proposal, critique and final response in the tenant-scoped reasoning trace.
-3. Add adversarial tests for prompt injection in evidence, provider output and specialist handoffs.
+1. Add authenticated API routes and a review interface for memory proposals, approvals, retrieval and deletion.
+2. Integrate approved memory retrieval into reasoning preparation without mixing it with untrusted external evidence.
+3. Add expiry cleanup and adversarial tests for memory poisoning and prompt injection.
 4. Keep all external actions in draft/approval states until action-bound authorisation is independently verified.
