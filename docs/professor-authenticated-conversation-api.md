@@ -54,9 +54,9 @@ The conversation API does not invoke the capability runtime or task executor.
 
 - The endpoint remains unavailable when verified identity, tenant storage, or
   the explicitly configured reasoning provider is missing.
-- Provider failure returns a generic 503. The user message may already have
-  been stored, so a retry should continue using the returned conversation ID
-  when one was supplied.
+- Provider failure returns a generic 503. The user turn is not persisted unless
+  the provider returns a valid response, avoiding incomplete conversation
+  records when reasoning fails.
 - No production database migration, OIDC tenant provisioning, provider secret,
   deployment, voice connection, or external action is performed here.
 - This implementation uses the existing SQLite tenant-data prototype. A
