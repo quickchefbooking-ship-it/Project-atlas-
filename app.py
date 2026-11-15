@@ -39,6 +39,13 @@ from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRep
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
 from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
 from atlas_engine.tenant_plan_lifecycle import router as tenant_plan_lifecycle_router
+from atlas_engine.conversation_service import ConversationService
+from atlas_engine.openai_compatible_provider import (
+    OpenAICompatibleConversationProvider,
+    load_provider_from_environment,
+)
+from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
+from atlas_engine.professor_conversation_api import router as professor_conversation_router
 from atlas_engine.tenant_evidence_review import (
     router as tenant_evidence_review_router,
     initialize_tenant_evidence_review_schema,
@@ -93,7 +100,21 @@ async def lifespan(app: FastAPI):
     except Exception:
         app.state.tenant_data_path = None
         logger.error("Tenant plan storage initialization failed; tenant plan routes remain disabled")
+    app.state.conversation_provider = None
+    app.state.conversation_service = ConversationService()
+    try:
+        provider_config = load_provider_from_environment()
+        if provider_config is not None:
+            provider = OpenAICompatibleConversationProvider(provider_config)
+            app.state.conversation_provider = provider
+            app.state.conversation_service = ConversationService(provider)
+            logger.info("Professor text reasoning provider configured")
+    except Exception:
+        logger.error("Professor reasoning provider configuration is invalid; conversation remains disabled")
     yield
+    provider = getattr(app.state, "conversation_provider", None)
+    if provider is not None:
+        provider.close()
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
@@ -104,6 +125,9 @@ app.state.tenant_capability_registry = app.state.tenant_capability_runtime.regis
 app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
+app.include_router(professor_conversation_router)
+app.state.conversation_service = ConversationService()
+app.state.conversation_provider = None
 
 
 class TenantPlanStepInput(BaseModel):
@@ -148,6 +172,7 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_plan_schema(connection)
         initialize_tenant_step_schema(connection)
         initialize_tenant_evidence_review_schema(connection)
+        initialize_tenant_conversation_schema(connection)
         connection.commit()
     finally:
         connection.close()
