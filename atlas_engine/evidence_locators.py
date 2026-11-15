@@ -30,7 +30,7 @@ _VOID_TAGS = {
 
 
 def _normalise_text(value: str) -> str:
-    return re.sub(r"\\s+", " ", value).strip()
+    return re.sub(r"\s+", " ", value).strip()
 
 
 @dataclass
