@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 import time
@@ -116,7 +117,11 @@ def test_review_endpoint_persists_server_attributed_annotation(monkeypatch, tmp_
         assert body["status"] == "review_recorded"
         assert body["revision"] == 1
         annotation = body["bundle"]["claims"][0]["annotations"][0]
-        assert annotation["reviewer_id"].startswith("reviewer:")
+        expected_reviewer = "reviewer:" + hashlib.sha256(
+            (ISSUER + "\\0" + "reviewer-a").encode("utf-8")
+        ).hexdigest()[:32]
+        assert annotation["reviewer_id"] == expected_reviewer
+        assert body["reviewer_id"] == expected_reviewer
         assert annotation["reviewed_at"] == body["reviewed_at"]
         assert annotation["relation"] == "supports"
 
