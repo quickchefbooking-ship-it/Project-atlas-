@@ -27,7 +27,7 @@ from .professor_reasoning_cycle import (
     critique_answer,
 )
 
-MAX_PIPELINE_OUTPUT_CHARS = 12_000
+MAX_PIPELINE_OUTPUT_CHARS = 4_000
 MAX_BLUEPRINT_JSON_CHARS = 8_000
 
 
