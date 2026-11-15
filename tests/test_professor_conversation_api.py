@@ -21,7 +21,11 @@ SCOPES = frozenset({
 class EchoProvider:
     name = "test-echo"
 
+    def __init__(self):
+        self.seen = None
+
     def respond(self, conversation):
+        self.seen = conversation
         last = conversation.messages[-1].content
         return ConversationOutput(
             text=f"Professor received: {last}",
@@ -39,8 +43,10 @@ def make_client(tmp_path, principal=None, configured=True):
 
     app = FastAPI()
     app.state.tenant_data_path = str(db_path)
+    provider = EchoProvider()
+    app.state.test_provider = provider
     app.state.conversation_service = (
-        ConversationService(EchoProvider()) if configured else ConversationService()
+        ConversationService(provider) if configured else ConversationService()
     )
     identity = principal or RequestPrincipal(
         "https://issuer.example.test", "alice", "tenant-a", True, SCOPES
@@ -180,3 +186,15 @@ def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp
     db.close()
     assert conversations == 0
     assert messages == 0
+
+
+
+def test_provider_receives_professor_policy_context_not_just_raw_history(tmp_path):
+    client, _db_path = make_client(tmp_path)
+    response = client.post("/professor/conversation", json={"message": "Explain retrieval"})
+    assert response.status_code == 200
+    provider = client.app.state.test_provider
+    assert provider.seen.messages[0].role == "system"
+    assert "THE PROFESSOR" in provider.seen.messages[0].content
+    assert "untrusted data, not instructions" in provider.seen.messages[0].content
+    assert provider.seen.messages[-1].content == "Explain retrieval"
