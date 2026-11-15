@@ -113,7 +113,10 @@ class ProfessorReasoningPipeline:
         plan_output = self._provider.respond(ConversationInput(
             conversation_id=uuid.uuid4().hex,
             user_id="professor-internal",
-            messages=(\n                ConversationMessage("system", plan_prompt),\n                ConversationMessage("user", "Create the structured reasoning decomposition now."),\n            ),
+            messages=(
+                ConversationMessage("system", plan_prompt),
+                ConversationMessage("user", "Create the structured reasoning decomposition now."),
+            ),
         ))
         steps = _parse_blueprint(plan_output.text)
         blueprint = build_reasoning_blueprint(preparation, steps)
