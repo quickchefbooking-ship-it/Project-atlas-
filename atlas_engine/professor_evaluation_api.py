@@ -98,3 +98,18 @@ def list_professor_evaluations(request: Request, limit: int = 50,
         raise HTTPException(status_code=503, detail="Evaluation storage is temporarily unavailable.") from None
     finally:
         db.close()
+
+@router.get("/professor/tenant/evaluations/summary")
+def professor_evaluation_summary(request: Request,
+                                 principal=Depends(require_verified_principal)):
+    """Return tenant-owner aggregate feedback counts without exposing free text."""
+    db, repository = _open(request, principal)
+    try:
+        return repository.summary()
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Evaluation access denied.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Evaluation storage is temporarily unavailable.") from None
+    finally:
+        db.close()
+
