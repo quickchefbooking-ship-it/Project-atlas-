@@ -64,3 +64,20 @@ The conversation API does not invoke the capability runtime or task executor.
   backed-up database configuration before enabling the routes.
 - Apply rate limits, retention policy, operational monitoring and abuse
   controls at the deployment boundary before public exposure.
+
+
+## Model-assisted plan proposals
+
+`POST /professor/tenant/plans/suggest` accepts an objective from a verified
+tenant member and asks the configured text provider for a structured proposal.
+The proposal is parsed against a strict JSON contract and the application-owned
+capability registry. Capability risk, version, required scopes, timeout and
+resource budget are derived by trusted application code; the model cannot set
+or escalate them.
+
+A valid proposal is persisted only as a tenant-owned `DRAFT`. The route does
+not prepare, approve, dispatch or execute the plan. The existing separate
+prepare workflow performs deterministic capability and scope checks, and
+external/privileged work remains blocked pending a future action-bound
+approval implementation. Model-produced text is never treated as proof of
+approval or capability authority.
