@@ -363,6 +363,15 @@ class SQLiteAccountRepository:
                    WHERE account_id=? AND consumed_at IS NULL""",
                 (now_text, row["account_id"]),
             )
+            # Password changes invalidate every existing browser/device session.
+            sessions_table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='atlas_sessions'"
+            ).fetchone()
+            if sessions_table:
+                conn.execute(
+                    "UPDATE atlas_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL",
+                    (now_text, row["account_id"]),
+                )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -382,6 +391,15 @@ class SQLiteAccountRepository:
             )
             if cursor.rowcount != 1:
                 raise AccountNotFound("Account was not found.")
+            if status != "active":
+                sessions_table = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='atlas_sessions'"
+                ).fetchone()
+                if sessions_table:
+                    conn.execute(
+                        "UPDATE atlas_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL",
+                        (now, account_id),
+                    )
             conn.commit()
         finally:
             conn.close()
