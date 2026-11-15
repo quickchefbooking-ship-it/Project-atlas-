@@ -142,3 +142,73 @@ def review_frame(frame: CognitiveFrame) -> tuple[str, ...]:
     if not frame.context:
         findings.append("Reason only from the task and declared constraints; do not imply missing context.")
     return tuple(findings)
+
+
+
+@dataclass(frozen=True)
+class CognitivePreparation:
+    """A framed task plus approved public evidence for a downstream reasoner."""
+
+    frame: CognitiveFrame
+    evidence: tuple[dict, ...]
+    evidence_context: str
+    review_findings: tuple[str, ...]
+
+
+def prepare_for_reasoning(
+    request: CognitiveRequest,
+    *,
+    retrieve_evidence: bool = True,
+    evidence_limit: int = 3,
+) -> CognitivePreparation:
+    """Compose intake, evidence retrieval and deterministic review.
+
+    Evidence retrieval is restricted by professor_reasoning_context to
+    approved, read-only public/curated sources. Evidence excerpts are labelled
+    untrusted data by the formatter. Clarification-needed requests do not
+    trigger retrieval. This function never calls a model or executes a plan.
+    """
+    if not isinstance(retrieve_evidence, bool):
+        raise ValueError("retrieve_evidence must be a boolean.")
+    frame = frame_task(request)
+    findings = review_frame(frame)
+    if not frame.reasoning_ready or not retrieve_evidence:
+        return CognitivePreparation(
+            frame=frame,
+            evidence=(),
+            evidence_context="",
+            review_findings=findings,
+        )
+
+    from .professor_reasoning_context import (
+        build_reasoning_evidence,
+        format_evidence_context,
+    )
+
+    query_parts = [frame.goal, frame.task, frame.context, *frame.constraints]
+    query = " ".join(part for part in query_parts if part)[:MAX_CONTEXT_CHARS]
+    evidence = build_reasoning_evidence(query, limit=evidence_limit)
+    if not isinstance(evidence, list):
+        raise TypeError("Evidence retrieval must return a list.")
+    # Preserve provenance fields without allowing arbitrary unbounded payloads.
+    bounded_evidence = tuple(
+        {
+            key: value
+            for key, value in item.items()
+            if key in {
+                "document_id", "source_id", "title", "url",
+                "content_sha256", "trust_level", "matched_terms", "excerpt",
+            }
+        }
+        for item in evidence[:3]
+        if isinstance(item, dict)
+    )
+    formatted = format_evidence_context(list(bounded_evidence))
+    if not isinstance(formatted, str) or len(formatted) > 3_500:
+        raise ValueError("Formatted evidence context exceeded its safety budget.")
+    return CognitivePreparation(
+        frame=frame,
+        evidence=bounded_evidence,
+        evidence_context=formatted,
+        review_findings=findings,
+    )
