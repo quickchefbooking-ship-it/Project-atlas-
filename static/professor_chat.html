@@ -29,7 +29,7 @@ label{display:block;font-size:.78rem;color:#b7c7da;margin:10px 0 5px}
 <main>
 <aside class="panel sidebar">
 <strong>Connection</strong>
-<div class="muted">Sign in through your organisation's identity provider and paste its short-lived access token below. It is held in page memory only.</div>
+<div class="muted">Hosted organisation sign-in is the target. Until your identity provider is registered, this page uses a temporary short-lived token bridge for controlled testing only.</div><div id="loginReadiness" class="status" role="status" aria-live="polite">Checking hosted sign-in configuration…</div>
 <label for="token">OIDC access token</label><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer token">
 <div class="actions"><button id="connect">Connect</button><button id="disconnect" class="secondary">Disconnect</button></div>
 <div id="status" class="status" role="status" aria-live="polite">Not connected</div>
@@ -67,6 +67,8 @@ label{display:block;font-size:.78rem;color:#b7c7da;margin:10px 0 5px}
  $("message").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
  $("showTrace").addEventListener("click",async()=>{if(!conversationId)return;try{const d=await request("/professor/conversations/"+encodeURIComponent(conversationId)+"/trace");$("trace").textContent=JSON.stringify(d,null,2)}catch(e){$("trace").textContent=e.message}});
  $("delete").addEventListener("click",async()=>{if(!conversationId||!confirm("Delete this conversation and its message content?"))return;try{await request("/professor/conversations/"+encodeURIComponent(conversationId),{method:"DELETE"});conversationId=null;clearChat();$("conversationLabel").textContent="New conversation";$("showTrace").disabled=true;$("delete").disabled=true;await refresh()}catch(e){setStatus(e.message)}});
+async function checkLoginReadiness(){try{const r=await fetch("/identity/login-readiness");const d=await r.json();const missing=[...(d.api_verifier?.missing_settings||[]),...(d.hosted_login?.missing_settings||[])];$("loginReadiness").textContent=d.status==="ready"?"Hosted OIDC configuration is present. The provider callback flow still requires deployment validation.":"Hosted sign-in not configured. Missing deployment settings: "+missing.join(", ");}catch(_){$("loginReadiness").textContent="Hosted sign-in readiness could not be checked."}}
+ checkLoginReadiness();
 })();
 </script>
 </body></html>
