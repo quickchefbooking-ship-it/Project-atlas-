@@ -6,7 +6,7 @@
 
 The capability registry now has a draft implementation of strict input/output contract validation. That is necessary but not sufficient to execute a specialist arm safely. Before any handler can run, Professor needs a separately enforced execution boundary that binds a specific caller, tenant, task, attempt, capability version, approved parameters and resource budget into one auditable decision.
 
-The default state remains **execution disabled**. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
+The default state remains **execution disabled**. The application now reads `ATLAS_CAPABILITY_EXECUTION_ENABLED` as a process-wide gate; only the exact value `true` (case-insensitive, whitespace-trimmed) enables the gate. Missing, blank, `yes`, `1` and all other values leave execution disabled. The route checks this gate on every request before tenant storage access, plan inspection, capability lookup or handler dispatch. Missing application state also fails closed. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
 
 ## 2. Non-goals
 
@@ -120,7 +120,7 @@ Use fake handlers and deterministic test identities only. Tests must assert hand
 
 ## 9. Staged implementation plan
 
-**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The immutable execution envelope, global kill switch and durable audit reservation still need review and hardening.
+**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The process-wide global kill switch is implemented and defaults off. The immutable execution envelope and durable audit reservation still need implementation and review.
 
 **Stage B — pure local pilot (implemented narrowly):** bounded local arithmetic is executable through the verified tenant route. A separate read-only Crossref adapter and evidence/report chain also exist, but Crossref currently runs in-process and is not an isolated worker.
 

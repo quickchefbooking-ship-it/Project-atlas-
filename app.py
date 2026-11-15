@@ -63,6 +63,11 @@ from atlas_engine.tenant_evidence_review import (
 logger = logging.getLogger(__name__)
 
 
+def _capability_execution_enabled_from_environment() -> bool:
+    """Execution is opt-in: only an explicit true value opens the global gate."""
+    return os.getenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "").strip().lower() == "true"
+
+
 class StorageBackend:
     now_isoformat = staticmethod(storage.now_isoformat)
     save_task = staticmethod(storage.save_task)
@@ -82,6 +87,7 @@ api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Import repository-owned curated references into the persistent local store."""
+    app.state.capability_execution_enabled = _capability_execution_enabled_from_environment()
     imported = load_bundled_knowledge()
     if storage.get_source("manual-paste") is None:
         register_source("manual-paste", "Manual Research Imports", "manual_paste", access_mode="approval_gated")
@@ -129,6 +135,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
 app.state.tenant_data_path = None
+app.state.capability_execution_enabled = _capability_execution_enabled_from_environment()
 app.state.tenant_capability_runtime = build_default_capability_runtime()
 app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
 app.include_router(tenant_plan_lifecycle_router)

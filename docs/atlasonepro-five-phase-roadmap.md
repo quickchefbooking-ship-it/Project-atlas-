@@ -79,7 +79,8 @@ Deliverables:
 - Delivered: Draft 2020-12 JSON Schema syntax checks at registration and bounded runtime input/output validation; payloads are finite JSON objects with a 64-KiB cap and errors do not echo untrusted values.
 - Delivered: fixed application-owned handler bindings and a tenant-scoped one-step execution route protected by verified identity, `plans:execute`, registered capability scopes, plan readiness and exact capability version.
 - Delivered vertical slice: bounded local arithmetic; read-only Crossref scholarly search; evidence bundling, deterministic evidence evaluation and Professor report generation. No task-supplied handler registration or arbitrary code execution.
-- Remaining: add a separately enforced global execution kill switch, improve independent evidence verification, and move any network-capable or credential-bearing adapter behind a separately isolated worker before expanding network access.
+- Delivered: a separately enforced, process-wide capability execution kill switch. It defaults off and only enables when `ATLAS_CAPABILITY_EXECUTION_ENABLED=true`; the route checks it on every request before plan/storage/handler work. Tests prove fail-closed configuration and zero handler calls when disabled.
+- Remaining: improve independent evidence verification, and move the existing network-capable Crossref adapter behind a separately isolated worker before expanding network access.
 - Add specialist arms incrementally: knowledge/research, media, HR/operations and communications drafts.
 - Keep email sending, social publishing, payments, trading, purchasing and deletion disabled or approval-gated until later security gates pass.
 

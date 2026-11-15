@@ -43,6 +43,14 @@ def execute_next_tenant_professor_step(
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Plan execution denied.") from None
 
+    # This process-wide gate is checked on every request, before storage access,
+    # plan inspection, capability lookup or handler dispatch. Missing state fails closed.
+    if getattr(request.app.state, "capability_execution_enabled", False) is not True:
+        raise HTTPException(
+            status_code=503,
+            detail="Capability execution is globally disabled.",
+        )
+
     database_path = getattr(request.app.state, "tenant_data_path", None)
     runtime = getattr(request.app.state, "tenant_capability_runtime", None)
     if not database_path or not isinstance(runtime, CapabilityRuntime):
