@@ -76,6 +76,10 @@ def professor_conversation(
             latest_user_message=payload.message,
         )
         result = service.respond(conversation)
+        if len(result.text) > 4000:
+            raise ReasoningProviderError(
+                "Provider answer exceeds the conversation persistence limit."
+            )
         repository.append_turn(
             conversation_id,
             payload.message,
