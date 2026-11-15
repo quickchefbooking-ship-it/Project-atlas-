@@ -18,6 +18,7 @@ from .conversation_service import ConversationNotConfigured
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, RequestPrincipal
 from .openai_compatible_provider import ReasoningProviderError
+from .professor_reasoning_pipeline import ReasoningPipelineError
 from .professor_reasoning_context import build_reasoning_evidence, format_evidence_context
 from .tenant_reasoning_audit import TenantReasoningAuditRepository
 from .tenant_conversation_repository import (
@@ -135,7 +136,7 @@ def professor_conversation(
         raise HTTPException(status_code=404, detail="Conversation not found.") from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
-    except (ConversationNotConfigured, ReasoningProviderError):
+    except (ConversationNotConfigured, ReasoningProviderError, ReasoningPipelineError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Professor could not complete this response. Your message may be saved; retry safely.",
