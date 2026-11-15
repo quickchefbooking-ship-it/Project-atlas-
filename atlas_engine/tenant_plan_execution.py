@@ -17,6 +17,7 @@ from .identity_policy import AuthorizationDenied, authorize_tenant_resource
 from .orchestration_coordinator import preview_plan
 from .plan_contract import PlanState
 from .tenant_plan_repository import TenantPlanConflict, TenantPlanNotFound, TenantPlanRepository
+from .tenant_execution_audit_repository import TenantExecutionAuditRepository
 from .tenant_step_execution_repository import (
     TenantStepError, TenantStepExecutionRepository,
 )
@@ -177,12 +178,33 @@ def execute_next_tenant_professor_step(
                 step.capability, version, step.objective,
                 dependency_outputs=dependency_outputs,
             )
+            # The committed reservation is a hard precondition for dispatch.
+            # If its transaction fails, runtime.execute is never reached.
+            audit = TenantExecutionAuditRepository(connection, principal)
+            reservation_event_id = audit.reserve(
+                plan_id=plan_id,
+                step_id=step.step_id,
+                capability=step.capability,
+                capability_version=version,
+                attempt_number=lease.attempt_number,
+                fencing_token=lease.fencing_token,
+                capability_input=capability_input,
+            )
             result = runtime.execute(
                 step.capability, version, capability_input,
                 timeout_seconds=step.timeout_seconds,
             )
+            audit.record_outcome(
+                reservation_event_id, event_type="handler_succeeded", output=result
+            )
             record = steps.complete(lease, result=result)
         except CapabilityExecutionError:
+            if "reservation_event_id" in locals():
+                audit.record_outcome(
+                    reservation_event_id,
+                    event_type="handler_failed",
+                    error_code="capability_execution_failed",
+                )
             steps.complete(lease, error_code="capability_execution_failed")
             plans.transition(
                 plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
