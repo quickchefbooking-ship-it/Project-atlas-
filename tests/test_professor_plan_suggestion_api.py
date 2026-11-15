@@ -107,6 +107,7 @@ def test_suggestion_creates_tenant_owned_draft_without_execution(tmp_path):
     assert provider.seen.messages[0].role == "system"
 
     db = sqlite3.connect(db_path)
+    db.row_factory = sqlite3.Row
     saved = TenantPlanRepository(db, principal).get(result["plan_id"])
     db.close()
     assert saved.state.value == "draft"
