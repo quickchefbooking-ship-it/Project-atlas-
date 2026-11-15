@@ -200,7 +200,7 @@ def initialize_tenant_evidence_review_schema(db: sqlite3.Connection) -> None:
 def _reviewer_id(principal) -> str:
     # Stable pseudonymous attribution; raw OIDC subject and issuer are not stored.
     digest = hashlib.sha256(
-        (principal.issuer + "\\0" + principal.subject).encode("utf-8")
+        (principal.issuer + "\0" + principal.subject).encode("utf-8")
     ).hexdigest()
     return "reviewer:" + digest[:32]
 
