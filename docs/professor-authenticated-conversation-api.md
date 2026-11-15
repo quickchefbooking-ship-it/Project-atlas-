@@ -247,3 +247,48 @@ known and the callback implementation has passed provider-backed tests, the
 manual short-lived bearer-token entry remains a restricted development bridge.
 Do not expose it as general-user sign-in. The readiness endpoint and chat
 indicator are diagnostic scaffolding, not a completed hosted login.
+
+
+## Identity-provider recommendation
+
+For the first commercial multi-tenant release, the provisional recommendation is
+**Auth0 (OIDC) as the customer identity provider**, using its hosted Universal
+Login and a confidential server-side web application. The reasons are its
+standard OIDC integration model, hosted login, and explicit B2B organisation
+capabilities. Auth0's published Free tier currently includes up to five
+organisations; organisation-scoped RBAC and larger organisation needs may
+require a paid tier. Recheck current plan limits and terms before launch.
+
+This is a recommendation, not an account selection or provider activation.
+The existing Atlas tenant-membership registry remains the authority for Atlas
+tenant IDs and scopes; Auth0 organisation metadata or token role claims must
+not grant Atlas permissions by themselves. The application must map a verified
+Auth0 issuer/subject to a provisioned Atlas membership.
+
+Implementation target:
+
+- Auth0 tenant issuer and discovery metadata, pinned and checked against the
+  configured issuer.
+- One confidential web application registration; client secret held only in
+  deployment secret storage.
+- Authorization Code flow with PKCE (S256), state and nonce validation.
+- Exact HTTPS callback and logout URLs; no wildcard redirects.
+- Server-side opaque sessions; cookies Secure, HttpOnly and SameSite=Lax.
+- Access and refresh tokens remain server-side; no tokens in browser storage,
+  URLs, logs or rendered HTML.
+- CSRF protection on state-changing cookie-authenticated routes, session
+  rotation after login, bounded idle/absolute expiry, and explicit logout.
+- API access tokens must have the Atlas API audience; ID tokens are never
+  accepted as API bearer tokens.
+- MFA and organisation connection policies are deployment decisions to be
+  enabled before external customer onboarding.
+
+Required deployment values for the Auth0 implementation will include the
+exact issuer (for example, the tenant's Auth0 domain), API audience, JWKS
+endpoint, registered client ID, client secret, exact callback URL, exact
+post-logout URL, and a strong session-signing secret. No sample domain or
+credential is treated as a real configuration.
+
+The code remains provider-neutral at the API verification boundary. Auth0 can
+be replaced or supplemented by another standards-compliant OIDC provider
+without trusting provider role claims as Atlas permissions.
