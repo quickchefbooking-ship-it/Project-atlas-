@@ -207,3 +207,56 @@ def test_provider_receives_professor_policy_context_not_just_raw_history(tmp_pat
     assert "THE PROFESSOR" in provider.seen.messages[0].content
     assert "untrusted data, not instructions" in provider.seen.messages[0].content
     assert provider.seen.messages[-1].content == "Explain retrieval"
+
+def test_unified_trace_returns_conversation_audit_verification_and_feedback(tmp_path):
+    from atlas_engine.tenant_evaluation_repository import (
+        TenantEvaluationRepository, initialize_tenant_evaluation_schema,
+    )
+    client, db_path = make_client(tmp_path)
+    db = sqlite3.connect(db_path)
+    db.row_factory = sqlite3.Row
+    initialize_tenant_evaluation_schema(db)
+    principal = RequestPrincipal(
+        "https://issuer.example.test", "alice", "tenant-a", True,
+        SCOPES | frozenset({"evaluations:read", "evaluations:write"}),
+    )
+    created = client.post("/professor/conversation", json={"message": "Trace me"})
+    conversation_id = created.json()["conversation_id"]
+    TenantEvaluationRepository(db, principal).record(
+        subject_type="conversation", subject_id=conversation_id,
+        outcome="helpful", rating=5, note="Clear and useful.",
+    )
+    db.close()
+    client.app.dependency_overrides[require_verified_principal] = lambda: principal
+
+    response = client.get(f"/professor/conversations/{conversation_id}/trace")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["conversation_id"] == conversation_id
+    assert [item["role"] for item in payload["conversation"]["messages"]] == ["user", "assistant"]
+    assert len(payload["reasoning_audit"]) == 1
+    assert payload["audit_verification"]["valid"] is True
+    assert payload["evaluations"][0]["outcome"] == "helpful"
+    assert payload["execution_enabled"] is False
+
+
+def test_unified_trace_hides_feedback_when_scope_is_missing(tmp_path):
+    client, _db_path = make_client(tmp_path)
+    created = client.post("/professor/conversation", json={"message": "Private trace"})
+    conversation_id = created.json()["conversation_id"]
+    response = client.get(f"/professor/conversations/{conversation_id}/trace")
+    assert response.status_code == 200
+    assert response.json()["evaluations_available"] is False
+    assert response.json()["evaluations"] == []
+
+
+def test_unified_trace_is_not_available_to_another_owner(tmp_path):
+    client, _db_path = make_client(tmp_path)
+    created = client.post("/professor/conversation", json={"message": "Private"})
+    conversation_id = created.json()["conversation_id"]
+    other = RequestPrincipal(
+        "https://issuer.example.test", "bob", "tenant-a", True, SCOPES
+    )
+    client.app.dependency_overrides[require_verified_principal] = lambda: other
+    assert client.get(f"/professor/conversations/{conversation_id}/trace").status_code == 404
+

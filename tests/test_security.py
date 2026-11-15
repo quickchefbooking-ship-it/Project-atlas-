@@ -61,6 +61,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/conversations/{conversation_id}", "GET"),
         ("/professor/conversations/{conversation_id}", "DELETE"),
         ("/professor/conversations/{conversation_id}/audit", "GET"),
+        ("/professor/conversations/{conversation_id}/trace", "GET"),
         ("/professor/conversations/{conversation_id}/audit/verify", "GET"),
     }
     unprotected = []
