@@ -230,3 +230,59 @@ def test_atlas_cookie_rejects_cross_site_fetch_metadata():
     with pytest.raises(HTTPException) as exc:
         require_verified_principal(request, csrf_token=csrf)
     assert exc.value.status_code == 403
+
+
+def test_real_atlas_session_cookie_composes_server_membership_and_session_bound_csrf(tmp_path):
+    from atlas_engine.account_identity import SQLiteAccountRepository
+    from atlas_engine.atlas_session_identity import AtlasSessionIdentityService, ATLAS_IDENTITY_ISSUER
+    from atlas_engine.session_identity import SQLiteSessionRepository
+
+    identity_path = str(tmp_path / "atlas-identity.sqlite")
+    accounts = SQLiteAccountRepository(identity_path)
+    accounts.initialize()
+    account = accounts.create_pending_account(
+        "browser@example.test", "a sufficiently long browser password"
+    )
+    accounts.set_account_status(account.account_id, "active")
+
+    sessions = SQLiteSessionRepository(identity_path)
+    sessions.initialize()
+    memberships = SQLiteMembershipRegistry(str(tmp_path / "browser-memberships.sqlite"))
+    memberships.initialize()
+    memberships.create_tenant("company-a", "Company A")
+    memberships.provision_membership(
+        ATLAS_IDENTITY_ISSUER,
+        account.account_id,
+        "company-a",
+        {"professor:chat", "memory:read"},
+    )
+    service = AtlasSessionIdentityService(sessions, memberships)
+
+    first = sessions.issue_session(account.account_id)
+    first_csrf = sessions.issue_csrf_token(first.token)
+
+    def request_for(session_token):
+        return SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(
+                identity_service=None,
+                atlas_session_identity_service=service,
+                atlas_trusted_origins=frozenset({"https://atlas.example.test"}),
+            )),
+            cookies={"__Host-atlas_session": session_token},
+            headers={
+                "origin": "https://atlas.example.test",
+                "sec-fetch-site": "same-origin",
+            },
+            method="POST",
+        )
+
+    principal = require_verified_principal(request_for(first.token), csrf_token=first_csrf)
+    assert principal.issuer == ATLAS_IDENTITY_ISSUER
+    assert principal.subject == account.account_id
+    assert principal.tenant_id == "company-a"
+    assert principal.scopes == frozenset({"professor:chat", "memory:read"})
+
+    second = sessions.issue_session(account.account_id)
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(request_for(second.token), csrf_token=first_csrf)
+    assert exc.value.status_code == 403
