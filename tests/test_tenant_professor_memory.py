@@ -113,3 +113,36 @@ def test_expired_approved_memory_is_not_retrieved(memory_repos):
     db.execute("UPDATE tenant_professor_memory_proposals SET expires_at=? WHERE proposal_id=?",
                ("2000-01-01T00:00:00+00:00", "expired"))
     assert owner.retrieve("concise answers") == ()
+
+def test_expiry_cleanup_removes_only_current_owners_expired_records(memory_repos):
+    db, owner, other, _tenant = memory_repos
+    owner.propose("expired-owner", category="context", title="Old owner note", content="Expired owner content.")
+    owner.decide("expired-owner", decision="approved")
+    owner.propose("live-owner", category="context", title="Current owner note", content="Keep this content.")
+    other.propose("expired-other", category="context", title="Other owner note", content="Other owner's content.")
+    db.execute(
+        "UPDATE tenant_professor_memory_proposals SET expires_at=? WHERE proposal_id IN (?,?)",
+        ("2000-01-01T00:00:00+00:00", "expired-owner", "expired-other"),
+    )
+    assert owner.purge_expired() == 1
+    assert owner.list_proposals(status="all") == tuple(
+        item for item in owner.list_proposals(status="all") if item["proposal_id"] == "live-owner"
+    )
+    assert db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_memory_decisions WHERE proposal_id='expired-owner'"
+    ).fetchone()[0] == 0
+    assert other.list_proposals(status="all")[0]["proposal_id"] == "expired-other"
+
+
+def test_expiry_cleanup_requires_delete_scope_and_bounded_limit(memory_repos):
+    db, _owner, _other, _tenant = memory_repos
+    reader = TenantProfessorMemoryRepository(
+        db, RequestPrincipal("issuer", "reader", "tenant-a", True, frozenset({"memory:read"}))
+    )
+    with pytest.raises(AuthorizationDenied):
+        reader.purge_expired()
+    owner_without_delete = TenantProfessorMemoryRepository(
+        db, RequestPrincipal("issuer", "no-delete", "tenant-a", True, frozenset({"memory:read"}))
+    )
+    with pytest.raises(AuthorizationDenied):
+        owner_without_delete.purge_expired()
