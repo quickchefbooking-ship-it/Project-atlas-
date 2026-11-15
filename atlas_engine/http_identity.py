@@ -137,4 +137,15 @@ def require_verified_principal(
                 detail="Invalid bearer authentication.",
                 headers={"WWW-Authenticate": "Bearer"},
             ) from None
+    if not getattr(request, "cookies", {}).get(ATLAS_SESSION_COOKIE):
+        if getattr(request.app.state, "identity_service", None) is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Verified user identity is not configured.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Bearer or Atlas browser authentication required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return _cookie_principal(request, csrf_token)
