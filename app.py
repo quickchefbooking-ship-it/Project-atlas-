@@ -323,6 +323,41 @@ def health():
     return api.health()
 
 
+@app.get("/launch/readiness")
+def launch_readiness():
+    """Return a non-secret launch checklist; configuration is not a live health check."""
+    identity_configured = getattr(app.state, "identity_service", None) is not None
+    tenant_storage_configured = bool(getattr(app.state, "tenant_data_path", None))
+    conversation_service = getattr(app.state, "conversation_service", None)
+    provider_configured = bool(
+        conversation_service is not None
+        and getattr(conversation_service, "is_configured", False)
+    )
+    hosted_login_settings = ("ATLAS_OIDC_CLIENT_ID", "ATLAS_OIDC_REDIRECT_URI")
+    hosted_login_configured = all(os.getenv(name) for name in hosted_login_settings)
+
+    checks = {
+        "verified_api_identity": identity_configured,
+        "hosted_browser_login_configuration": hosted_login_configured,
+        "tenant_data_storage": tenant_storage_configured,
+        "reasoning_provider_configured": provider_configured,
+        # A configured URL/key does not prove that a live round trip works.
+        "live_provider_round_trip_verified": False,
+    }
+    blockers = [name for name, passed in checks.items() if not passed]
+    return {
+        "status": "ready_for_release_review" if not blockers else "not_ready",
+        "checks": checks,
+        "blockers": blockers,
+        "execution_enabled": False,
+        "note": (
+            "Configuration presence is not a live service test. A human must "
+            "verify a real provider conversation, hosted sign-in and deployment "
+            "security before release."
+        ),
+    }
+
+
 @app.get("/identity/me")
 def identity_me(principal=Depends(require_verified_principal)):
     """Return the authenticated tenant principal for integration diagnostics."""
