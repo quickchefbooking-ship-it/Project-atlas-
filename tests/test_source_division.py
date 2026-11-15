@@ -191,6 +191,14 @@ Do not import this automatically.
     assert _bundled_document_metadata(unreviewed) is None
     assert _bundled_document_metadata(without_metadata) is None
 
+    # A source register is discovery metadata, not an approved knowledge note.
+    index_only = tmp_path / "index-only.md"
+    index_only.write_text(
+        """---\nid: knowledge-index-001\ntitle: "Source index"\ndivision: "wellbeing"\nsource:\n  publisher: "AtlasOnePro"\n  url: "https://example.org/index"\nreview_status: "index-only"\n---\n\nThis index points to sources but is not itself approved guidance.\n""",
+        encoding="utf-8",
+    )
+    assert _bundled_document_metadata(index_only) is None
+
 
 
 def test_retrieval_does_not_import_bundled_material_as_a_side_effect(monkeypatch, tmp_path):
