@@ -120,7 +120,7 @@ Use fake handlers and deterministic test identities only. Tests must assert hand
 
 ## 9. Staged implementation plan
 
-**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The immutable execution envelope, global kill switch and durable audit reservation still need review and hardening.
+**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The process-wide global kill switch is implemented and defaults off. The immutable execution envelope and durable audit reservation still need implementation and review.
 
 **Stage B — pure local pilot (implemented narrowly):** bounded local arithmetic is executable through the verified tenant route. A separate read-only Crossref adapter and evidence/report chain also exist, but Crossref currently runs in-process and is not an isolated worker.
 
