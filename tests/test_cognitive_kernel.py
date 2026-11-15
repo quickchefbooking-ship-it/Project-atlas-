@@ -124,3 +124,10 @@ def test_simple_greeting_is_ready_for_conversational_response():
     frame = frame_task(CognitiveRequest(task="Hello"))
     assert frame.reasoning_ready is True
     assert frame.open_questions == ()
+
+
+def test_concise_explanation_request_is_ready_without_clarification():
+    from atlas_engine.cognitive_kernel import frame_task
+
+    frame = frame_task(CognitiveRequest(task="Explain retrieval"))
+    assert frame.reasoning_ready is True
