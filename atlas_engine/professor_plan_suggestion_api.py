@@ -70,13 +70,22 @@ def suggest_tenant_professor_plan(
         }
         for item in registry.list_definitions()
     ]
-    system_message = _PLAN_SYSTEM_PROMPT + "\nTrusted capability catalogue:\n" + str(catalogue)
+    system_message = (
+        _PLAN_SYSTEM_PROMPT
+        + "\nTrusted capability catalogue:\n"
+        + json.dumps(catalogue, separators=(",", ":"))
+    )
+    if len(system_message) > 4000:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The trusted capability catalogue exceeds the planning context limit.",
+        )
     try:
         conversation = ConversationInput(
             conversation_id=uuid.uuid4().hex,
             user_id=principal.subject,
             messages=(
-                ConversationMessage("system", system_message[:4000]),
+                ConversationMessage("system", system_message),
                 ConversationMessage("user", payload.objective),
             ),
         )
