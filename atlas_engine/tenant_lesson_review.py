@@ -32,7 +32,7 @@ class TenantLessonReviewRepository:
         if not isinstance(principal, RequestPrincipal): raise TypeError("Verified principal required.")
         self.db, self.p = db, principal
         self.db.row_factory = sqlite3.Row
-        self.key = hashlib.sha256((principal.issuer+"\\0"+principal.subject).encode()).hexdigest()
+        self.key = hashlib.sha256((principal.issuer+"\0"+principal.subject).encode()).hexdigest()
     def _auth(self, scope): authorize_tenant_resource(self.p,self.p.tenant_id,{scope})
     def propose(self, *, title, lesson_text, evaluation_ids):
         self._auth("lessons:propose")
