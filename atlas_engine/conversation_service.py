@@ -28,13 +28,13 @@ class ConversationService:
     def is_configured(self) -> bool:
         return self._provider is not None
 
-    def reason(self, request: CognitiveRequest) -> ProfessorReasoningResult:
+    def reason(self, request: CognitiveRequest, *, approved_memory: tuple[dict, ...] = ()) -> ProfessorReasoningResult:
         """Run the complete cognitive pipeline through the explicitly injected provider."""
         if self._provider is None:
             raise ConversationNotConfigured(
                 "Professor's conversational reasoning service is not configured."
             )
-        return ProfessorReasoningPipeline(self._provider).run(request)
+        return ProfessorReasoningPipeline(self._provider).run(request, approved_memory=approved_memory)
 
     def respond(self, conversation: ConversationInput) -> ConversationOutput:
         if self._provider is None:
