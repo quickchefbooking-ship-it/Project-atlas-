@@ -6,7 +6,7 @@
 
 The capability registry now has a draft implementation of strict input/output contract validation. That is necessary but not sufficient to execute a specialist arm safely. Before any handler can run, Professor needs a separately enforced execution boundary that binds a specific caller, tenant, task, attempt, capability version, approved parameters and resource budget into one auditable decision.
 
-The default state remains **execution disabled**. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
+The default state remains **execution disabled**. The application now reads `ATLAS_CAPABILITY_EXECUTION_ENABLED` as a process-wide gate; only the exact value `true` (case-insensitive, whitespace-trimmed) enables the gate. Missing, blank, `yes`, `1` and all other values leave execution disabled. The route checks this gate on every request before tenant storage access, plan inspection, capability lookup or handler dispatch. Missing application state also fails closed. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
 
 ## 2. Non-goals
 
