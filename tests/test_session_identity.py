@@ -109,3 +109,27 @@ def test_session_timeouts_are_bounded():
         SQLiteSessionRepository(":memory:", idle_timeout=timedelta(seconds=10))
     with pytest.raises(ValueError):
         SQLiteSessionRepository(":memory:", idle_timeout=timedelta(hours=2), absolute_timeout=timedelta(hours=1))
+
+def test_password_reset_revokes_all_existing_sessions(identity):
+    accounts, sessions, account = identity
+    first = sessions.issue_session(account.account_id)
+    second = sessions.issue_session(account.account_id)
+    recovery = accounts.issue_password_recovery_token(account.email)
+    accounts.reset_password(recovery, "a replacement secure password")
+    for token in (first.token, second.token):
+        with pytest.raises(InvalidSession):
+            sessions.validate_session(token)
+
+
+def test_suspending_account_revokes_sessions_in_storage(identity):
+    accounts, sessions, account = identity
+    issued = sessions.issue_session(account.account_id)
+    accounts.set_account_status(account.account_id, "suspended")
+    conn = sqlite3.connect(sessions.database_path)
+    try:
+        revoked_at = conn.execute(
+            "SELECT revoked_at FROM atlas_sessions WHERE session_id=?", (issued.session_id,)
+        ).fetchone()[0]
+        assert revoked_at is not None
+    finally:
+        conn.close()
