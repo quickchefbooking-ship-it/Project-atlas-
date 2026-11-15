@@ -1,4 +1,5 @@
 """Cross-boundary integration tests for THE PROFESSOR's safe reasoning lifecycle."""
+import re
 import sqlite3
 
 from fastapi import FastAPI
@@ -45,7 +46,13 @@ class FixtureProvider:
         if "decomposition now" in conversation.messages[-1].content.lower():
             text = '{"steps":[{"step_id":"research","objective":"Frame the research request"}]}'
         else:
-            text = "Research this safely. The research is bounded and no external actions were taken."
+            prompt = conversation.messages[0].content
+            evidence_ids = re.findall(r'"document_id"\\s*:\\s*"([^"]+)"', prompt)
+            citations = " ".join(evidence_ids)
+            text = (
+                "Research this safely. The research is bounded and no external "
+                f"actions were taken. {citations}"
+            )
         return ConversationOutput(
             text=text,
             provider=self.name,
