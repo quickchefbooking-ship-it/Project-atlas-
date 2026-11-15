@@ -147,3 +147,22 @@ def test_audit_schema_migrates_existing_database_without_breaking_old_chain(tmp_
     initialize_reasoning_audit_schema(db)
     repo = TenantReasoningAuditRepository(db, principal())
     assert repo.verify_chain()["valid"] is True
+
+def test_audit_records_bounded_memory_references_and_rejects_invalid_ids(tmp_path):
+    db = database(tmp_path)
+    repo = TenantReasoningAuditRepository(db, principal())
+    record = repo.append(
+        conversation_id="chat-memory", request_text="q", response_text="a",
+        context_text="ctx", provider="fixture", model="v1", evidence=[],
+        metadata={"memory_proposal_ids": ["memory-1", "memory-2"]},
+    )
+    assert record.metadata["memory_proposal_ids"] == ["memory-1", "memory-2"]
+    assert repo.verify_chain()["valid"] is True
+    with pytest.raises(ValueError):
+        repo.append(conversation_id="chat-memory", request_text="q", response_text="a",
+                    context_text="ctx", provider="fixture", model="v1", evidence=[],
+                    metadata={"memory_proposal_ids": ["x"] * 6})
+    with pytest.raises(ValueError):
+        repo.append(conversation_id="chat-memory", request_text="q", response_text="a",
+                    context_text="ctx", provider="fixture", model="v1", evidence=[],
+                    metadata={"memory_proposal_ids": ["duplicate", "duplicate"]})
