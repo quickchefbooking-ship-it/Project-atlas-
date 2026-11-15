@@ -330,6 +330,41 @@ def identity_me(principal=Depends(require_verified_principal)):
     }
 
 
+@app.get("/identity/login-readiness")
+def identity_login_readiness():
+    """Expose non-secret deployment readiness for hosted OIDC login.
+
+    This diagnostic never returns provider endpoints, client credentials,
+    tokens, tenant membership, or permission data.
+    """
+    verifier_settings = (
+        "ATLAS_OIDC_ISSUER",
+        "ATLAS_OIDC_AUDIENCE",
+        "ATLAS_OIDC_JWKS_URI",
+        "ATLAS_OIDC_ALLOWED_ALGORITHMS",
+        "ATLAS_MEMBERSHIP_DB_PATH",
+    )
+    hosted_login_settings = (
+        "ATLAS_OIDC_CLIENT_ID",
+        "ATLAS_OIDC_REDIRECT_URI",
+    )
+    missing_verifier = [name for name in verifier_settings if not os.getenv(name)]
+    missing_login = [name for name in hosted_login_settings if not os.getenv(name)]
+    return {
+        "status": "ready" if not missing_verifier and not missing_login else "not_configured",
+        "api_verifier": {
+            "configured": not missing_verifier,
+            "missing_settings": missing_verifier,
+        },
+        "hosted_login": {
+            "configured": not missing_login,
+            "missing_settings": missing_login,
+            "flow": "authorization_code_pkce",
+        },
+        "note": "This endpoint reports configuration presence only; it does not authenticate users.",
+    }
+
+
 
 @app.post("/professor/tenant/plans", status_code=201)
 def create_tenant_professor_plan(
