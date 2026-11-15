@@ -166,8 +166,10 @@ def test_professor_lifecycle_keeps_preview_feedback_and_lessons_separate(tmp_pat
     assert decision.json()["runtime_promotion"] == "disabled"
 
     # Reviewer identity cannot read the proposer's private conversation or trace.
-    assert client.get(f"/professor/conversations/{conversation_id}").status_code == 404
-    assert client.get(f"/professor/conversations/{conversation_id}/trace").status_code == 404
+    # Bob has no conversation-read scope, so access is denied before the API
+    # reveals whether the other user private conversation exists.
+    assert client.get(f"/professor/conversations/{conversation_id}").status_code == 403
+    assert client.get(f"/professor/conversations/{conversation_id}/trace").status_code == 403
 
     # The owner can inspect the complete read-only trace after switching back.
     current["principal"] = principal("alice", ALICE_SCOPES)
