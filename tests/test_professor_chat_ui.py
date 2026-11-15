@@ -14,6 +14,7 @@ def test_professor_chat_page_uses_verified_bearer_api_without_persisting_token()
     assert '"/trace"' in html
     assert "localStorage" not in html
     assert "sessionStorage" not in html
+    assert 'token="";$("token").value=""' in html
     assert "X-API-Key" not in html
 
 
