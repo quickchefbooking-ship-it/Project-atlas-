@@ -187,3 +187,32 @@ separate human-reviewed workflow with provenance and a reversible change log.
 - The page can list and reopen saved conversations, start a new conversation, send turns, inspect the read-only trace and explicitly delete a conversation.
 - This is a browser client, not an identity provider or login system. A deployment must provide a secure OIDC sign-in flow and issue appropriately scoped access tokens before general users can use it. Do not paste tokens into shared devices.
 - A missing identity configuration, tenant database, required scope or reasoning provider is shown as an API error; the page does not fabricate model responses.
+
+
+## Deployment-owned OIDC configuration
+
+The repository already contains a cryptographic JWT verifier (`PyJWTTokenVerifier`) that uses a pinned deployment-configured JWKS URL. The server constructs it only when all five settings below are present. The browser does not validate JWTs and must never be treated as the authority for identity or permissions.
+
+Required server environment:
+
+- `ATLAS_OIDC_ISSUER`: exact HTTPS issuer value expected in the token's `iss` claim (no trailing slash, matching the identity provider metadata exactly).
+- `ATLAS_OIDC_AUDIENCE`: API audience expected in the access token.
+- `ATLAS_OIDC_JWKS_URI`: HTTPS JWKS endpoint for that issuer.
+- `ATLAS_OIDC_ALLOWED_ALGORITHMS`: explicit comma-separated allowlist; supported values are `RS256`, `PS256` and `ES256`. Use only algorithms actually configured by the issuer.
+- `ATLAS_MEMBERSHIP_DB_PATH`: dedicated writable path for the server-controlled tenant membership registry.
+
+Also required for conversation use:
+
+- `ATLAS_TENANT_DATA_DB_PATH`: dedicated tenant conversation/plan database. It must not resolve to the core task database or membership database.
+- The deployment must separately configure the opt-in reasoning provider settings above. Without them, the chat API correctly returns 503.
+
+### Provisioning sequence
+
+1. Register an API/resource audience with the organisation's OIDC provider. Configure the access-token issuer, audience and JWKS URI exactly; issue access tokens for this API, not ID tokens.
+2. Supply the five OIDC settings and two database paths through the hosting platform's secret/environment configuration. Do not put secrets or tokens in source control, URL parameters, build logs or client JavaScript.
+3. Provision the tenant and issuer/subject membership through a trusted operator-controlled provisioning process using `SQLiteMembershipRegistry`. Grant only the required scopes: `conversations:read` and `conversations:write`; grant `conversations:delete` only where deletion is intended. Never derive scopes from provider role strings or browser input.
+4. Configure a supported reasoning endpoint and model only after its privacy, retention, cost and data-processing terms have been approved. Keep the provider disabled until that decision is made.
+5. Restart the service, then test `GET /identity/me` with a short-lived API access token. Confirm the issuer, subject, tenant and server-derived scopes. Next test list, create, reopen, trace and delete using a non-production tenant. Confirm that another tenant/owner cannot access those records.
+6. Before public rollout, replace or formally approve the SQLite prototype storage, add managed backups, TLS, rate limits, retention/deletion policy, monitoring, incident handling and a security review.
+
+The browser workspace now calls `GET /identity/me` before listing conversations and checks that the verified principal has `conversations:read` and `conversations:write`. This improves diagnostics; the server remains the security boundary. The page still uses a manually supplied short-lived token until a hosted OIDC authorization-code flow with PKCE and a registered redirect URI is implemented. Do not use manual token entry as the general-user sign-in experience.
