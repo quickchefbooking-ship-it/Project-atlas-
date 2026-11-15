@@ -46,7 +46,7 @@ from atlas_engine.openai_compatible_provider import (
 )
 from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
 from atlas_engine.tenant_evaluation_repository import initialize_tenant_evaluation_schema
-from atlas_engine.professor_evaluation_api import router as professor_evaluation_router
+from atlas_engine.professor_evaluation_api import router as professor_evaluation_router\nfrom atlas_engine.tenant_lesson_review import initialize_tenant_lesson_review_schema\nfrom atlas_engine.professor_lesson_review_api import router as professor_lesson_review_router
 from atlas_engine.professor_conversation_api import router as professor_conversation_router
 from atlas_engine.professor_plan_suggestion_api import router as professor_plan_suggestion_router
 from atlas_engine.tenant_evidence_review import (
@@ -129,7 +129,7 @@ app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
 app.include_router(professor_conversation_router)
-app.include_router(professor_evaluation_router)
+app.include_router(professor_evaluation_router)\napp.include_router(professor_lesson_review_router)
 app.include_router(professor_plan_suggestion_router)
 app.state.conversation_service = ConversationService()
 app.state.conversation_provider = None
@@ -178,7 +178,7 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_step_schema(connection)
         initialize_tenant_evidence_review_schema(connection)
         initialize_tenant_conversation_schema(connection)
-        initialize_tenant_evaluation_schema(connection)
+        initialize_tenant_evaluation_schema(connection)\n        initialize_tenant_lesson_review_schema(connection)
         connection.commit()
     finally:
         connection.close()
