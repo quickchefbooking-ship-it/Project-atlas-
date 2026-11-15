@@ -110,6 +110,14 @@ def professor_conversation(
             conversation_id=conversation_id, request_text=payload.message,
             response_text=response_text, context_text=system_context,
             provider=provider_name, model=model_name, evidence=evidence,
+            metadata={
+                "status": reasoning.status,
+                "step_count": len(reasoning.blueprint.steps) if reasoning.blueprint else 0,
+                "critique_accepted": reasoning.critique.accepted_for_delivery if reasoning.critique else False,
+                "goal_coverage": reasoning.critique.goal_coverage if reasoning.critique else 0.0,
+                "action_boundary": reasoning.preparation.frame.action_boundary.value,
+                "execution_enabled": False,
+            },
         )
         return {
             "audit_id": audit.audit_id,
