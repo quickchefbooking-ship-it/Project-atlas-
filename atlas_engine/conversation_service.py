@@ -6,6 +6,9 @@ invoke tools, or perform external actions.
 """
 from __future__ import annotations
 
+from .cognitive_kernel import CognitiveRequest
+from .professor_reasoning_pipeline import ProfessorReasoningPipeline, ProfessorReasoningResult
+
 from .conversation_contract import (
     ConversationInput,
     ConversationOutput,
@@ -24,6 +27,14 @@ class ConversationService:
     @property
     def is_configured(self) -> bool:
         return self._provider is not None
+
+    def reason(self, request: CognitiveRequest, *, approved_memory: tuple[dict, ...] = ()) -> ProfessorReasoningResult:
+        """Run the complete cognitive pipeline through the explicitly injected provider."""
+        if self._provider is None:
+            raise ConversationNotConfigured(
+                "Professor's conversational reasoning service is not configured."
+            )
+        return ProfessorReasoningPipeline(self._provider).run(request, approved_memory=approved_memory)
 
     def respond(self, conversation: ConversationInput) -> ConversationOutput:
         if self._provider is None:

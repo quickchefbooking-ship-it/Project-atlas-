@@ -138,3 +138,95 @@ def test_membership_store_outage_returns_503(tmp_path):
         require_verified_principal(_request(service), "Bearer signed.token.value")
     assert exc.value.status_code == 503
     assert "private database details" not in exc.value.detail
+
+
+class FakeAtlasSessions:
+    def __init__(self, valid=True):
+        self.valid = valid
+        self.seen_session = None
+        self.seen_csrf = None
+
+    def validate_csrf_token(self, session_token, csrf_token):
+        self.seen_session = session_token
+        self.seen_csrf = csrf_token
+        return self.valid
+
+
+class FakeAtlasSessionIdentity:
+    def __init__(self, valid_csrf=True):
+        self.sessions = FakeAtlasSessions(valid_csrf)
+        self.seen_session = None
+
+    def authenticate(self, session_token):
+        self.seen_session = session_token
+        return "atlas-principal"
+
+
+def _cookie_request(method="GET", *, origin=None, fetch_site="same-origin",
+                    csrf="csrf-token", valid_csrf=True):
+    service = FakeAtlasSessionIdentity(valid_csrf)
+    headers = {"sec-fetch-site": fetch_site}
+    if origin is not None:
+        headers["origin"] = origin
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(
+            identity_service=None,
+            atlas_session_identity_service=service,
+            atlas_trusted_origins=frozenset({"https://atlas.example.test"}),
+        )),
+        cookies={"__Host-atlas_session": "opaque-session-token"},
+        headers=headers,
+        method=method,
+    )
+    return request, service, csrf
+
+
+def test_atlas_cookie_authenticates_safe_request_without_csrf_header():
+    request, service, _ = _cookie_request()
+    principal = require_verified_principal(request)
+    assert principal == "atlas-principal"
+    assert service.seen_session == "opaque-session-token"
+
+
+def test_atlas_cookie_rejects_state_change_without_trusted_origin():
+    request, _, csrf = _cookie_request("POST", csrf="valid-csrf")
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(request, csrf_token=csrf)
+    assert exc.value.status_code == 403
+
+
+def test_atlas_cookie_rejects_untrusted_origin_even_with_valid_csrf():
+    request, _, csrf = _cookie_request(
+        "POST", origin="https://attacker.example", csrf="valid-csrf"
+    )
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(request, csrf_token=csrf)
+    assert exc.value.status_code == 403
+
+
+def test_atlas_cookie_requires_session_bound_csrf_for_state_change():
+    request, service, csrf = _cookie_request(
+        "POST", origin="https://atlas.example.test", valid_csrf=False
+    )
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(request, csrf_token=csrf)
+    assert exc.value.status_code == 403
+    assert service.sessions.seen_session == "opaque-session-token"
+
+
+def test_atlas_cookie_accepts_trusted_origin_and_valid_csrf():
+    request, service, csrf = _cookie_request(
+        "POST", origin="https://atlas.example.test", valid_csrf=True
+    )
+    principal = require_verified_principal(request, csrf_token=csrf)
+    assert principal == "atlas-principal"
+    assert service.sessions.seen_csrf == csrf
+
+
+def test_atlas_cookie_rejects_cross_site_fetch_metadata():
+    request, _, csrf = _cookie_request(
+        "POST", origin="https://atlas.example.test", fetch_site="cross-site"
+    )
+    with pytest.raises(HTTPException) as exc:
+        require_verified_principal(request, csrf_token=csrf)
+    assert exc.value.status_code == 403

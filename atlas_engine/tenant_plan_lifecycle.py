@@ -120,3 +120,52 @@ def prepare_tenant_professor_plan(
         ) from None
     finally:
         connection.close()
+
+
+@router.get("/professor/tenant/plans/{plan_id}/preview")
+def preview_tenant_professor_plan(
+    plan_id: str,
+    request: Request,
+    principal=Depends(require_verified_principal),
+):
+    """Return a non-mutating readiness preview for a tenant-owned DRAFT."""
+    database_path = getattr(request.app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(status_code=503, detail="Tenant plan storage is not configured.")
+    registry = getattr(request.app.state, "tenant_capability_registry", None)
+    if not isinstance(registry, CapabilityRegistry):
+        raise HTTPException(status_code=503, detail="Trusted capability catalogue is not configured.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        repository = TenantPlanRepository(connection, principal)
+        plan = repository.get(plan_id)
+        if plan.state is not PlanState.DRAFT:
+            raise HTTPException(status_code=409, detail="Only a DRAFT plan can be previewed.")
+        # Evaluate the DRAFT as a hypothetical READY plan without persisting
+        # any state transition. The preview engine intentionally blocks DRAFT
+        # plans, while this endpoint must report future readiness.
+        candidate = ProfessorPlan(
+            plan_id=plan.plan_id,
+            objective=plan.objective,
+            acceptance_criteria=plan.acceptance_criteria,
+            steps=plan.steps,
+            state=PlanState.READY,
+            approval_reference=None,
+        )
+        preview = preview_plan(candidate, registry, granted_scopes=principal.scopes)
+        return {
+            "status": "blocked" if preview.blocked_step_ids else "preview_ready",
+            "readiness": _readiness_payload(preview),
+            "mutated": False,
+            "execution_enabled": False,
+            "next_step": "Review the preview; call the separate prepare endpoint only when satisfied.",
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant plan access denied.") from None
+    except TenantPlanNotFound:
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Tenant plan storage is temporarily unavailable.") from None
+    finally:
+        connection.close()

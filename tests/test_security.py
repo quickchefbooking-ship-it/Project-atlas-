@@ -35,6 +35,9 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
+        ("/professor/chat", "GET"),
+        ("/identity/login-readiness", "GET"),
+        ("/launch/readiness", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
@@ -47,7 +50,28 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "POST"),
         ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "GET"),
         ("/professor/tenant/plans/{plan_id}/ask", "POST"),
+        ("/professor/tenant/plans/{plan_id}/preview", "GET"),
+        ("/professor/tenant/evaluations", "POST"),
+        ("/professor/tenant/evaluations", "GET"),
+        ("/professor/tenant/evaluations/summary", "GET"),
+        ("/professor/tenant/lessons", "POST"),
+        ("/professor/tenant/lessons", "GET"),
+        ("/professor/tenant/lessons/{candidate_id}/decision", "POST"),
         ("/professor/tenant/plans/{plan_id}/ask", "POST"),
+        ("/professor/conversation", "POST"),
+        ("/professor/tenant/plans/suggest", "POST"),
+        ("/professor/conversations", "GET"),
+        ("/professor/conversations/{conversation_id}", "GET"),
+        ("/professor/conversations/{conversation_id}", "DELETE"),
+        ("/professor/conversations/{conversation_id}/audit", "GET"),
+        ("/professor/conversations/{conversation_id}/trace", "GET"),
+        ("/professor/conversations/{conversation_id}/audit/verify", "GET"),
+        ("/professor/memory/proposals", "POST"),
+        ("/professor/memory/proposals", "GET"),
+        ("/professor/memory/proposals/{proposal_id}/decision", "POST"),
+        ("/professor/memory/retrieve", "POST"),
+        ("/professor/memory/{proposal_id}", "DELETE"),
+        ("/professor/memory/cleanup", "POST"),
     }
     unprotected = []
     for route in app_module.app.routes:
@@ -175,9 +199,29 @@ def test_identity_introspection_does_not_accept_shared_api_key_as_human_identity
     monkeypatch.setattr(app_module, "API_REQUIRE_AUTH", True)
     monkeypatch.setattr(app_module, "API_KEY", "test-secret")
     monkeypatch.delenv("ATLAS_API_KEY", raising=False)
-    client = TestClient(app_module.app)
 
-    response = client.get("/identity/me", headers={"X-API-Key": "test-secret"})
+    response = TestClient(app_module.app).get("/identity/me", headers={"X-API-Key": "test-secret"})
 
     assert response.status_code == 503
     assert "Verified user identity is not configured" in response.json()["detail"]
+
+def test_launch_readiness_is_non_secret_and_never_claims_live_provider_verification(monkeypatch):
+    monkeypatch.delenv("ATLAS_OIDC_CLIENT_ID", raising=False)
+    monkeypatch.delenv("ATLAS_OIDC_REDIRECT_URI", raising=False)
+    app_module.app.state.identity_service = None
+    app_module.app.state.tenant_data_path = None
+    app_module.app.state.conversation_service = app_module.ConversationService()
+
+    response = TestClient(app_module.app).get("/launch/readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["checks"]["verified_api_identity"] is False
+    assert payload["checks"]["hosted_browser_login_configuration"] is False
+    assert payload["checks"]["tenant_data_storage"] is False
+    assert payload["checks"]["reasoning_provider_configured"] is False
+    assert payload["checks"]["live_provider_round_trip_verified"] is False
+    assert payload["execution_enabled"] is False
+    assert "ATLAS_OIDC_CLIENT_ID" not in response.text
+    assert "api_key" not in response.text.lower()

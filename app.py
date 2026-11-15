@@ -39,6 +39,22 @@ from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRep
 from atlas_engine.tenant_orchestration_service import TenantProfessorOrchestrationService
 from atlas_engine.plan_contract import PlanStep, ProfessorPlan, RiskClass, PlanValidationError
 from atlas_engine.tenant_plan_lifecycle import router as tenant_plan_lifecycle_router
+from atlas_engine.conversation_service import ConversationService
+from atlas_engine.openai_compatible_provider import (
+    OpenAICompatibleConversationProvider,
+    load_provider_from_environment,
+)
+from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
+from atlas_engine.tenant_professor_memory import initialize_tenant_memory_schema
+from atlas_engine.professor_memory_api import router as professor_memory_router
+from atlas_engine.tenant_evaluation_repository import initialize_tenant_evaluation_schema
+from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
+from atlas_engine.professor_reasoning_audit_api import router as professor_reasoning_audit_router
+from atlas_engine.professor_evaluation_api import router as professor_evaluation_router
+from atlas_engine.tenant_lesson_review import initialize_tenant_lesson_review_schema
+from atlas_engine.professor_lesson_review_api import router as professor_lesson_review_router
+from atlas_engine.professor_conversation_api import router as professor_conversation_router
+from atlas_engine.professor_plan_suggestion_api import router as professor_plan_suggestion_router
 from atlas_engine.tenant_evidence_review import (
     router as tenant_evidence_review_router,
     initialize_tenant_evidence_review_schema,
@@ -93,7 +109,21 @@ async def lifespan(app: FastAPI):
     except Exception:
         app.state.tenant_data_path = None
         logger.error("Tenant plan storage initialization failed; tenant plan routes remain disabled")
+    app.state.conversation_provider = None
+    app.state.conversation_service = ConversationService()
+    try:
+        provider_config = load_provider_from_environment()
+        if provider_config is not None:
+            provider = OpenAICompatibleConversationProvider(provider_config)
+            app.state.conversation_provider = provider
+            app.state.conversation_service = ConversationService(provider)
+            logger.info("Professor text reasoning provider configured")
+    except Exception:
+        logger.error("Professor reasoning provider configuration is invalid; conversation remains disabled")
     yield
+    provider = getattr(app.state, "conversation_provider", None)
+    if provider is not None:
+        provider.close()
 
 
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
@@ -104,6 +134,14 @@ app.state.tenant_capability_registry = app.state.tenant_capability_runtime.regis
 app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
+app.include_router(professor_conversation_router)
+app.include_router(professor_memory_router)
+app.include_router(professor_reasoning_audit_router)
+app.include_router(professor_evaluation_router)
+app.include_router(professor_lesson_review_router)
+app.include_router(professor_plan_suggestion_router)
+app.state.conversation_service = ConversationService()
+app.state.conversation_provider = None
 
 
 class TenantPlanStepInput(BaseModel):
@@ -148,6 +186,11 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_plan_schema(connection)
         initialize_tenant_step_schema(connection)
         initialize_tenant_evidence_review_schema(connection)
+        initialize_tenant_conversation_schema(connection)
+        initialize_tenant_evaluation_schema(connection)
+        initialize_reasoning_audit_schema(connection)
+        initialize_tenant_lesson_review_schema(connection)
+        initialize_tenant_memory_schema(connection)
         connection.commit()
     finally:
         connection.close()
@@ -240,10 +283,6 @@ class TaskCancellationRequestInput(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
-class ConversationRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
-
-
 class GenerateImageRequest(BaseModel):
     prompt: str
     output_path: Optional[str] = None
@@ -264,16 +303,12 @@ def professor_voice_ui():
     )
 
 
-@app.post("/professor/conversation", dependencies=[Depends(require_api_key)])
-def professor_conversation(payload: ConversationRequest):
-    """Fail closed until a real conversational reasoning backend is configured."""
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=(
-            "Professor's conversational reasoning service is not configured yet. "
-            "The voice interface can capture speech and play spoken responses, "
-            "but general question answering is not enabled."
-        ),
+@app.get("/professor/chat", include_in_schema=False)
+def professor_chat_ui():
+    """Serve the authenticated browser-first Professor conversation workspace."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "professor_chat.html",
+        media_type="text/html",
     )
 
 
@@ -288,6 +323,41 @@ def health():
     return api.health()
 
 
+@app.get("/launch/readiness")
+def launch_readiness():
+    """Return a non-secret launch checklist; configuration is not a live health check."""
+    identity_configured = getattr(app.state, "identity_service", None) is not None
+    tenant_storage_configured = bool(getattr(app.state, "tenant_data_path", None))
+    conversation_service = getattr(app.state, "conversation_service", None)
+    provider_configured = bool(
+        conversation_service is not None
+        and getattr(conversation_service, "is_configured", False)
+    )
+    hosted_login_settings = ("ATLAS_OIDC_CLIENT_ID", "ATLAS_OIDC_REDIRECT_URI")
+    hosted_login_configured = all(os.getenv(name) for name in hosted_login_settings)
+
+    checks = {
+        "verified_api_identity": identity_configured,
+        "hosted_browser_login_configuration": hosted_login_configured,
+        "tenant_data_storage": tenant_storage_configured,
+        "reasoning_provider_configured": provider_configured,
+        # A configured URL/key does not prove that a live round trip works.
+        "live_provider_round_trip_verified": False,
+    }
+    blockers = [name for name, passed in checks.items() if not passed]
+    return {
+        "status": "ready_for_release_review" if not blockers else "not_ready",
+        "checks": checks,
+        "blockers": blockers,
+        "execution_enabled": False,
+        "note": (
+            "Configuration presence is not a live service test. A human must "
+            "verify a real provider conversation, hosted sign-in and deployment "
+            "security before release."
+        ),
+    }
+
+
 @app.get("/identity/me")
 def identity_me(principal=Depends(require_verified_principal)):
     """Return the authenticated tenant principal for integration diagnostics."""
@@ -296,6 +366,41 @@ def identity_me(principal=Depends(require_verified_principal)):
         "subject": principal.subject,
         "tenant_id": principal.tenant_id,
         "scopes": sorted(principal.scopes),
+    }
+
+
+@app.get("/identity/login-readiness")
+def identity_login_readiness():
+    """Expose non-secret deployment readiness for hosted OIDC login.
+
+    This diagnostic never returns provider endpoints, client credentials,
+    tokens, tenant membership, or permission data.
+    """
+    verifier_settings = (
+        "ATLAS_OIDC_ISSUER",
+        "ATLAS_OIDC_AUDIENCE",
+        "ATLAS_OIDC_JWKS_URI",
+        "ATLAS_OIDC_ALLOWED_ALGORITHMS",
+        "ATLAS_MEMBERSHIP_DB_PATH",
+    )
+    hosted_login_settings = (
+        "ATLAS_OIDC_CLIENT_ID",
+        "ATLAS_OIDC_REDIRECT_URI",
+    )
+    missing_verifier = [name for name in verifier_settings if not os.getenv(name)]
+    missing_login = [name for name in hosted_login_settings if not os.getenv(name)]
+    return {
+        "status": "ready" if not missing_verifier and not missing_login else "not_configured",
+        "api_verifier": {
+            "configured": not missing_verifier,
+            "missing_settings": missing_verifier,
+        },
+        "hosted_login": {
+            "configured": not missing_login,
+            "missing_settings": missing_login,
+            "flow": "authorization_code_pkce",
+        },
+        "note": "This endpoint reports configuration presence only; it does not authenticate users.",
     }
 
 
