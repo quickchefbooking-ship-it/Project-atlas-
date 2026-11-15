@@ -148,6 +148,34 @@ class TenantEvaluationRepository:
             ).fetchone()
         return self._decode(row)
 
+    def summary(self) -> dict[str, Any]:
+        """Return bounded aggregate counts; never exposes notes or evidence content."""
+        self._authorize("evaluations:read")
+        rows = self.db.execute(
+            """SELECT outcome, COUNT(*) AS total
+               FROM tenant_professor_evaluations
+               WHERE tenant_id=? AND owner_key=?
+               GROUP BY outcome ORDER BY outcome""",
+            (self.principal.tenant_id, self.owner_key),
+        ).fetchall()
+        counts = {outcome: 0 for outcome in sorted(VALID_OUTCOMES)}
+        for row in rows:
+            counts[row["outcome"]] = int(row["total"])
+        total = sum(counts.values())
+        rated = self.db.execute(
+            """SELECT COUNT(*) AS total, AVG(rating) AS average
+               FROM tenant_professor_evaluations
+               WHERE tenant_id=? AND owner_key=? AND rating IS NOT NULL""",
+            (self.principal.tenant_id, self.owner_key),
+        ).fetchone()
+        return {
+            "total": total,
+            "outcomes": counts,
+            "rated_count": int(rated["total"]),
+            "average_rating": round(float(rated["average"]), 2) if rated["average"] is not None else None,
+            "interpretation": "Descriptive feedback only; not a verified measure of correctness or permission to change behaviour.",
+        }
+
     def list(self, *, limit: int = 50, subject_type: str | None = None,
              subject_id: str | None = None) -> tuple[EvaluationRecord, ...]:
         self._authorize("evaluations:read")
