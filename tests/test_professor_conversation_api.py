@@ -124,16 +124,13 @@ def test_two_turn_chat_passes_prior_messages_back_to_professor_and_verifies_audi
     # Inspect the answer call for turn two: it must receive the full bounded
     # history, not just the latest message.
     second_turn_answer = provider.calls[-1]
-    user_messages = [
-        (item.role, item.content)
-        for item in second_turn_answer.messages
-        if item.role in ("user", "assistant")
-    ]
-    assert user_messages == [
-        ("user", "My project is called AtlasOnePro."),
-        ("assistant", "Professor received: My project is called AtlasOnePro."),
-        ("user", "What is the name of my project?"),
-    ]
+    # Prior turns are supplied as bounded context in the answer-stage
+    # system prompt; the latest message remains the final user message.
+    assert second_turn_answer.messages[-1].role == "user"
+    assert second_turn_answer.messages[-1].content == "What is the name of my project?"
+    system_prompt = second_turn_answer.messages[0].content
+    assert "user: My project is called AtlasOnePro." in system_prompt
+    assert "assistant: Professor received: My project is called AtlasOnePro." in system_prompt
 
     trace = client.get(f"/professor/conversations/{conversation_id}/trace")
     assert trace.status_code == 200
