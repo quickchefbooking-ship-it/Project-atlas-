@@ -47,7 +47,7 @@ class FixtureProvider:
             text = '{"steps":[{"step_id":"research","objective":"Frame the research request"}]}'
         else:
             prompt = conversation.messages[0].content
-            evidence_ids = re.findall(r'"document_id"\\s*:\\s*"([^"]+)"', prompt)
+            evidence_ids = re.findall(r'"document_id"\s*:\s*"([^"]+)"', prompt)
             citations = " ".join(evidence_ids)
             text = (
                 "Research this safely. The research is bounded and no external "
