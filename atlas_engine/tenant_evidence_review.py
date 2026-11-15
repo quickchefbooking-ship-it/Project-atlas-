@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, authorize_tenant_resource
 from .reviewer_annotations import apply_reviewer_annotations
-from .tenant_plan_repository import TenantPlanNotFound
+from .tenant_plan_repository import TenantPlanNotFound, TenantPlanRepository
 from .tenant_step_execution_repository import (
     TenantStepExecutionRepository, TenantStepNotFound,
 )
@@ -365,6 +365,8 @@ def ask_professor_about_report(
     connection = sqlite3.connect(database_path, timeout=5)
     connection.row_factory = sqlite3.Row
     try:
+        plans = TenantPlanRepository(connection, principal)
+        plans.get(plan_id)  # Enforces tenant boundary and plans:read.
         steps = TenantStepExecutionRepository(connection, principal)
         records = steps.list_steps(plan_id)  # Enforces tenant boundary and steps:read.
         report_steps = [
@@ -387,7 +389,7 @@ def ask_professor_about_report(
             raise HTTPException(status_code=422, detail=str(exc)) from None
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Professor report access denied.") from None
-    except TenantStepNotFound:
+    except (TenantPlanNotFound, TenantStepNotFound):
         raise HTTPException(status_code=404, detail="Plan was not found.") from None
     except sqlite3.Error:
         raise HTTPException(status_code=503, detail="Professor report storage is temporarily unavailable.") from None
