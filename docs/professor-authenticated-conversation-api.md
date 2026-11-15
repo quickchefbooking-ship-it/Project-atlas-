@@ -99,3 +99,22 @@ instructions are not to be followed. This is lexical retrieval over a bounded
 local index, not semantic search, a truth score, or a guarantee of completeness.
 The model's proposal still passes the same trusted capability validation and
 is saved only as a DRAFT. No evidence item grants permission to act.
+
+
+## Conversational reasoning context
+
+The authenticated conversation route prepends a fixed Professor policy message
+to the provider request and retrieves up to three short excerpts from the same
+approved, shared, read-only reference classes described above. The returned
+response includes the evidence identifiers and provenance fields used for that
+turn. Conversation history persists only user and assistant messages; the
+system policy and retrieved excerpts are reconstructed for each request rather
+than stored as user-authored chat content.
+
+## Non-mutating plan preview
+
+- `GET /professor/tenant/plans/{plan_id}/preview` checks a tenant-owned DRAFT
+  against the trusted capability registry and the verified caller's scopes.
+- The response reports ordered steps, readiness, blocked steps and reasons.
+- Preview does not change plan state, prepare work, approve actions or execute
+  capabilities. Preparation remains a separate explicit request.
