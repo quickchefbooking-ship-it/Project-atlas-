@@ -69,7 +69,6 @@ def professor_conversation(
                 ConversationMessage(item.role, item.content)
                 for item in prior.messages
             )
-        repository.append(conversation_id, "user", payload.message)
         conversation = build_conversation_input(
             conversation_id=conversation_id,
             user_id=principal.subject,
@@ -77,6 +76,7 @@ def professor_conversation(
             latest_user_message=payload.message,
         )
         result = service.respond(conversation)
+        repository.append(conversation_id, "user", payload.message)
         repository.append(conversation_id, "assistant", result.text)
         return {
             "conversation_id": conversation_id,
