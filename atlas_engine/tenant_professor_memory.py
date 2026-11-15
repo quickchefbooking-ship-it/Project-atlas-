@@ -82,10 +82,6 @@ def initialize_tenant_memory_schema(db: sqlite3.Connection) -> None:
       BEFORE UPDATE ON tenant_professor_memory_decisions BEGIN
       SELECT RAISE(ABORT,'memory decision history is append-only');
     END;
-    CREATE TRIGGER IF NOT EXISTS professor_memory_decisions_no_delete
-      BEFORE DELETE ON tenant_professor_memory_decisions BEGIN
-      SELECT RAISE(ABORT,'memory decision history is append-only');
-    END;
     """)
 
 
