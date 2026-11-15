@@ -299,7 +299,7 @@ def professor_voice_ui():
     )
 
 
-@app.get("/professor/sources", include_in_schema=False)
+@app.get("/professor/chat", include_in_schema=False)\ndef professor_chat_ui():\n    """Serve the authenticated browser-first Professor conversation workspace."""\n    return FileResponse(\n        Path(__file__).resolve().parent / "static" / "professor_chat.html",\n        media_type="text/html",\n    )\n\n\n@app.get("/professor/sources", include_in_schema=False)
 def professor_sources_ui():
     """Serve the static Source Division operator interface; data remains API-key protected."""
     return FileResponse(Path(__file__).resolve().parent / "static" / "professor_sources.html", media_type="text/html")
