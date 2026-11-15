@@ -116,3 +116,11 @@ def test_preparation_can_disable_evidence_retrieval():
     )
     assert prepared.frame.reasoning_ready is True
     assert prepared.evidence == ()
+
+
+def test_simple_greeting_is_ready_for_conversational_response():
+    from atlas_engine.cognitive_kernel import frame_task
+
+    frame = frame_task(CognitiveRequest(task="Hello"))
+    assert frame.reasoning_ready is True
+    assert frame.open_questions == ()
