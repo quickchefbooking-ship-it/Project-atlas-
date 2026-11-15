@@ -63,6 +63,21 @@ def execute_next_tenant_professor_step(
             )
         elif plan.state is not PlanState.RUNNING:
             raise HTTPException(status_code=409, detail="Plan is not in a runnable state.")
+        else:
+            # Check the next dependency-ready step before claim_next_step: the
+            # repository also enforces step scopes, and would otherwise surface
+            # a revoked capability scope as a generic conflict (409). Stop the
+            # plan with an explicit authorization response before any handler
+            # can be invoked. The post-claim check below remains defence in depth.
+            preview = preview_plan(plan, runtime.registry, granted_scopes=principal.scopes)
+            if preview.blocked_step_ids:
+                plans.transition(
+                    plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Required capability permissions are no longer available; the plan has been stopped.",
+                )
 
         worker_id = _worker_id(principal)
         lease = steps.claim_next_step(plan_id, worker_id, lease_seconds=60)
