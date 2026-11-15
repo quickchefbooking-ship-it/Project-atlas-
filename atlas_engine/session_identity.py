@@ -7,6 +7,7 @@ routes or cookie handling; those require the separate browser/CSRF integration s
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import sqlite3
 import uuid
@@ -98,9 +99,13 @@ class SQLiteSessionRepository:
                     absolute_expires_at TEXT NOT NULL,
                     revoked_at TEXT,
                     rotated_to_session_id TEXT,
+                    csrf_token_hash TEXT,
                     FOREIGN KEY(account_id) REFERENCES atlas_accounts(account_id)
                 )
             """)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(atlas_sessions)")}
+            if "csrf_token_hash" not in columns:
+                conn.execute("ALTER TABLE atlas_sessions ADD COLUMN csrf_token_hash TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_atlas_sessions_account ON atlas_sessions(account_id, revoked_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_atlas_sessions_expiry ON atlas_sessions(idle_expires_at, absolute_expires_at)")
             conn.commit()
@@ -181,6 +186,74 @@ class SQLiteSessionRepository:
         except Exception:
             conn.rollback()
             raise
+        finally:
+            conn.close()
+
+
+    def issue_csrf_token(self, session_token: str) -> str:
+        """Create a session-bound synchronizer token; only its digest is persisted."""
+        session_digest = _digest(session_token)
+        csrf_token = secrets.token_urlsafe(32)
+        csrf_digest = hashlib.sha256(csrf_token.encode("utf-8")).hexdigest()
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT s.session_id,s.idle_expires_at,s.absolute_expires_at,a.status
+                   FROM atlas_sessions s JOIN atlas_accounts a ON a.account_id=s.account_id
+                   WHERE s.token_hash=? AND s.revoked_at IS NULL
+                     AND s.rotated_to_session_id IS NULL""",
+                (session_digest,),
+            ).fetchone()
+            now = _now()
+            if row is None or row["status"] != "active":
+                raise InvalidSession("Session is invalid or expired.")
+            try:
+                idle = datetime.fromisoformat(row["idle_expires_at"])
+                absolute = datetime.fromisoformat(row["absolute_expires_at"])
+            except (TypeError, ValueError):
+                raise InvalidSession("Session is invalid or expired.") from None
+            if idle.tzinfo is None or absolute.tzinfo is None or idle <= now or absolute <= now:
+                raise InvalidSession("Session is invalid or expired.")
+            conn.execute("UPDATE atlas_sessions SET csrf_token_hash=? WHERE session_id=?",
+                         (csrf_digest, row["session_id"]))
+            conn.commit()
+            return csrf_token
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def validate_csrf_token(self, session_token: str, csrf_token: str) -> bool:
+        """Constant-time verify a CSRF token against its owning live session."""
+        session_digest = _digest(session_token)
+        if not isinstance(csrf_token, str) or not 40 <= len(csrf_token) <= 256:
+            return False
+        supplied = hashlib.sha256(csrf_token.encode("utf-8")).hexdigest()
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """SELECT s.csrf_token_hash,s.revoked_at,s.rotated_to_session_id,
+                          s.idle_expires_at,s.absolute_expires_at,a.status
+                   FROM atlas_sessions s JOIN atlas_accounts a ON a.account_id=s.account_id
+                   WHERE s.token_hash=?""",
+                (session_digest,),
+            ).fetchone()
+            if (row is None or row["csrf_token_hash"] is None
+                    or row["revoked_at"] is not None
+                    or row["rotated_to_session_id"] is not None
+                    or row["status"] != "active"):
+                return False
+            try:
+                idle = datetime.fromisoformat(row["idle_expires_at"])
+                absolute = datetime.fromisoformat(row["absolute_expires_at"])
+            except (TypeError, ValueError):
+                return False
+            now = _now()
+            if idle.tzinfo is None or absolute.tzinfo is None or idle <= now or absolute <= now:
+                return False
+            return hmac.compare_digest(row["csrf_token_hash"], supplied)
         finally:
             conn.close()
 
