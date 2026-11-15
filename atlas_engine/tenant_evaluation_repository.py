@@ -124,10 +124,13 @@ class TenantEvaluationRepository:
             allowed = {"document_id", "url", "content_sha256"}
             if set(item) - allowed:
                 raise ValueError("Evidence may contain only provenance references.")
-            clean_evidence.append({
-                key: self._validate_reference(value, key)
-                for key, value in item.items()
-            })
+            clean_item = {}
+            for key, value in item.items():
+                maximum = 1_000 if key == "url" else (64 if key == "content_sha256" else MAX_REFERENCE_CHARS)
+                if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+                    raise ValueError(f"{key} must be a non-empty string of at most {maximum} characters.")
+                clean_item[key] = value.strip()
+            clean_evidence.append(clean_item)
         encoded = json.dumps(clean_evidence, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
         if len(encoded.encode("utf-8")) > MAX_PAYLOAD_BYTES:
             raise ValueError("Evidence references exceed the storage limit.")
