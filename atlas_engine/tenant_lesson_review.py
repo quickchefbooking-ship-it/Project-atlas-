@@ -49,7 +49,7 @@ class TenantLessonReviewRepository:
         self._auth("lessons:approve")
         if decision not in {"approved","rejected"}: raise ValueError("Decision must be approved or rejected.")
         if not isinstance(rationale,str) or len(rationale)>1000: raise ValueError("Rationale must be at most 1000 characters.")
-        row=self.db.execute("SELECT * FROM tenant_lesson_candidates WHERE candidate_id=? AND tenant_id=? AND owner_key=?",(candidate_id,self.p.tenant_id,self.key)).fetchone()
+        row=self.db.execute("SELECT * FROM tenant_lesson_candidates WHERE candidate_id=? AND tenant_id=?",(candidate_id,self.p.tenant_id)).fetchone()
         if row is None: raise LookupError("Lesson candidate not found.")
         if row["proposer_key"]==self.key: raise PermissionError("A different reviewer must decide this proposal.")
         latest=self.db.execute("SELECT decision FROM tenant_lesson_candidate_decisions WHERE candidate_id=? ORDER BY decision_id DESC LIMIT 1",(candidate_id,)).fetchone()
@@ -60,5 +60,5 @@ class TenantLessonReviewRepository:
     def list(self, limit=50):
         self._auth("lessons:read")
         if type(limit) is not int or not 1<=limit<=100: raise ValueError("limit must be 1-100.")
-        rows=self.db.execute("""SELECT c.*, (SELECT d.decision FROM tenant_lesson_candidate_decisions d WHERE d.candidate_id=c.candidate_id ORDER BY d.decision_id DESC LIMIT 1) AS status FROM tenant_lesson_candidates c WHERE c.tenant_id=? AND c.owner_key=? ORDER BY c.candidate_id DESC LIMIT ?""",(self.p.tenant_id,self.key,limit)).fetchall()
+        rows=self.db.execute("""SELECT c.*, (SELECT d.decision FROM tenant_lesson_candidate_decisions d WHERE d.candidate_id=c.candidate_id ORDER BY d.decision_id DESC LIMIT 1) AS status FROM tenant_lesson_candidates c WHERE c.tenant_id=? ORDER BY c.candidate_id DESC LIMIT ?""",(self.p.tenant_id,limit)).fetchall()
         return [{"candidate_id":r["candidate_id"],"title":r["title"],"lesson_text":r["lesson_text"],"evaluation_ids":json.loads(r["evaluation_ids_json"]),"status":r["status"] or "pending","created_at":r["created_at"],"runtime_promotion":"disabled"} for r in rows]
