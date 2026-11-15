@@ -7,6 +7,8 @@ def test_professor_chat_page_uses_verified_bearer_api_without_persisting_token()
 
     assert 'Authorization:"Bearer "+token' in html
     assert 'request("/identity/me")' in html
+    assert 'fetch("/identity/login-readiness")' in html
+    assert "Hosted organisation sign-in is the target." in html
     assert '"conversations:read"' in html
     assert '"conversations:write"' in html
     assert '"/professor/conversation"' in html
