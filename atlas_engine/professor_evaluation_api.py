@@ -42,8 +42,13 @@ def create_professor_evaluation(payload: EvaluationInput, request: Request,
             conversations = TenantConversationRepository(db, principal)
             conversations.get(payload.subject_id, limit=1)
         elif payload.subject_type == "plan":
-            from .tenant_plan_repository import TenantPlanRepository
-            TenantPlanRepository(db, principal).get(payload.subject_id)
+            from .tenant_plan_repository import TenantPlanNotFound, TenantPlanRepository
+            try:
+                TenantPlanRepository(db, principal).get(payload.subject_id)
+            except TenantPlanNotFound:
+                raise HTTPException(status_code=404, detail="Plan was not found.") from None
+        else:
+            raise HTTPException(status_code=422, detail="Task evaluations are not exposed until task ownership is tenant-scoped.")
         record = repository.record(
             subject_type=payload.subject_type, subject_id=payload.subject_id,
             outcome=payload.outcome, rating=payload.rating, note=payload.note,
