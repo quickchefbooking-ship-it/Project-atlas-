@@ -12,7 +12,7 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - Structured decomposition validates step IDs, dependencies and cycles. It is a proposal only; execution is always disabled.
 - Deterministic critique checks visible goal coverage, declared constraints, evidence-document citations and approval boundaries before delivery.
 - The two-pass reasoning pipeline asks the explicitly configured provider for a bounded JSON decomposition, validates its structure, then requests an answer and applies the critique gate.
-- The authenticated Professor chat endpoint now routes through this cognitive pipeline and includes bounded prior conversation context. Held answers are not represented as completed external actions.
+- The authenticated Professor chat endpoint now routes through this cognitive pipeline and includes bounded prior conversation context. Held answers are not represented as completed external actions.\n- Tenant-scoped audit records now include bounded decision metadata: pipeline status, step count, critique acceptance, lexical goal coverage, action boundary and the permanently disabled execution flag. Metadata is hash-chained with the audit record; legacy records remain verifiable.
 
 ## Important limitations
 
