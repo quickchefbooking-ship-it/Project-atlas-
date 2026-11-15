@@ -5,7 +5,7 @@ AtlasOnePro is the wider platform. The **Professor** is its central reasoning an
 ## Current prototype capabilities
 
 - FastAPI service and public health checks
-- Task creation and local, restricted arithmetic execution
+- Task creation, restricted local arithmetic, and a tenant-scoped bounded Professor capability path for read-only scholarly research and evidence reporting
 - Deterministic success-criteria evaluation
 - SQLite persistence for tasks, evaluations, lessons and proposals
 - Human-reviewed improvement proposals
@@ -51,6 +51,10 @@ Example:
 The API key is a shared-secret development control, not per-user identity, role-based authorization or multi-tenant authentication. The approved_by proposal field is caller-supplied audit metadata, not independently verified identity. Do not expose this prototype as a public multi-user service.
 
 Media output paths are constrained to ATLAS_MEDIA_OUTPUT_DIR. Path traversal and symlink escapes are rejected by the media generator.
+
+## Professor capability execution
+
+The repository includes a narrow, verified-identity and tenant-scoped `execute-next` route. It can invoke only application-owned registered handlers after plan readiness, capability scope checks and JSON Schema validation. The current built-in vertical slice includes bounded local arithmetic and read-only Crossref scholarly metadata retrieval, followed by evidence bundling, evaluation and report generation. This is not a general plugin runner: external writes, privileged actions, arbitrary code, task-supplied handlers and unattended dispatch remain unavailable. Crossref network work currently runs in-process and is not a substitute for an isolated worker. See [the capability execution boundary](docs/professor-capability-execution-boundary.md).
 
 ## Architecture
 

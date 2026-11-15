@@ -53,10 +53,11 @@ Implemented:
 - Tests cover retry policy validation, capability evidence, fake-provider duplicate suppression, cancellation idempotency/races/fencing, restart persistence, expired/late requests, retry schedule eligibility, due-time gating, concurrent claims, attempt ceilings, expiry, terminal outcomes and scheduled-retry cancellation.
 
 Current limits:
-- The application-owned immutable capability registry is metadata-only. No planner, runtime schema validator, capability-handler invocation or unattended scheduler/dispatcher is wired into orchestration.
+- The capability runtime is deliberately narrow, not a general plugin system. The current one-step route can execute only the five application-owned built-in handlers described above; there is no generic planner-to-handler binding, dynamic plugin loading or unattended scheduler/dispatcher.
 - The bounded local executor has a cooperative 30-second monotonic per-attempt deadline and a 128-node AST complexity cap. There is no hard termination mechanism for uninterruptible work or future external capabilities.
-- The existing local executor remains single-attempt and is not opted in; retry scheduling is an internal primitive only.
-- Cancellation checkpoints are suitable only for the bounded synchronous local executor. Future long-running or external capabilities require their own safe-point and side-effect reconciliation contracts.
+- The existing local task executor remains single-attempt and is not opted in; retry scheduling is an internal primitive only.
+- The current Crossref read-only handler performs bounded network I/O in-process. Its transport timeout is not a hard process-kill boundary; do not add further network or credential-bearing handlers until isolation, destination controls and resource termination are proven.
+- The capability execution route is manually invoked one step at a time. It is not an autonomous scheduler and must not be described as one.
 - Shared API-key authentication and caller-supplied actor labels are not verified per-user identity or RBAC.
 
 At code head `5fda244649fd32b6d6a2875c8402ae35a2c0d262`, both [PR workflow](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/43402285254) and [push workflow](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/43402277024) passed **211 tests** with one non-blocking Starlette/AnyIO deprecation warning. Coverage also includes bounded task intake and validation responses that omit request values.
@@ -71,13 +72,14 @@ Acceptance gates:
 
 ## Phase 3 — Professor capability registry and specialist arms
 
-**Status: metadata-only registry prototype implemented; runtime validation, capability execution and specialist arms remain planned.**
+**Status: registry, pinned schema validation and a narrow tenant-scoped execution vertical slice implemented; general specialist routing and isolated external adapters remain planned.**
 
 Deliverables:
 - Delivered: application-owned, immutable, versioned capability definitions with input/output schema metadata, scopes, risk class, side-effect declaration, timeout, approval policy and retry-contract matching. Remote schema references and mutable schema metadata are rejected.
-- Remaining: add a pinned runtime JSON Schema validator and a planner that selects only registered capabilities and validates inputs/outputs.
-- Bind each approved capability to a narrowly scoped application-owned handler; enforce identity, tenant and scope checks at the execution boundary.
-- Begin with local computation and read-only Source Division research.
+- Delivered: Draft 2020-12 JSON Schema syntax checks at registration and bounded runtime input/output validation; payloads are finite JSON objects with a 64-KiB cap and errors do not echo untrusted values.
+- Delivered: fixed application-owned handler bindings and a tenant-scoped one-step execution route protected by verified identity, `plans:execute`, registered capability scopes, plan readiness and exact capability version.
+- Delivered vertical slice: bounded local arithmetic; read-only Crossref scholarly search; evidence bundling, deterministic evidence evaluation and Professor report generation. No task-supplied handler registration or arbitrary code execution.
+- Remaining: add a separately enforced global execution kill switch, improve independent evidence verification, and move any network-capable or credential-bearing adapter behind a separately isolated worker before expanding network access.
 - Add specialist arms incrementally: knowledge/research, media, HR/operations and communications drafts.
 - Keep email sending, social publishing, payments, trading, purchasing and deletion disabled or approval-gated until later security gates pass.
 
@@ -129,7 +131,7 @@ Acceptance gates:
 
 1. Complete a focused review of the Phase 1/2 combined diff, especially cancellation-versus-completion ordering, retry due/deadline claims, expired lease recovery, and task/evaluation/attempt transaction boundaries.
 2. Keep the shared API-key limitation explicit: actor labels and capability evidence references are not verified identity or independent proof; this prototype is not suitable for public multi-user use.
-3. Keep the capability registry metadata-only until test-evidence verification, pinned runtime schema validation, handler binding and identity/tenant/scope enforcement are independently testable. Task input must never register or modify capabilities.
+3. Keep the existing capability catalogue application-owned and closed to task registration. Before adding another handler, independently verify evidence references, add a global execution kill switch, and prove identity/tenant/scope enforcement and output validation on the exact execution path.
 4. Only after registry verification is enforceable, design a disabled-by-default due-work scheduler with explicit operational controls and restart/concurrency tests. Existing due-time claim gates remain manual and do not auto-dispatch work.
 5. Revisit per-attempt timeout semantics only with an executor that can stop safely or prove side-effect reconciliation; do not imply a thread timeout can undo work.
 6. Continue persistent-memory/evaluation regression coverage and record exact PR/push CI evidence after each meaningful change. Do not enable runtime capability invocation or specialist arms until the Phase 2 gates and Phase 3 security/contract gates pass.
