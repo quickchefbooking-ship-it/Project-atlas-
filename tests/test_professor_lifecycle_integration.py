@@ -181,6 +181,11 @@ def test_professor_lifecycle_keeps_preview_feedback_and_lessons_separate(tmp_pat
     assert trace.status_code == 200
     payload = trace.json()
     assert len(payload["reasoning_audit"]) == 1
+    trace_metadata = payload["reasoning_audit"][0]["metadata"]
+    assert trace_metadata["status"] == "ready"
+    assert trace_metadata["step_count"] == 1
+    assert trace_metadata["critique_accepted"] is True
+    assert trace_metadata["execution_enabled"] is False
     assert payload["audit_verification"]["valid"] is True
     assert payload["evaluations"][0]["evaluation_id"] == evaluation_id
     assert payload["learning_policy"].startswith("Feedback is review evidence only")
