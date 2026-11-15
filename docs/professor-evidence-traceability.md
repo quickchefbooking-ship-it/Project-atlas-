@@ -57,9 +57,17 @@ This identity gate already existed before the current locator work. It authentic
 
 The locator is relative to the stored HTML snapshot and may change in a later version. It does not resolve a live page, prove claim support, or authenticate the source publisher. PDF page-coordinate resolution remains outstanding; no PDF parser dependency has been added or selected. The resolver is not yet integrated into the authenticated Professor research/report route.
 
+## Tenant-owned source snapshot boundary — draft implementation
+
+A further draft adds `atlas_engine/tenant_approved_sources.py` and initializes its schema in the separate tenant data database. It stages immutable source snapshots under a compound `(tenant_id, document_id)` key, records the staging principal, bounds source text and metadata, accepts only HTTPS source URIs, and keeps new records pending by default. Approval/rejection is a one-way pending-to-reviewed decision with server-derived reviewer attribution. Approved lookup always requires both the authenticated tenant ID and document ID; a document ID from another tenant returns no record. Snapshot content/provenance cannot be updated or deleted through normal SQLite operations.
+
+This is a repository/schema foundation only. It is not yet exposed as an authenticated ingestion or approval HTTP workflow, and the new tenant source table is not yet connected to the evidence-review endpoint or HTML locator. The legacy global source store remains separate and must not be treated as tenant-owned. SQLite triggers are integrity controls, not tamper-proof storage against an administrator with database-file access. PDF content may be staged as metadata, but no PDF extraction is implemented.
+
+Tests cover pending-by-default, approval and rejection, reviewer spoofing/repeated decisions, cross-tenant lookup isolation, unsafe URI rejection, digest linkage, and snapshot immutability.
+
 ## Next verification gates
 
-1. Integrate approved-source binding and HTML locator resolution into the authenticated tenant evidence-review workflow, with tenant ownership checks for every source document.
+1. Add authenticated tenant source-ingestion and approval routes using verified principal attribution, then integrate tenant-owned approved-source lookup and HTML locator resolution into the evidence-review workflow.
 2. Add PDF page/paragraph/table locator resolution after selecting and reviewing a maintained parser dependency and its security/supply-chain implications.
 3. Extend source-ingestion approval so reviewer identity is derived from the verified principal, not the current free-form source-ingestion reviewer label.
 4. Add independent reviewer workflow, disagreement/correction/supersession history and tenant scoping.
