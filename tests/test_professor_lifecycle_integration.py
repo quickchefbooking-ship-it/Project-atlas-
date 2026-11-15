@@ -42,7 +42,7 @@ class FixtureProvider:
     name = "integration-fixture"
 
     def respond(self, conversation):
-        if "structured reasoning decomposition" in conversation.messages[-1].content.lower():
+        if "decomposition now" in conversation.messages[-1].content.lower():
             text = '{"steps":[{"step_id":"research","objective":"Frame the research request"}]}'
         else:
             text = "Research this safely. The research is bounded and no external actions were taken."
