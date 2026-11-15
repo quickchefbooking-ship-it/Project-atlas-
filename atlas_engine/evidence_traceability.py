@@ -22,7 +22,7 @@ _RELATIONS = {"supports", "challenges", "mentions"}
 
 def _required_text(value: Any, field: str, maximum: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(f"{field} must be non-empty text of at most {maximum} characters.")
+        raise ValueError(f"{field} must be non-empty text of at most {maximum:,} characters.")
     return value.strip()
 
 
