@@ -29,8 +29,12 @@ class EchoProvider:
     def respond(self, conversation):
         self.seen = conversation
         last = conversation.messages[-1].content
+        if "structured decomposition" in last.lower():
+            text = '{"steps":[{"step_id":"answer","objective":"Answer the user"}]}'
+        else:
+            text = f"Professor received: {last}"
         return ConversationOutput(
-            text=f"Professor received: {last}",
+            text=text,
             provider="test-echo",
             model="fixture-v1",
         )
@@ -174,8 +178,12 @@ def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp
         name = "test-long"
 
         def respond(self, conversation):
+            if "structured decomposition" in conversation.messages[-1].content.lower():
+                text = '{"steps":[{"step_id":"answer","objective":"Answer the user"}]}'
+            else:
+                text = "x" * 4001
             return ConversationOutput(
-                text="x" * 4001,
+                text=text,
                 provider="test-long",
                 model="fixture-v1",
             )
