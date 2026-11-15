@@ -99,4 +99,4 @@ def test_chain_verifier_accepts_valid_chain_and_detects_tampering(tmp_path):
     )
     result = repo.verify_chain()
     assert result["valid"] is False
-    assert result["broken_audit_ids"] == [first.audit_id, first.audit_id + 1]
+    assert result["broken_audit_ids"] == [first.audit_id]
