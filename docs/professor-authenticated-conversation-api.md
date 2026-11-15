@@ -177,3 +177,13 @@ separate human-reviewed workflow with provenance and a reversible change log.
 - `GET /professor/conversations/{conversation_id}/trace` provides one read-only view of the owned conversation messages, its audit records, chain verification and any conversation feedback the caller is authorized to read. Feedback is omitted with an availability flag when the caller lacks `evaluations:read`.
 - SQLite triggers prevent updates and deletes. Hash chaining makes alteration detectable when the chain is independently verified; it is not a substitute for externally anchored tamper-evident storage, backups, or production-grade audit retention.
 - The trace records what the application supplied to the provider, not proof that a model internally attended to or correctly used each item. No automatic learning or execution authority is created.
+
+
+## Browser-first Professor chat workspace
+
+- `GET /professor/chat` serves the mobile-first browser conversation interface.
+- The page accepts a short-lived OIDC bearer access token issued by the deployment's identity provider. The token is held only in page memory and cleared when the user disconnects or reloads; it is not written to browser storage or sent in a URL.
+- The page calls the authenticated conversation, list, read, delete and unified trace routes using the `Authorization: Bearer` header. It does not use the legacy API-key field or trust client-supplied tenant/scope values.
+- The page can list and reopen saved conversations, start a new conversation, send turns, inspect the read-only trace and explicitly delete a conversation.
+- This is a browser client, not an identity provider or login system. A deployment must provide a secure OIDC sign-in flow and issue appropriately scoped access tokens before general users can use it. Do not paste tokens into shared devices.
+- A missing identity configuration, tenant database, required scope or reasoning provider is shown as an API error; the page does not fabricate model responses.
