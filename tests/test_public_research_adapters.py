@@ -322,3 +322,47 @@ def test_authenticated_crossref_search_stages_pending_records(monkeypatch, tmp_p
     assert response.json()["documents"][0]["state"] == "pending"
     assert response.json()["documents"][0]["source_id"] == "crossref-public"
     assert storage.get_source("crossref-public") is not None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.github.com/repos/octocat/Hello-World",
+        "https://huggingface.co/api/models/open-model/demo",
+        "https://huggingface.co/api/datasets/open-model/demo",
+        "https://api.crossref.org/works?rows=3",
+    ],
+)
+def test_json_destination_policy_accepts_only_registered_public_endpoints(url):
+    from atlas_engine.public_research_adapters import _validate_json_endpoint
+    _validate_json_endpoint(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.github.com/repos/octocat/Hello-World",
+        "https://evil.example/repos/octocat/Hello-World",
+        "https://127.0.0.1/repos/octocat/Hello-World",
+        "https://api.github.com:8443/repos/octocat/Hello-World",
+        "https://user:secret@api.github.com/repos/octocat/Hello-World",
+        "https://api.github.com/repos/../admin",
+        "https://api.github.com/repos/%2e%2e/admin",
+        "https://api.github.com/users/octocat",
+        "https://huggingface.co/api/spaces/open-model/demo",
+        "https://api.crossref.org/works/../admin",
+        "https://api.crossref.org.evil.example/works",
+    ],
+)
+def test_json_destination_policy_rejects_unapproved_origins_and_paths(monkeypatch, url):
+    from atlas_engine.public_research_adapters import _get_json
+
+    def unexpected_network_call(_request):
+        pytest.fail("An unapproved destination must be rejected before network access.")
+
+    monkeypatch.setattr(
+        "atlas_engine.public_research_adapters._open_without_redirect",
+        unexpected_network_call,
+    )
+    with pytest.raises(PublicSourceError, match="approved destination policy"):
+        _get_json(url)
