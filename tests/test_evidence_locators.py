@@ -115,3 +115,27 @@ def test_oversized_html_and_excerpt_are_rejected(monkeypatch, tmp_path):
         resolve_approved_html_excerpt(
             source_document_id=document["id"], excerpt="x" * 2_001
         )
+
+
+
+def test_html_locator_normalizes_whitespace_and_nested_inline_text():
+    blocks = extract_html_blocks(
+        "<html><body><p>The <strong>published</strong>   analysis "
+        "found an association.</p></body></html>"
+    )
+    assert blocks[0]["text"] == "The published analysis found an association."
+
+
+def test_html_locator_rejects_non_https_source_uri(monkeypatch, tmp_path):
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "http-source.sqlite"))
+    storage.init_db()
+    register_source("html-research", "HTML Research", "manual_import")
+    document = ingest_document(
+        "html-research", "HTTP source", "http://example.org/research",
+        "<p>Some research.</p>", metadata={"content_type": "text/html"},
+    )
+    review_document(document["id"], "approved", "reviewer-label")
+    with pytest.raises(ValueError, match="absolute HTTPS"):
+        resolve_approved_html_excerpt(
+            source_document_id=document["id"], excerpt="Some research."
+        )
