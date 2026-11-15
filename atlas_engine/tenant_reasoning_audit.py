@@ -136,7 +136,7 @@ class TenantReasoningAuditRepository:
                 (self.principal.tenant_id, self.owner_key),
             ).fetchone()
             previous_hash = previous["record_hash"] if previous else "0" * 64
-            canonical = json.dumps({
+            canonical_data = {
                 "tenant_id": self.principal.tenant_id,
                 "owner_key": self.owner_key,
                 "conversation_id": conversation_id,
@@ -144,8 +144,11 @@ class TenantReasoningAuditRepository:
                 "response_sha256": response_hash,
                 "context_sha256": context_hash,
                 "provider": provider, "model": model,
-                "evidence": safe_evidence, "metadata": safe_metadata, "previous_hash": previous_hash,
-            }, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+                "evidence": safe_evidence, "previous_hash": previous_hash,
+            }
+            if safe_metadata:
+                canonical_data["metadata"] = safe_metadata
+            canonical = json.dumps(canonical_data, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
             record_hash = self.digest(canonical)
             cur = self.db.execute(
                 """INSERT INTO tenant_professor_reasoning_audit
@@ -204,7 +207,7 @@ class TenantReasoningAuditRepository:
             try:
                 evidence = json.loads(row["evidence_json"])
                 metadata = json.loads(row["metadata_json"])
-                canonical = json.dumps({
+                canonical_data = {
                     "tenant_id": row["tenant_id"],
                     "owner_key": row["owner_key"],
                     "conversation_id": row["conversation_id"],
@@ -212,8 +215,11 @@ class TenantReasoningAuditRepository:
                     "response_sha256": row["response_sha256"],
                     "context_sha256": row["context_sha256"],
                     "provider": row["provider"], "model": row["model"],
-                    "evidence": evidence, "metadata": metadata, "previous_hash": row["previous_hash"],
-                }, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+                    "evidence": evidence, "previous_hash": row["previous_hash"],
+                }
+                if metadata:
+                    canonical_data["metadata"] = metadata
+                canonical = json.dumps(canonical_data, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
                 calculated = self.digest(canonical)
                 valid = (
                     row["previous_hash"] == expected_previous
