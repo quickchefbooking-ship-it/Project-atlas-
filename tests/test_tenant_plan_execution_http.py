@@ -365,3 +365,48 @@ def test_professor_executes_full_research_evidence_evaluation_report_chain(monke
         assert calls == [("safe AI orchestration", 3)]
     finally:
         client.__exit__(None, None, None)
+
+
+
+def test_execute_next_rechecks_capability_scope_after_membership_change(monkeypatch, tmp_path):
+    from atlas_engine import capability_runtime
+
+    calls = []
+    original_calculate = capability_runtime._calculate
+
+    def tracked_calculate(payload, deadline):
+        calls.append(dict(payload))
+        return original_calculate(payload, deadline)
+
+    monkeypatch.setattr(capability_runtime, "_calculate", tracked_calculate)
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.json()["status"] == "step_succeeded"
+        assert len(calls) == 1
+
+        # Re-provisioning updates the verified membership's scopes. The next
+        # HTTP request resolves the new membership rather than trusting the
+        # permissions that were present when the plan was prepared.
+        memberships = SQLiteMembershipRegistry(str(tmp_path / "members.sqlite"))
+        memberships.provision_membership(
+            ISSUER,
+            "operator",
+            "tenant-a",
+            {
+                "plans:read", "plans:write", "plans:execute",
+                "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+                "research:public",
+            },
+        )
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert second.status_code == 403
+        assert "permissions are no longer available" in second.json()["detail"]
+        assert len(calls) == 1  # the second handler was never invoked
+    finally:
+        client.__exit__(None, None, None)

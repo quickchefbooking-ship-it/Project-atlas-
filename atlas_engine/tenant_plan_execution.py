@@ -63,6 +63,42 @@ def execute_next_tenant_professor_step(
             )
         elif plan.state is not PlanState.RUNNING:
             raise HTTPException(status_code=409, detail="Plan is not in a runnable state.")
+        else:
+            # A running plan cannot use preview_plan: that preview is deliberately
+            # limited to READY/APPROVED plans. Recheck only dependency-ready,
+            # not-yet-completed steps against fresh membership scopes before the
+            # repository attempts to claim one (which otherwise masks revocation
+            # as a generic 409 conflict).
+            records = steps.list_steps(plan_id)
+            states = {item.step_id: item.state for item in records}
+            for candidate in plan.steps:
+                if states.get(candidate.step_id) != "pending":
+                    continue
+                if any(states.get(dependency) != "succeeded" for dependency in candidate.depends_on):
+                    continue
+                version = candidate.capability_version
+                if version is None:
+                    matches = [
+                        item.version for item in runtime.registry.list_definitions()
+                        if item.name == candidate.capability
+                    ]
+                    version = matches[0] if len(matches) == 1 else None
+                definition = runtime.registry.get(candidate.capability, version) if version else None
+                required_scopes = set(candidate.required_scopes)
+                if definition is None:
+                    plans.transition(
+                        plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+                    )
+                    raise HTTPException(status_code=409, detail="The planned capability is not installed.")
+                required_scopes.update(definition.required_scopes)
+                if not required_scopes.issubset(principal.scopes):
+                    plans.transition(
+                        plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+                    )
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Required capability permissions are no longer available; the plan has been stopped.",
+                    )
 
         worker_id = _worker_id(principal)
         lease = steps.claim_next_step(plan_id, worker_id, lease_seconds=60)
@@ -101,6 +137,29 @@ def execute_next_tenant_professor_step(
                 plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
             )
             raise HTTPException(status_code=409, detail="The planned capability is not installed.")
+
+        # Membership scopes are resolved afresh for every HTTP request. A plan
+        # may span several execute-next calls, so re-check the exact step's
+        # declared and registry-required scopes after claiming it and before
+        # invoking its handler. If access was withdrawn, terminalise the
+        # claimed step and stop the plan rather than leaving a live lease.
+        definition = runtime.registry.get(step.capability, version)
+        if definition is None:
+            steps.complete(lease, error_code="capability_not_found")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            raise HTTPException(status_code=409, detail="The planned capability is not installed.")
+        required_scopes = set(step.required_scopes) | set(definition.required_scopes)
+        if not required_scopes.issubset(principal.scopes):
+            steps.complete(lease, error_code="capability_scope_revoked")
+            plans.transition(
+                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Required capability permissions are no longer available; the plan has been stopped.",
+            )
 
         try:
             # Capability-specific input mapping is derived from the trusted
