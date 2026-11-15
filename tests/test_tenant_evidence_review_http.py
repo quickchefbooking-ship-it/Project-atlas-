@@ -91,11 +91,10 @@ def _client(monkeypatch, tmp_path, *, review_scope=True):
         "limitations": [],
     }
     db.execute("""
-      INSERT INTO tenant_professor_step_runs
-        (tenant_id,plan_id,step_id,state,result_json)
-      VALUES(?,?,?,?,?)
-    """, ("tenant-a", "review-plan", "bundle", "succeeded",
-          json.dumps(bundle, separators=(",", ":"))))
+      UPDATE tenant_professor_step_runs
+      SET state='succeeded',result_json=?
+      WHERE tenant_id=? AND plan_id=? AND step_id=?
+    """, (json.dumps(bundle, separators=(",", ":")), "tenant-a", "review-plan", "bundle"))
     db.commit()
     db.close()
     return client, verifier, {"Authorization": "Bearer review-token"}
