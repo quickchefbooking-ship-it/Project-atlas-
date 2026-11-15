@@ -286,7 +286,7 @@ def test_conversation_uses_only_approved_memory_when_read_scope_is_granted(tmp_p
     memory.decide("pref-1", decision="approved")
     db.close()
 
-    response = client.post("/professor/conversation", json={"message": "Explain retrieval"})
+    response = client.post("/professor/conversation", json={"message": "Explain concise retrieval"})
     assert response.status_code == 200
     assert response.json()["memory_references"] == ["pref-1"]
     provider = client.app.state.test_provider
