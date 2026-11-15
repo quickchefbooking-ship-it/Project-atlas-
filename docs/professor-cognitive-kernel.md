@@ -10,7 +10,9 @@ The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 - Action boundaries distinguish information, drafts and externally consequential actions.
 - Evidence-aware preparation retrieves only approved, read-only public/curated sources and preserves provenance. Retrieved excerpts are explicitly untrusted data.
 - Structured decomposition validates step IDs, dependencies and cycles. It is a proposal only; execution is always disabled.
-- Deterministic critique checks visible goal coverage, declared constraints, evidence-document citations and approval boundaries before delivery.\n- The two-pass reasoning pipeline asks the explicitly configured provider for a bounded JSON decomposition, validates its structure, then requests an answer and applies the critique gate.\n- The authenticated Professor chat endpoint now routes through this cognitive pipeline and includes bounded prior conversation context. Held answers are not represented as completed external actions.
+- Deterministic critique checks visible goal coverage, declared constraints, evidence-document citations and approval boundaries before delivery.
+- The two-pass reasoning pipeline asks the explicitly configured provider for a bounded JSON decomposition, validates its structure, then requests an answer and applies the critique gate.
+- The authenticated Professor chat endpoint now routes through this cognitive pipeline and includes bounded prior conversation context. Held answers are not represented as completed external actions.
 
 ## Important limitations
 
