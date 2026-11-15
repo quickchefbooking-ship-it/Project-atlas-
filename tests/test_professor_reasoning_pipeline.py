@@ -143,3 +143,36 @@ def test_memory_prompt_injection_remains_untrusted_reference_data_in_both_passes
         assert call.messages[1].role == "user"
         assert hostile_content not in call.messages[1].content
         assert "No tools or actions are available" in call.messages[0].content or "Do not include tools" in call.messages[0].content
+
+class InvalidOutputProvider:
+    name = "invalid"
+
+    def respond(self, conversation):
+        return {"text": "not a ConversationOutput"}
+
+
+def test_pipeline_rejects_provider_response_outside_contract():
+    with pytest.raises(ReasoningPipelineError, match="unsupported response type"):
+        ProfessorReasoningPipeline(InvalidOutputProvider()).run(
+            CognitiveRequest(task="Explain the architecture"),
+            retrieve_evidence=False,
+        )
+
+
+class OversizedMetadataProvider:
+    name = "oversized"
+
+    def respond(self, conversation):
+        return ConversationOutput(
+            text='{"steps":[{"step_id":"a","objective":"Frame the goal"}]}',
+            provider="p" * 65,
+            model="fixture-v1",
+        )
+
+
+def test_pipeline_rejects_unbounded_provider_metadata():
+    with pytest.raises(ReasoningPipelineError, match="invalid or unbounded"):
+        ProfessorReasoningPipeline(OversizedMetadataProvider()).run(
+            CognitiveRequest(task="Explain the architecture"),
+            retrieve_evidence=False,
+        )
