@@ -227,6 +227,71 @@ class TenantConversationRepository:
             )
         return StoredConversationMessage(row["ordinal"], row["role"], row["content"], row["created_at"])
 
+    def append_turn(
+        self,
+        conversation_id: str,
+        user_content: str,
+        assistant_content: str,
+        *,
+        create_if_missing: bool = False,
+    ) -> tuple[StoredConversationMessage, StoredConversationMessage]:
+        """Atomically persist one complete user/assistant turn."""
+        self._auth("conversations:write")
+        conversation_id = self._validate_id(conversation_id)
+        for content in (user_content, assistant_content):
+            if not isinstance(content, str) or not content.strip() or len(content) > MAX_MESSAGE_CHARS:
+                raise ValueError("Message content must contain 1 to 4000 characters.")
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            if create_if_missing:
+                try:
+                    self.db.execute(
+                        """INSERT INTO tenant_professor_conversations
+                           (tenant_id,owner_key,conversation_id) VALUES(?,?,?)""",
+                        (self.principal.tenant_id, self.owner_key, conversation_id),
+                    )
+                except sqlite3.IntegrityError:
+                    raise ValueError("Conversation ID already exists for this owner.") from None
+            exists = self.db.execute(
+                """SELECT 1 FROM tenant_professor_conversations
+                   WHERE tenant_id=? AND owner_key=? AND conversation_id=?""",
+                (self.principal.tenant_id, self.owner_key, conversation_id),
+            ).fetchone()
+            if exists is None:
+                raise ConversationNotFound("Conversation was not found.")
+            count = self.db.execute(
+                """SELECT COUNT(*) AS n FROM tenant_professor_conversation_messages
+                   WHERE tenant_id=? AND owner_key=? AND conversation_id=?""",
+                (self.principal.tenant_id, self.owner_key, conversation_id),
+            ).fetchone()["n"]
+            if count + 2 > MAX_STORED_MESSAGES:
+                raise ValueError("Conversation has reached its message limit.")
+            first_ordinal = count
+            stored = []
+            for offset, (role, content) in enumerate(
+                (("user", user_content), ("assistant", assistant_content))
+            ):
+                row = self.db.execute(
+                    """INSERT INTO tenant_professor_conversation_messages
+                       (tenant_id,owner_key,conversation_id,ordinal,role,content)
+                       VALUES(?,?,?,?,?,?) RETURNING ordinal,role,content,created_at""",
+                    (
+                        self.principal.tenant_id, self.owner_key, conversation_id,
+                        first_ordinal + offset, role, content.strip(),
+                    ),
+                ).fetchone()
+                stored.append(
+                    StoredConversationMessage(
+                        row["ordinal"], row["role"], row["content"], row["created_at"]
+                    )
+                )
+            self.db.execute(
+                """UPDATE tenant_professor_conversations SET updated_at=CURRENT_TIMESTAMP
+                   WHERE tenant_id=? AND owner_key=? AND conversation_id=?""",
+                (self.principal.tenant_id, self.owner_key, conversation_id),
+            )
+        return stored[0], stored[1]
+
     def delete(self, conversation_id: str) -> None:
         self._auth("conversations:delete")
         conversation_id = self._validate_id(conversation_id)
