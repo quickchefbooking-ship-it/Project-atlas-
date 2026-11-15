@@ -60,8 +60,8 @@ def professor_conversation(
     db, repository = _repository(request, principal)
     conversation_id = payload.conversation_id or uuid.uuid4().hex
     try:
-        if payload.conversation_id is None:
-            repository.create(conversation_id)
+        is_new_conversation = payload.conversation_id is None
+        if is_new_conversation:
             prior_messages = ()
         else:
             prior = repository.get(conversation_id, limit=23)
@@ -76,6 +76,8 @@ def professor_conversation(
             latest_user_message=payload.message,
         )
         result = service.respond(conversation)
+        if is_new_conversation:
+            repository.create(conversation_id)
         repository.append(conversation_id, "user", payload.message)
         repository.append(conversation_id, "assistant", result.text)
         return {
