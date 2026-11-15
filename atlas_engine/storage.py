@@ -221,6 +221,23 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_source_documents_source_hash_lookup
             ON source_documents(source_id, content_sha256)
         """)
+        # Source text and provenance form one immutable snapshot. Review state
+        # and attribution may change only through the pending-to-reviewed flow.
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS source_documents_snapshot_no_update
+            BEFORE UPDATE OF source_id, title, uri, content, content_sha256,
+                             metadata_json, created_at ON source_documents
+            BEGIN
+              SELECT RAISE(ABORT, 'source document snapshot is immutable');
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS source_documents_no_delete
+            BEFORE DELETE ON source_documents
+            BEGIN
+              SELECT RAISE(ABORT, 'source document snapshots cannot be deleted');
+            END
+        """)
         conn.commit()
     finally:
         conn.close()

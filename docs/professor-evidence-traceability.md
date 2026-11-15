@@ -36,9 +36,17 @@ Traceability states:
 
 The output therefore labels claim support, source credibility and independence as `not_assessed` or `not_machine_assessed`. Exact text matching is a provenance check, not a truth check.
 
+## Approved-source binding — draft implementation
+
+A follow-on draft adds `atlas_engine/approved_source_traceability.py`. Its public function accepts a persisted source-document ID and excerpt annotation fields; it resolves the source text, URI and digest from Atlas storage rather than accepting them from the caller. It requires the stored document to be `approved` with `reviewed` or `authoritative` trust level, recomputes the content digest, and passes the stored digest as the expected source version. The result includes the source document ID, title, state, trust level, digest and the source-ingestion reviewer label. That reviewer label is explicitly not treated as verified identity.
+
+The same draft adds SQLite triggers that prevent source snapshot content/provenance fields from being updated and prevent source-document deletion. Review-state transitions remain handled through the existing pending-to-approved/rejected path. This is database-level immutability within the configured SQLite database, not tamper-proof storage against an administrator who can replace the database file or drop triggers.
+
+Tests cover approved-only lookup, pending/rejected rejection, missing IDs, digest linkage, caller attempts to inject source text/URI, and snapshot update/delete prevention. The work remains a draft and is not yet integrated into the authenticated Professor research/report route.
+
 ## Next verification gates
 
-1. Bind source snapshots to approved ingestion records and immutable retrieval metadata, not arbitrary caller-supplied text.
+1. Integrate approved-source binding with the authenticated tenant evidence-review workflow and bind reviewer attribution to the verified principal, not a free-form request field.
 2. Add PDF/HTML-aware locator resolution with deterministic page/section extraction and tests against source files.
 3. Authenticate reviewer IDs from the verified principal, never from a free-form request field.
 4. Add independent reviewer workflow, disagreement/correction/supersession history and tenant scoping.
