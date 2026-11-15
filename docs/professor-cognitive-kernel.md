@@ -1,32 +1,27 @@
 # Professor cognitive kernel
 
-The cognitive kernel is the deterministic control plane for THE PROFESSOR. It
-prepares a bounded task frame before model reasoning, specialist routing,
-memory retrieval, or planning.
+The cognitive kernel is the deterministic control plane for THE PROFESSOR.
 
-## Current boundary
+## Implemented stages
 
-- Intake validates and bounds task, context, goal, and constraints.
-- Framing distinguishes the requested task from supplied context and records
-  missing context/constraints as assumptions rather than inventing facts.
-- Ambiguous short requests are held for clarification.
-- Drafting remains draft-only. Requests that may create external side effects
-  are marked as requiring separate, verified human approval.
-- A deterministic review returns quality and safety findings.
+- Bounded intake validates task, context, goal and constraints.
+- Ambiguous short requests pause for clarification.
+- Missing context and constraints are recorded as assumptions, not invented.
+- Action boundaries distinguish information, drafts and externally consequential actions.
+- Evidence-aware preparation retrieves only approved, read-only public/curated sources and preserves provenance. Retrieved excerpts are explicitly untrusted data.
+- Structured decomposition validates step IDs, dependencies and cycles. It is a proposal only; execution is always disabled.
+- Deterministic critique checks visible goal coverage, declared constraints, evidence-document citations and approval boundaries before delivery.
 
-## Deliberate limitations
+## Important limitations
 
-This kernel does not claim human-like understanding, call an LLM, retrieve or
-write memory, select capabilities, execute plans, or perform I/O. It is the
-first control stage to be composed with the existing conversation, evidence,
-learning, planning, and audit modules. Model output must not override these
-boundaries. Execution remains separately gated.
+The critique uses lexical coverage as a warning signal, not semantic proof. A
+future model-based critic may add semantic review, but must not override
+application-owned policy, evidence provenance, approval or execution boundaries.
+This module does not claim human-like cognition and does not execute tools.
 
 ## Next composition stages
 
-1. Connect the frame to evidence-aware context retrieval with source provenance.
-2. Compose a structured reasoning result and decomposition against the existing
-   ProfessorPlan contract.
-3. Add a critique/evaluation pass checking goal coverage, constraints, evidence,
-   and uncertainty before producing a user-facing response.
-4. Persist the stage trace through the tenant-scoped audit path.
+1. Connect the validated decomposition to the existing model-provider adapter and capability registry, keeping capability metadata application-owned.
+2. Add an end-to-end conversation pipeline that records intake, evidence, plan proposal, critique and final response in the tenant-scoped reasoning trace.
+3. Add adversarial tests for prompt injection in evidence, provider output and specialist handoffs.
+4. Keep all external actions in draft/approval states until action-bound authorisation is independently verified.
