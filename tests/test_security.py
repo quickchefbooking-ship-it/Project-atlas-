@@ -65,6 +65,11 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/conversations/{conversation_id}/audit", "GET"),
         ("/professor/conversations/{conversation_id}/trace", "GET"),
         ("/professor/conversations/{conversation_id}/audit/verify", "GET"),
+        ("/professor/memory/proposals", "POST"),
+        ("/professor/memory/proposals", "GET"),
+        ("/professor/memory/proposals/{proposal_id}/decision", "POST"),
+        ("/professor/memory/retrieve", "POST"),
+        ("/professor/memory/{proposal_id}", "DELETE"),
     }
     unprotected = []
     for route in app_module.app.routes:
