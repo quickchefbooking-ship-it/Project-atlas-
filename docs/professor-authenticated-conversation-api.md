@@ -174,5 +174,6 @@ separate human-reviewed workflow with provenance and a reversible change log.
 - Raw prompts, answers, credentials and retrieved excerpts are not duplicated in the audit table.
 - `GET /professor/conversations/{conversation_id}/audit` returns records only after verifying ownership of the conversation. The route is read-only and uses the verified identity boundary.
 - `GET /professor/conversations/{conversation_id}/audit/verify` recomputes the current tenant/owner hash chain and reports broken record IDs without returning raw content. Verification covers the full chain for that owner, across conversations.
+- `GET /professor/conversations/{conversation_id}/trace` provides one read-only view of the owned conversation messages, its audit records, chain verification and any conversation feedback the caller is authorized to read. Feedback is omitted with an availability flag when the caller lacks `evaluations:read`.
 - SQLite triggers prevent updates and deletes. Hash chaining makes alteration detectable when the chain is independently verified; it is not a substitute for externally anchored tamper-evident storage, backups, or production-grade audit retention.
 - The trace records what the application supplied to the provider, not proof that a model internally attended to or correctly used each item. No automatic learning or execution authority is created.
