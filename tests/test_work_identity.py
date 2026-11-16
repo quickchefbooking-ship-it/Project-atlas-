@@ -31,7 +31,7 @@ def test_canonical_uri_rejects_unsafe_or_ambiguous_uri_forms(uri):
 
 
 def test_provider_identifier_namespaces_are_allowlisted_and_bounded():
-    assert normalize_provider_identifiers({"PMID": "123"}) if False else normalize_provider_identifiers({"pmid": "123"}) == {"pmid": "123"}
+    assert normalize_provider_identifiers({"pmid": "123"}) == {"pmid": "123"}
     with pytest.raises(ValueError, match="namespace"):
         normalize_provider_identifiers({"unknown_provider": "123"})
 
