@@ -39,7 +39,7 @@ class MemoryProposal:
 
 def _memory_terms(value: str) -> set[str]:
     """Normalize Unicode letters/digits for language-tolerant lexical matching."""
-    return set(re.findall(r"[^\\W_]{3,}", value.casefold(), flags=re.UNICODE))
+    return set(re.findall(r"[^\W_]{3,}", value.casefold(), flags=re.UNICODE))
 
 
 def _utc_now() -> datetime:
