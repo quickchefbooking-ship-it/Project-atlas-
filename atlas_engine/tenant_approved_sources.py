@@ -105,6 +105,8 @@ def stage_tenant_source_document(
         raise ValueError("Source metadata must be an object.")
     encoded_metadata = json.dumps(metadata or {}, ensure_ascii=False, allow_nan=False,
                                   sort_keys=True, separators=(",", ":"))
+    if len(encoded_metadata.encode("utf-8")) > 16_384:
+        raise ValueError("Source metadata must not exceed 16 KiB.")
     document_id = "tsrc_" + uuid.uuid4().hex
     created_at = _now()
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
