@@ -227,7 +227,7 @@ class TenantProfessorMemoryRepository:
             existing = self.db.execute(
                 """SELECT 1 FROM tenant_professor_memory_supersessions
                    WHERE tenant_id=? AND owner_key=? AND
-                         (prior_proposal_id=? OR replacement_proposal_id=?)""",
+                         prior_proposal_id IN (?,?)""",
                 (self.principal.tenant_id, self.owner_key, prior_id, replacement_id),
             ).fetchone()
             if existing:
