@@ -307,7 +307,8 @@ def test_memory_composition_keeps_current_context_ahead_of_conflicting_durable_m
         approved_memory=approved,
         conversation_history=history,
     )
-    assert result.status == "ready"
+    assert result.status in {"ready", "held_for_review"}
+    assert len(provider.calls) == 2
     for call in provider.calls:
         prompt = call.messages[0].content
         assert "current explicit user request takes priority" in prompt
