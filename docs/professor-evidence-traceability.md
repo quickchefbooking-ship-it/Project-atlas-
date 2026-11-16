@@ -94,3 +94,12 @@ Assessments are append-only and multiple revisions are preserved. The system del
 When records share a URL or provider identifier but carry conflicting non-empty DOI values, the records are deliberately not merged through that alias. The bundle emits an explicit `conflicting_identifiers_not_merged` record for review. URL query strings are preserved to avoid silently conflating versioned or parameterized resources; credentials, fragments, alternate ports and unsupported URI schemes are rejected. No fuzzy title matching is performed.
 
 This is bibliographic record deduplication only. A shared identifier is a possible same-work signal, not proof of identical scientific content; separate groups do not prove independent studies. It does not assess study independence, publication quality, methodology, claim support or truth. Provider IDs and DOI values are input metadata; no provider API is queried and no new network access is introduced.
+
+
+## Source assessment correction and history — draft implementation
+
+The source-assessment repository now supports append-only correction chains. A correction is a new assessment row that points to the prior assessment with `supersedes_assessment_id` and requires a bounded `revision_reason`. The earlier row is never updated or deleted; its effective `superseded` status and `superseded_by` pointer are derived from the later row. A partial correction request, cross-tenant/cross-source target, missing reason, or second successor for the same prior assessment is rejected. A unique partial index enforces one successor per assessment, and schema initialization migrates older assessment tables before creating the index.
+
+The authenticated API accepts correction metadata on `POST /professor/tenant/sources/{document_id}/assessments`. A separate `GET /professor/tenant/sources/{document_id}/assessments` requires `evidence:source:read` and returns only the verified tenant's history; a foreign tenant receives an empty history. The POST continues to require `evidence:source:assess`. Tests cover immutable earlier revisions, sequential corrections, duplicate correction attempts, schema migration, reviewer attribution, scope enforcement and cross-tenant isolation.
+
+This records the correction history; it does not itself determine which assessment is factually correct. The newest active assessment remains a reviewer-attributed statement with evidence references, not an independently verified source-quality verdict.
