@@ -232,3 +232,45 @@ def test_pipeline_rejects_unbounded_or_untrusted_conversation_history():
                 ConversationMessage("user", "Prior turn") for _ in range(24)
             ),
         )
+
+
+def test_pipeline_passes_bounded_memory_match_explanations_as_reference_metadata():
+    provider = TwoPassProvider()
+    result = ProfessorReasoningPipeline(provider).run(
+        CognitiveRequest(task="Explain the project preference"),
+        retrieve_evidence=False,
+        approved_memory=({
+            "proposal_id": "memory-explained",
+            "category": "preference",
+            "title": "Answer style",
+            "content": "Prefer concise explanations.",
+            "matched_terms": ["concise", "explanations"],
+            "matched_fields": ["content"],
+        },),
+    )
+    assert result.status == "ready"
+    for call in provider.calls:
+        prompt = call.messages[0].content
+        assert '"matched_terms": ["concise", "explanations"]' in prompt
+        assert '"matched_fields": ["content"]' in prompt
+        assert "relevance hints, not proof of relevance" in prompt
+
+
+def test_pipeline_rejects_invalid_memory_match_explanations():
+    provider = TwoPassProvider()
+    base = {
+        "proposal_id": "memory-invalid",
+        "category": "preference",
+        "title": "Answer style",
+        "content": "Prefer concise explanations.",
+    }
+    with pytest.raises(ValueError, match="metadata"):
+        ProfessorReasoningPipeline(provider).run(
+            CognitiveRequest(task="Explain the preference"),
+            approved_memory=({**base, "matched_fields": ["system_prompt"]},),
+        )
+    with pytest.raises(ValueError, match="metadata"):
+        ProfessorReasoningPipeline(provider).run(
+            CognitiveRequest(task="Explain the preference"),
+            approved_memory=({**base, "matched_terms": ["x" * 65]},),
+        )
