@@ -55,10 +55,12 @@ class CapabilityRuntime:
                 for source in output["sources"]:
                     if not isinstance(source, Mapping):
                         raise CapabilityExecutionError("A dependency returned an invalid source record.")
+                    doi = source.get("doi") or None
                     sources.append({
                         "title": source.get("title"),
                         "uri": source.get("uri"),
-                        "doi": source.get("doi") or None,
+                        "doi": doi,
+                        "identifiers": {"crossref": doi} if doi else {},
                         "publisher": source.get("publisher", ""),
                         "retrieved_at": source.get("retrieved_at", ""),
                         "claims": [],
@@ -292,6 +294,18 @@ def build_default_capability_runtime() -> CapabilityRuntime:
                             "title": {"type": "string", "minLength": 1, "maxLength": 500},
                             "uri": {"type": "string", "minLength": 1, "maxLength": 1000},
                             "doi": {"type": ["string", "null"], "maxLength": 200},
+                            "identifiers": {
+                                "type": "object",
+                                "properties": {
+                                    "crossref": {"type": "string", "maxLength": 512},
+                                    "pubmed": {"type": "string", "maxLength": 512},
+                                    "pmid": {"type": "string", "maxLength": 512},
+                                    "openalex": {"type": "string", "maxLength": 512},
+                                    "arxiv": {"type": "string", "maxLength": 512},
+                                    "semantic_scholar": {"type": "string", "maxLength": 512},
+                                },
+                                "additionalProperties": false,
+                            },
                             "publisher": {"type": "string", "maxLength": 300},
                             "retrieved_at": {"type": "string", "maxLength": 64},
                             "claims": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
@@ -311,10 +325,11 @@ def build_default_capability_runtime() -> CapabilityRuntime:
                 "sources": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
                 "claims": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
                 "duplicate_records": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
+                "identifier_conflicts": {"type": "array", "maxItems": 190, "items": {"type": "object"}},
                 "summary": {"type": "object"},
-                "limitations": {"type": "array", "maxItems": 4, "items": {"type": "string"}},
+                "limitations": {"type": "array", "maxItems": 5, "items": {"type": "string"}},
             },
-            "required": ["schema_version", "sources", "claims", "duplicate_records", "summary", "limitations"],
+            "required": ["schema_version", "sources", "claims", "duplicate_records", "identifier_conflicts", "summary", "limitations"],
             "additionalProperties": False,
         },
         required_scopes=("research:public",),
