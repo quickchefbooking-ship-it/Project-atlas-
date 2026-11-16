@@ -78,3 +78,10 @@ Tests cover pending-by-default, approval and rejection, reviewer spoofing/repeat
 7. Keep claims and source content labelled as untrusted data in Professor prompts and reports.
 
 Until these gates pass, Professor must describe these results as traceability checks and reviewer annotations, not independent verification of factual truth.
+
+
+## Source publication, methodology and retraction assessments — draft implementation
+
+A further draft adds `atlas_engine/tenant_source_assessments.py` and the authenticated route `POST /professor/tenant/sources/{document_id}/assessments`. It records append-only, tenant-scoped assessment revisions for publication status (`published`, `preprint`, `unpublished`, `unknown`), retraction/correction status (`not_known`, `correction_notice`, `expression_of_concern`, `retracted`, `unknown`) and study-design category. Each assessment includes bounded HTTPS evidence references, a reviewer rationale, server-derived reviewer attribution and a timestamp. A dedicated `evidence:source:assess` scope is required. The source must already be approved and reviewed/authoritative within the same tenant. Caller-supplied tenant or reviewer IDs are rejected.
+
+Assessments are append-only and multiple revisions are preserved. The system deliberately permits `unknown`; no notice found is not treated as proof of no retraction. It emits `quality_score: not_scored` and does not infer source quality, methodology adequacy or factual truth from the labels. The evidence references and rationale are reviewer-supplied and are not independently fetched or validated for the truth of the assessment. This is a structured human review record, not an automated source-quality engine or external retraction-monitoring service.
