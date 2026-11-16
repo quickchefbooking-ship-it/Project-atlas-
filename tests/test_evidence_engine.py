@@ -59,3 +59,38 @@ def test_rejects_untrusted_uri_credentials_and_unknown_annotation_fields():
 def test_bundle_rejects_unbounded_input():
     with pytest.raises(ValueError, match="between 1 and 20"):
         build_evidence_bundle([])
+
+
+
+def test_bundle_groups_canonical_provider_aliases_and_preserves_identity_conflicts():
+    bundle = build_evidence_bundle([
+        {
+            **source("Study A", "10.1000/a", []),
+            "uri": "https://publisher.example/record-a",
+            "identifiers": {"pubmed": "12345"},
+        },
+        {
+            **source("Study A alternate", "10.1000/a", []),
+            "uri": "https://doi.org/10.1000/a",
+            "identifiers": {"crossref": "10.1000/a"},
+        },
+        {
+            **source("Different work", "10.1000/b", []),
+            "uri": "https://publisher.example/record-a",
+            "identifiers": {"pubmed": "12345"},
+        },
+    ])
+    assert bundle["duplicate_records"]
+    assert bundle["identifier_conflicts"]
+    assert any(
+        item["status"] == "conflicting_identifiers_not_merged"
+        for item in bundle["identifier_conflicts"]
+    )
+    assert any(len(item["source_ids"]) == 2 for item in bundle["duplicate_records"])
+
+
+def test_bundle_rejects_unapproved_provider_identifier_namespace():
+    record = source("Study A", "10.1000/a", [])
+    record["identifiers"] = {"random_database": "abc"}
+    with pytest.raises(ValueError, match="namespace"):
+        build_evidence_bundle([record])
