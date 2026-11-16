@@ -85,7 +85,7 @@ def professor_conversation(
         if "memory:read" in principal.scopes:
             memory_repository = TenantProfessorMemoryRepository(db, principal)
             approved_memory = tuple(
-                {key: item[key] for key in ("proposal_id", "category", "title", "content")}
+                {key: item[key] for key in ("proposal_id", "category", "title", "content", "matched_terms", "matched_fields")}
                 for item in memory_repository.retrieve(payload.message, limit=5)
             )
         reasoning = service.reason(
