@@ -235,7 +235,9 @@ def test_pipeline_rejects_unbounded_or_untrusted_conversation_history():
 
 
 def test_pipeline_passes_bounded_memory_match_explanations_as_reference_metadata():
-    provider = TwoPassProvider()
+    provider = TwoPassProvider(
+        answer="The project preference is to prefer concise explanations. This explains the approved answer style."
+    )
     result = ProfessorReasoningPipeline(provider).run(
         CognitiveRequest(task="Explain the project preference"),
         retrieve_evidence=False,
