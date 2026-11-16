@@ -177,3 +177,74 @@ def test_memory_retrieval_supports_unicode_terms_and_explains_matches(memory_rep
     assert results[0]["proposal_id"] == "unicode"
     assert results[0]["matched_terms"] == ["café", "préféré"]
     assert results[0]["matched_fields"] == ["title"]
+
+
+def test_confirmed_supersession_hides_old_memory_and_keeps_audit(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("old-pref", category="preference", title="Answer style",
+                  content="Give detailed explanations.")
+    owner.decide("old-pref", decision="approved")
+    owner.propose("new-pref", category="preference", title="Answer style",
+                  content="Give concise explanations.")
+    owner.decide("new-pref", decision="approved")
+    assert len(owner.retrieve("explanations", limit=5)) == 2
+    owner.confirm_supersession(
+        "old-pref", "new-pref", confirmed=True,
+        rationale="Owner confirmed the concise preference replaces the old one.",
+    )
+    results = owner.retrieve("explanations", limit=5)
+    assert [item["proposal_id"] for item in results] == ["new-pref"]
+    history = owner.list_supersessions()
+    assert len(history) == 1
+    assert history[0]["prior_proposal_id"] == "old-pref"
+    assert history[0]["replacement_proposal_id"] == "new-pref"
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        db.execute(
+            "UPDATE tenant_professor_memory_supersessions SET rationale='changed'"
+        )
+
+
+def test_supersession_requires_explicit_confirmation_and_approval_scope(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("old", category="preference", title="Style", content="Old style.")
+    owner.decide("old", decision="approved")
+    owner.propose("new", category="preference", title="Style", content="New style.")
+    owner.decide("new", decision="approved")
+    with pytest.raises(ValueError, match="explicit owner confirmation"):
+        owner.confirm_supersession("old", "new", confirmed=False)
+    reader = TenantProfessorMemoryRepository(
+        db, RequestPrincipal("https://issuer.example.test", "reader", "tenant-a",
+                             True, frozenset({"memory:read"}))
+    )
+    with pytest.raises(AuthorizationDenied):
+        reader.confirm_supersession("old", "new", confirmed=True)
+
+
+def test_supersession_rejects_cross_owner_and_invalid_records(memory_repos):
+    _db, owner, other, _tenant = memory_repos
+    owner.propose("old", category="preference", title="Style", content="Old style.")
+    owner.decide("old", decision="approved")
+    owner.propose("new", category="preference", title="Style", content="New style.")
+    owner.decide("new", decision="approved")
+    with pytest.raises(MemoryNotFound):
+        other.confirm_supersession("old", "new", confirmed=True)
+    with pytest.raises(ValueError, match="cannot supersede itself"):
+        owner.confirm_supersession("old", "old", confirmed=True)
+    owner.confirm_supersession("old", "new", confirmed=True)
+    with pytest.raises(ValueError, match="already superseded or linked"):
+        owner.confirm_supersession("old", "new", confirmed=True)
+    owner.propose("pending", category="preference", title="Style", content="Pending style.")
+    with pytest.raises(ValueError, match="approved, unexpired"):
+        owner.confirm_supersession("new", "pending", confirmed=True)
+
+
+def test_deleting_memory_removes_linked_supersession_metadata(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("old", category="preference", title="Style", content="Old style.")
+    owner.decide("old", decision="approved")
+    owner.propose("new", category="preference", title="Style", content="New style.")
+    owner.decide("new", decision="approved")
+    owner.confirm_supersession("old", "new", confirmed=True)
+    owner.delete("old")
+    assert owner.list_supersessions() == ()
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_memory_supersessions").fetchone()[0] == 0

@@ -88,6 +88,30 @@ def initialize_tenant_memory_schema(db: sqlite3.Connection) -> None:
       BEFORE UPDATE ON tenant_professor_memory_decisions BEGIN
       SELECT RAISE(ABORT,'memory decision history is append-only');
     END;
+    CREATE TABLE IF NOT EXISTS tenant_professor_memory_supersessions (
+      supersession_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      owner_key TEXT NOT NULL,
+      prior_proposal_id TEXT NOT NULL,
+      replacement_proposal_id TEXT NOT NULL,
+      reviewer_key TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      superseded_at TEXT NOT NULL,
+      UNIQUE(tenant_id,owner_key,prior_proposal_id),
+      CHECK(prior_proposal_id <> replacement_proposal_id),
+      FOREIGN KEY(tenant_id,owner_key,prior_proposal_id)
+        REFERENCES tenant_professor_memory_proposals(tenant_id,owner_key,proposal_id)
+        ON DELETE CASCADE,
+      FOREIGN KEY(tenant_id,owner_key,replacement_proposal_id)
+        REFERENCES tenant_professor_memory_proposals(tenant_id,owner_key,proposal_id)
+        ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_professor_memory_supersessions_owner
+      ON tenant_professor_memory_supersessions(tenant_id,owner_key,superseded_at DESC);
+    CREATE TRIGGER IF NOT EXISTS professor_memory_supersessions_no_update
+      BEFORE UPDATE ON tenant_professor_memory_supersessions BEGIN
+      SELECT RAISE(ABORT,'memory supersession history is append-only');
+    END;
     """)
 
 
@@ -172,6 +196,66 @@ class TenantProfessorMemoryRepository:
                  self.owner_key, decision, rationale.strip(), now),
             )
 
+    def confirm_supersession(self, prior_proposal_id: str, replacement_proposal_id: str,
+                             *, confirmed: bool, rationale: str = "") -> None:
+        """Explicitly retire an approved memory in favour of another approved memory."""
+        self._authorize("memory:approve")
+        if confirmed is not True:
+            raise ValueError("Memory supersession requires explicit owner confirmation.")
+        prior_id = self._validate_text(prior_proposal_id, "prior_proposal_id", 128)
+        replacement_id = self._validate_text(replacement_proposal_id, "replacement_proposal_id", 128)
+        if prior_id == replacement_id:
+            raise ValueError("A memory cannot supersede itself.")
+        if not isinstance(rationale, str) or len(rationale) > 500:
+            raise ValueError("Rationale must be at most 500 characters.")
+        now = _utc_now().isoformat()
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            rows = self.db.execute(
+                """SELECT proposal_id,status,expires_at
+                   FROM tenant_professor_memory_proposals
+                   WHERE tenant_id=? AND owner_key=? AND proposal_id IN (?,?)""",
+                (self.principal.tenant_id, self.owner_key, prior_id, replacement_id),
+            ).fetchall()
+            by_id = {row["proposal_id"]: row for row in rows}
+            if prior_id not in by_id or replacement_id not in by_id:
+                raise MemoryNotFound("Both memory proposals must belong to this owner.")
+            for proposal_id in (prior_id, replacement_id):
+                row = by_id[proposal_id]
+                if row["status"] != "approved" or row["expires_at"] <= now:
+                    raise ValueError("Only approved, unexpired memories can be superseded.")
+            existing = self.db.execute(
+                """SELECT 1 FROM tenant_professor_memory_supersessions
+                   WHERE tenant_id=? AND owner_key=? AND
+                         prior_proposal_id IN (?,?)""",
+                (self.principal.tenant_id, self.owner_key, prior_id, replacement_id),
+            ).fetchone()
+            if existing:
+                raise ValueError("A memory in this supersession is already superseded or linked.")
+            self.db.execute(
+                """INSERT INTO tenant_professor_memory_supersessions
+                   (tenant_id,owner_key,prior_proposal_id,replacement_proposal_id,
+                    reviewer_key,rationale,superseded_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (self.principal.tenant_id, self.owner_key, prior_id, replacement_id,
+                 self.owner_key, rationale.strip(), now),
+            )
+
+    def list_supersessions(self, *, limit: int = 50) -> tuple[dict, ...]:
+        """Read this owner's supersession history without exposing other tenants."""
+        self._authorize("memory:read")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
+            raise ValueError("Supersession limit must be between 1 and 200.")
+        rows = self.db.execute(
+            """SELECT prior_proposal_id,replacement_proposal_id,reviewer_key,
+                      rationale,superseded_at
+               FROM tenant_professor_memory_supersessions
+               WHERE tenant_id=? AND owner_key=?
+               ORDER BY superseded_at DESC,supersession_id DESC LIMIT ?""",
+            (self.principal.tenant_id, self.owner_key, limit),
+        ).fetchall()
+        return tuple(dict(row) for row in rows)
+
     def list_proposals(self, *, status: str = "pending", limit: int = 50) -> tuple[dict, ...]:
         self._authorize("memory:read")
         if status not in {"pending", "approved", "rejected", "all"}:
@@ -205,6 +289,12 @@ class TenantProfessorMemoryRepository:
             """SELECT proposal_id,category,title,content,expires_at,created_at
                FROM tenant_professor_memory_proposals
                WHERE tenant_id=? AND owner_key=? AND status='approved' AND expires_at>?
+                 AND NOT EXISTS (
+                   SELECT 1 FROM tenant_professor_memory_supersessions s
+                   WHERE s.tenant_id=tenant_professor_memory_proposals.tenant_id
+                     AND s.owner_key=tenant_professor_memory_proposals.owner_key
+                     AND s.prior_proposal_id=tenant_professor_memory_proposals.proposal_id
+                 )
                ORDER BY created_at DESC""",
             (self.principal.tenant_id, self.owner_key, now),
         ).fetchall()
