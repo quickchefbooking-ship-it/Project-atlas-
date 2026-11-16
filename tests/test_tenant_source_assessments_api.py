@@ -44,11 +44,15 @@ def _setup(monkeypatch, tmp_path):
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
     memberships.create_tenant("tenant-b", "Tenant B")
-    full_scopes = {"evidence:source:write", "evidence:source:approve", "evidence:source:assess"}
+    full_scopes = {"evidence:source:write", "evidence:source:approve", "evidence:source:assess", "evidence:source:read"}
     memberships.provision_membership(ISSUER, "writer", "tenant-a", full_scopes)
     memberships.provision_membership(ISSUER, "other", "tenant-b", full_scopes)
     memberships.provision_membership(
         ISSUER, "no-assess", "tenant-a",
+        {"evidence:source:write", "evidence:source:approve"},
+    )
+    memberships.provision_membership(
+        ISSUER, "no-read", "tenant-a",
         {"evidence:source:write", "evidence:source:approve"},
     )
     client = TestClient(app_module.app)
@@ -170,5 +174,101 @@ def test_source_assessment_cannot_access_other_tenant_or_pending_source(monkeypa
         )
         assert pending.status_code == 404
         assert cross_tenant.status_code == 404
+    finally:
+        client.__exit__(None, None, None)
+
+
+
+def test_authenticated_source_assessment_correction_preserves_history(monkeypatch, tmp_path):
+    client, _verifier, tenant_path, headers = _setup(monkeypatch, tmp_path)
+    try:
+        document_id = _approved(client, headers)
+        original = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers, json={"retraction_status": "unknown", "rationale": "Initial review."},
+        )
+        assert original.status_code == 200
+        first_id = original.json()["assessment_id"]
+        corrected = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers,
+            json={
+                "retraction_status": "retracted",
+                "evidence_references": ["https://example.org/retraction"],
+                "rationale": "Publisher notice verified by reviewer.",
+                "supersedes_assessment_id": first_id,
+                "revision_reason": "The first assessment lacked the notice.",
+            },
+        )
+        assert corrected.status_code == 200
+        assert corrected.json()["supersedes_assessment_id"] == first_id
+        db = sqlite3.connect(tenant_path)
+        rows = db.execute(
+            "SELECT assessment_id,supersedes_assessment_id,retraction_status FROM tenant_source_assessments WHERE tenant_id='tenant-a' AND document_id=? ORDER BY assessed_at",
+            (document_id,),
+        ).fetchall()
+        db.close()
+        assert len(rows) == 2
+        assert rows[1][1] == first_id
+        assert rows[0][2] == "unknown"
+        assert rows[1][2] == "retracted"
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_authenticated_source_assessment_correction_rejects_missing_reason_and_forged_target(monkeypatch, tmp_path):
+    client, _verifier, _tenant_path, headers = _setup(monkeypatch, tmp_path)
+    try:
+        document_id = _approved(client, headers)
+        original = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers, json={"rationale": "Initial."},
+        )
+        first_id = original.json()["assessment_id"]
+        missing_reason = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers,
+            json={"rationale": "Correction.", "supersedes_assessment_id": first_id},
+        )
+        forged = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers,
+            json={
+                "rationale": "Forged target.", "supersedes_assessment_id": "sass_not_owned",
+                "revision_reason": "Forged.",
+            },
+        )
+        assert missing_reason.status_code == 422
+        assert forged.status_code == 404
+    finally:
+        client.__exit__(None, None, None)
+
+
+
+def test_source_assessment_history_is_tenant_scoped_and_requires_read_scope(monkeypatch, tmp_path):
+    client, verifier, _tenant_path, headers = _setup(monkeypatch, tmp_path)
+    try:
+        document_id = _approved(client, headers)
+        created = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers, json={"rationale": "First assessment."},
+        )
+        assert created.status_code == 200
+        history = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert history.status_code == 200
+        assert len(history.json()["assessments"]) == 1
+        verifier.subject = "other"
+        cross_tenant = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert cross_tenant.status_code == 200
+        assert cross_tenant.json()["assessments"] == []
+        verifier.subject = "no-read"
+        denied = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert denied.status_code == 403
     finally:
         client.__exit__(None, None, None)

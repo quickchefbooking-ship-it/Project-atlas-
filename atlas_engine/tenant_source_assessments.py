@@ -57,6 +57,8 @@ def initialize_tenant_source_assessment_schema(db: sqlite3.Connection) -> None:
       rationale TEXT NOT NULL,
       reviewer_id TEXT NOT NULL,
       assessed_at TEXT NOT NULL,
+      supersedes_assessment_id TEXT,
+      revision_reason TEXT,
       PRIMARY KEY(tenant_id, assessment_id),
       FOREIGN KEY(tenant_id, document_id)
         REFERENCES tenant_approved_source_documents(tenant_id, document_id)
@@ -72,6 +74,18 @@ def initialize_tenant_source_assessment_schema(db: sqlite3.Connection) -> None:
       SELECT RAISE(ABORT, 'source assessments are append-only');
     END;
     """)
+    columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(tenant_source_assessments)")
+    }
+    if "supersedes_assessment_id" not in columns:
+        db.execute("ALTER TABLE tenant_source_assessments ADD COLUMN supersedes_assessment_id TEXT")
+    if "revision_reason" not in columns:
+        db.execute("ALTER TABLE tenant_source_assessments ADD COLUMN revision_reason TEXT")
+    db.execute("""
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_source_assessment_one_successor
+      ON tenant_source_assessments(tenant_id, supersedes_assessment_id)
+      WHERE supersedes_assessment_id IS NOT NULL
+    """)
 
 
 def append_tenant_source_assessment(
@@ -79,6 +93,8 @@ def append_tenant_source_assessment(
     reviewer_id: str, publication_status: str = "unknown",
     retraction_status: str = "unknown", study_design: str = "unknown",
     evidence_references: list[str] | None = None, rationale: str,
+    supersedes_assessment_id: str | None = None,
+    revision_reason: str | None = None,
 ) -> dict:
     """Append an assessment for an approved source; caller must pass verified reviewer attribution."""
     if not isinstance(tenant_id, str) or not tenant_id.strip():
@@ -101,6 +117,25 @@ def append_tenant_source_assessment(
     if any(not _valid_https_reference(ref) for ref in refs):
         raise ValueError("Assessment evidence references must be absolute HTTPS URLs.")
     encoded = json.dumps(refs, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    if (supersedes_assessment_id is None) != (revision_reason is None):
+        raise ValueError("A correction requires both supersedes_assessment_id and revision_reason.")
+    if supersedes_assessment_id is not None:
+        if not isinstance(supersedes_assessment_id, str) or not supersedes_assessment_id.strip():
+            raise ValueError("Superseded assessment identifier is invalid.")
+        if not isinstance(revision_reason, str) or not revision_reason.strip() or len(revision_reason) > 1000:
+            raise ValueError("Correction reason must contain 1 to 1,000 characters.")
+        target = db.execute("""
+          SELECT document_id FROM tenant_source_assessments
+          WHERE tenant_id=? AND assessment_id=?
+        """, (tenant_id, supersedes_assessment_id)).fetchone()
+        if target is None or target["document_id"] != document_id:
+            raise ValueError("Superseded assessment was not found for this tenant and source.")
+        existing_successor = db.execute("""
+          SELECT 1 FROM tenant_source_assessments
+          WHERE tenant_id=? AND supersedes_assessment_id=?
+        """, (tenant_id, supersedes_assessment_id)).fetchone()
+        if existing_successor is not None:
+            raise ValueError("Assessment has already been superseded.")
     source = db.execute("""
       SELECT 1 FROM tenant_approved_source_documents
       WHERE tenant_id=? AND document_id=? AND state='approved'
@@ -113,17 +148,21 @@ def append_tenant_source_assessment(
     db.execute("""
       INSERT INTO tenant_source_assessments
         (tenant_id,assessment_id,document_id,publication_status,retraction_status,
-         study_design,evidence_references_json,rationale,reviewer_id,assessed_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)
+         study_design,evidence_references_json,rationale,reviewer_id,assessed_at,
+         supersedes_assessment_id,revision_reason)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
     """, (tenant_id, assessment_id, document_id, publication_status,
           retraction_status, study_design, encoded, rationale.strip(),
-          reviewer_id, assessed_at))
+          reviewer_id, assessed_at, supersedes_assessment_id,
+          revision_reason.strip() if revision_reason else None))
     return {
         "assessment_id": assessment_id, "document_id": document_id,
         "publication_status": publication_status,
         "retraction_status": retraction_status, "study_design": study_design,
         "evidence_references": refs, "rationale": rationale.strip(),
         "reviewer_id": reviewer_id, "assessed_at": assessed_at,
+        "supersedes_assessment_id": supersedes_assessment_id,
+        "revision_reason": revision_reason.strip() if revision_reason else None,
         "quality_score": "not_scored",
     }
 
@@ -134,11 +173,16 @@ def list_tenant_source_assessments(
     """Return assessment history only for the requested tenant and source."""
     rows = db.execute("""
       SELECT assessment_id,document_id,publication_status,retraction_status,
-             study_design,evidence_references_json,rationale,reviewer_id,assessed_at
+             study_design,evidence_references_json,rationale,reviewer_id,assessed_at,
+             supersedes_assessment_id,revision_reason
       FROM tenant_source_assessments
       WHERE tenant_id=? AND document_id=?
       ORDER BY assessed_at, assessment_id
     """, (tenant_id, document_id)).fetchall()
+    superseded_by = {
+        row["supersedes_assessment_id"]: row["assessment_id"]
+        for row in rows if row["supersedes_assessment_id"] is not None
+    }
     return [{
         "assessment_id": row["assessment_id"],
         "document_id": row["document_id"],
@@ -147,5 +191,10 @@ def list_tenant_source_assessments(
         "study_design": row["study_design"],
         "evidence_references": json.loads(row["evidence_references_json"]),
         "rationale": row["rationale"], "reviewer_id": row["reviewer_id"],
-        "assessed_at": row["assessed_at"], "quality_score": "not_scored",
+        "assessed_at": row["assessed_at"],
+        "supersedes_assessment_id": row["supersedes_assessment_id"],
+        "revision_reason": row["revision_reason"],
+        "status": "superseded" if row["assessment_id"] in superseded_by else "active",
+        "superseded_by": superseded_by.get(row["assessment_id"]),
+        "quality_score": "not_scored",
     } for row in rows]
