@@ -123,13 +123,26 @@ class ProfessorReasoningPipeline:
             raise ValueError("Approved memory must be a tuple of at most five records.")
         safe_memory = []
         for item in approved_memory:
-            if not isinstance(item, dict) or set(item) - {"proposal_id", "category", "title", "content"}:
+            allowed = {"proposal_id", "category", "title", "content", "matched_terms", "matched_fields"}
+            if not isinstance(item, dict) or set(item) - allowed:
                 raise ValueError("Approved memory record has an invalid shape.")
             bounds = {"proposal_id": 128, "category": 64, "title": 120, "content": 2000}
             if any(not isinstance(item.get(key), str) or not item[key].strip()
                    or len(item[key]) > maximum for key, maximum in bounds.items()):
                 raise ValueError("Approved memory record contains invalid or unbounded fields.")
-            safe_memory.append({key: item[key] for key in bounds})
+            safe_item = {key: item[key] for key in bounds}
+            for key, permitted in (("matched_terms", 20), ("matched_fields", 3)):
+                values = item.get(key, ())
+                if (
+                    not isinstance(values, (tuple, list)) or len(values) > permitted
+                    or any(not isinstance(value, str) or not value.strip() or len(value) > 64
+                           for value in values)
+                ):
+                    raise ValueError("Approved memory retrieval metadata is invalid or unbounded.")
+                safe_item[key] = list(dict.fromkeys(values))
+            if any(field not in {"title", "category", "content"} for field in safe_item["matched_fields"]):
+                raise ValueError("Approved memory match metadata contains an unsupported field.")
+            safe_memory.append(safe_item)
         memory_ids = tuple(item["proposal_id"] for item in safe_memory)
         preparation = prepare_for_reasoning(request, retrieve_evidence=retrieve_evidence)
         frame = preparation.frame
@@ -142,7 +155,7 @@ class ProfessorReasoningPipeline:
             )
 
         evidence_context = preparation.evidence_context or "No approved evidence was retrieved."
-        memory_context = json.dumps(safe_memory, ensure_ascii=False) if safe_memory else "No approved user memories were retrieved."
+        memory_context = (\n            "Lexical match fields and terms are relevance hints, not proof of relevance. "\n            + json.dumps(safe_memory, ensure_ascii=False)\n            if safe_memory else "No approved user memories were retrieved."\n        )
         plan_prompt = (
             "You are THE PROFESSOR's planning stage. Return ONLY valid JSON with exactly "
             '{"steps":[{"step_id":"step_1","objective":"...","depends_on":[]}]} . '
