@@ -51,6 +51,10 @@ def _setup(monkeypatch, tmp_path):
         ISSUER, "no-assess", "tenant-a",
         {"evidence:source:write", "evidence:source:approve"},
     )
+    memberships.provision_membership(
+        ISSUER, "no-read", "tenant-a",
+        {"evidence:source:write", "evidence:source:approve"},
+    )
     client = TestClient(app_module.app)
     client.__enter__()
     verifier = SourceAssessmentVerifier()
@@ -236,5 +240,35 @@ def test_authenticated_source_assessment_correction_rejects_missing_reason_and_f
         )
         assert missing_reason.status_code == 422
         assert forged.status_code == 404
+    finally:
+        client.__exit__(None, None, None)
+
+
+
+def test_source_assessment_history_is_tenant_scoped_and_requires_read_scope(monkeypatch, tmp_path):
+    client, verifier, _tenant_path, headers = _setup(monkeypatch, tmp_path)
+    try:
+        document_id = _approved(client, headers)
+        created = client.post(
+            f"/professor/tenant/sources/{document_id}/assessments",
+            headers=headers, json={"rationale": "First assessment."},
+        )
+        assert created.status_code == 200
+        history = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert history.status_code == 200
+        assert len(history.json()["assessments"]) == 1
+        verifier.subject = "other"
+        cross_tenant = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert cross_tenant.status_code == 200
+        assert cross_tenant.json()["assessments"] == []
+        verifier.subject = "no-read"
+        denied = client.get(
+            f"/professor/tenant/sources/{document_id}/assessments", headers=headers,
+        )
+        assert denied.status_code == 403
     finally:
         client.__exit__(None, None, None)
