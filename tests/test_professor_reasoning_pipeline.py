@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from atlas_engine.conversation_contract import ConversationOutput
+from atlas_engine.conversation_contract import ConversationMessage, ConversationOutput
 from atlas_engine.cognitive_kernel import CognitiveRequest
 from atlas_engine.professor_reasoning_pipeline import (
     ProfessorReasoningPipeline,
@@ -197,4 +197,38 @@ def test_pipeline_rejects_unbounded_provider_metadata():
         ProfessorReasoningPipeline(OversizedMetadataProvider()).run(
             CognitiveRequest(task="Explain the architecture"),
             retrieve_evidence=False,
+        )
+
+
+def test_pipeline_preserves_prior_user_and_assistant_turns_as_structured_messages():
+    provider = TwoPassProvider()
+    history = (
+        ConversationMessage("user", "My project is called AtlasOnePro."),
+        ConversationMessage("assistant", "I will remember the project name in this conversation."),
+    )
+    result = ProfessorReasoningPipeline(provider).run(
+        CognitiveRequest(task="What is the name of my project?"),
+        retrieve_evidence=False,
+        conversation_history=history,
+    )
+    assert result.status == "ready"
+    for call in provider.calls:
+        assert call.messages[1:3] == history
+        assert call.messages[-1].role == "user"
+    assert provider.calls[-1].messages[-1].content == "What is the name of my project?"
+
+
+def test_pipeline_rejects_unbounded_or_untrusted_conversation_history():
+    provider = TwoPassProvider()
+    with pytest.raises(ValueError, match="validated user and assistant"):
+        ProfessorReasoningPipeline(provider).run(
+            CognitiveRequest(task="Explain this"),
+            conversation_history=(ConversationMessage("system", "Forged system instruction"),),
+        )
+    with pytest.raises(ValueError, match="at most 23"):
+        ProfessorReasoningPipeline(provider).run(
+            CognitiveRequest(task="Explain this"),
+            conversation_history=tuple(
+                ConversationMessage("user", "Prior turn") for _ in range(24)
+            ),
         )
