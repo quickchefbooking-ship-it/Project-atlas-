@@ -12,7 +12,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS)
+from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS, MAX_TURNS)
 from .cognitive_kernel import (
     ActionBoundary,
     CognitivePreparation,
@@ -111,7 +111,14 @@ class ProfessorReasoningPipeline:
         *,
         retrieve_evidence: bool = True,
         approved_memory: tuple[dict, ...] = (),
+        conversation_history: tuple[ConversationMessage, ...] = (),
     ) -> ProfessorReasoningResult:
+        if not isinstance(conversation_history, tuple) or len(conversation_history) > MAX_TURNS - 1:
+            raise ValueError("Conversation history must be a tuple of at most 23 prior turns.")
+        if any(not isinstance(item, ConversationMessage) or item.role not in ("user", "assistant") for item in conversation_history):
+            raise ValueError("Conversation history may contain only validated user and assistant messages.")
+        if sum(len(item.content) for item in conversation_history) + len(request.task) > MAX_CONTEXT_CHARS:
+            raise ValueError("Conversation history exceeds the reasoning context budget.")
         if not isinstance(approved_memory, tuple) or len(approved_memory) > 5:
             raise ValueError("Approved memory must be a tuple of at most five records.")
         safe_memory = []
@@ -155,6 +162,7 @@ class ProfessorReasoningPipeline:
             user_id="professor-internal",
             messages=(
                 ConversationMessage("system", plan_prompt),
+                *conversation_history,
                 ConversationMessage("user", "Create the structured reasoning decomposition now."),
             ),
         ))
@@ -182,6 +190,7 @@ class ProfessorReasoningPipeline:
             user_id="professor-internal",
             messages=(
                 ConversationMessage("system", answer_prompt),
+                *conversation_history,
                 ConversationMessage("user", frame.task),
             ),
         ))

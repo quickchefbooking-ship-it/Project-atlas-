@@ -121,16 +121,14 @@ def test_two_turn_chat_passes_prior_messages_back_to_professor_and_verifies_audi
     assert second.json()["execution_enabled"] is False
 
     # The pipeline makes a planning call and an answer call per turn.
-    # Inspect the answer call for turn two: it must receive the full bounded
-    # history, not just the latest message.
+    # Earlier turns must remain distinct, validated user/assistant messages.
     second_turn_answer = provider.calls[-1]
-    # Prior turns are supplied as bounded context in the answer-stage
-    # system prompt; the latest message remains the final user message.
-    assert second_turn_answer.messages[-1].role == "user"
+    assert [item.role for item in second_turn_answer.messages] == [
+        "system", "user", "assistant", "user"
+    ]
+    assert second_turn_answer.messages[1].content == "My project is called AtlasOnePro."
+    assert second_turn_answer.messages[2].content == "Professor received: My project is called AtlasOnePro."
     assert second_turn_answer.messages[-1].content == "What is the name of my project?"
-    system_prompt = second_turn_answer.messages[0].content
-    assert "user: My project is called AtlasOnePro." in system_prompt
-    assert "assistant: Professor received: My project is called AtlasOnePro." in system_prompt
 
     trace = client.get(f"/professor/conversations/{conversation_id}/trace")
     assert trace.status_code == 200
