@@ -105,3 +105,66 @@ def test_memory_api_exposes_owner_scoped_expiry_cleanup(tmp_path):
 def test_memory_api_cleanup_rejects_unbounded_limits(tmp_path):
     client, _current = make_client(tmp_path)
     assert client.post("/professor/memory/cleanup?limit=501").status_code == 422
+
+
+def test_memory_api_supersession_requires_confirmation_and_updates_retrieval(tmp_path):
+    client, _current = make_client(tmp_path)
+    def create_and_approve(title, content):
+        created = client.post("/professor/memory/proposals", json={
+            "category": "preference", "title": title, "content": content,
+        })
+        assert created.status_code == 201
+        proposal_id = created.json()["proposal_id"]
+        approved = client.post(
+            f"/professor/memory/proposals/{proposal_id}/decision",
+            json={"decision": "approved", "rationale": "Owner approved."},
+        )
+        assert approved.status_code == 200
+        return proposal_id
+
+    old_id = create_and_approve("Answer style", "Give detailed explanations.")
+    new_id = create_and_approve("Answer style", "Give concise explanations.")
+    assert len(client.post("/professor/memory/retrieve",
+                           json={"query": "explanations"}).json()["memories"]) == 2
+
+    denied = client.post(f"/professor/memory/proposals/{old_id}/supersession", json={
+        "replacement_proposal_id": new_id, "confirmed": False,
+    })
+    assert denied.status_code == 422
+
+    confirmed = client.post(f"/professor/memory/proposals/{old_id}/supersession", json={
+        "replacement_proposal_id": new_id, "confirmed": True,
+        "rationale": "Owner confirmed the newer preference.",
+    })
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "superseded"
+    memories = client.post("/professor/memory/retrieve",
+                           json={"query": "explanations"}).json()["memories"]
+    assert [item["proposal_id"] for item in memories] == [new_id]
+    history = client.get("/professor/memory/supersessions")
+    assert history.status_code == 200
+    assert history.json()["supersessions"][0]["prior_proposal_id"] == old_id
+
+
+def test_memory_api_supersession_is_owner_scoped_and_strictly_typed(tmp_path):
+    client, current = make_client(tmp_path)
+    old = client.post("/professor/memory/proposals", json={
+        "category": "preference", "title": "Style", "content": "Old style.",
+    }).json()["proposal_id"]
+    new = client.post("/professor/memory/proposals", json={
+        "category": "preference", "title": "Style", "content": "New style.",
+    }).json()["proposal_id"]
+    for proposal_id in (old, new):
+        assert client.post(f"/professor/memory/proposals/{proposal_id}/decision",
+                           json={"decision": "approved"}).status_code == 200
+
+    invalid = client.post(f"/professor/memory/proposals/{old}/supersession", json={
+        "replacement_proposal_id": new, "confirmed": 1,
+    })
+    assert invalid.status_code == 422
+
+    current["principal"] = RequestPrincipal("issuer", "bob", "tenant-a", True, SCOPES)
+    assert client.post(f"/professor/memory/proposals/{old}/supersession", json={
+        "replacement_proposal_id": new, "confirmed": True,
+    }).status_code == 404
+    assert client.get("/professor/memory/supersessions").json()["supersessions"] == []
