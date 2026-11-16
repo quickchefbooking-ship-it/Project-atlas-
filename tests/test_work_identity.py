@@ -23,6 +23,8 @@ def test_canonical_uri_normalization_preserves_query_but_normalizes_host_and_def
     "ftp://example.org/paper",
     "https://user:password@example.org/paper",
     "https://example.org:8443/paper",
+    "https://example.org:80/paper",
+    "http://example.org:443/paper",
     "https://example.org/paper#section",
 ])
 def test_canonical_uri_rejects_unsafe_or_ambiguous_uri_forms(uri):
@@ -70,3 +72,8 @@ def test_transitive_aliases_form_one_record_group_without_doi_conflict():
         {"uri": "https://publisher.example/other", "identifiers": {"openalex": "W123"}, "doi": "10.1000/work"},
     ])
     assert result["duplicate_groups"][0]["source_indices"] == [0, 1, 2]
+
+
+
+def test_doi_suffix_punctuation_is_not_silently_rewritten():
+    assert normalize_doi("10.1234/example.") == "10.1234/example."
