@@ -220,6 +220,25 @@ def _reviewer_id(principal) -> str:
     return "reviewer:" + digest[:32]
 
 
+
+
+def _ensure_annotation_ids(bundle: dict[str, Any]) -> None:
+    """Give pre-ID legacy annotations stable IDs in the returned revision copy."""
+    for claim in bundle.get("claims", []):
+        if not isinstance(claim, dict):
+            continue
+        for index, annotation in enumerate(claim.get("annotations", [])):
+            if isinstance(annotation, dict) and not annotation.get("annotation_id"):
+                legacy_seed = json.dumps([
+                    claim.get("claim_id"), index, annotation.get("source_id"),
+                    annotation.get("relation"), annotation.get("reviewer_id"),
+                    annotation.get("reviewed_at"),
+                ], ensure_ascii=False, separators=(",", ":"))
+                annotation["annotation_id"] = "legacy_" + hashlib.sha256(
+                    legacy_seed.encode("utf-8")
+                ).hexdigest()[:32]
+                annotation.setdefault("status", "active")
+
 def _load_bundle(db, tenant_id: str, plan_id: str, step_id: str):
     row = db.execute("""
       SELECT r.state,r.result_json,p.capability
@@ -281,18 +300,7 @@ def submit_evidence_review(
         correction_by_key = {}
         superseded_annotations = {}
         correction_reasons = []
-        for claim in base.get("claims", []):
-            if not isinstance(claim, dict):
-                continue
-            for index, existing in enumerate(claim.get("annotations", [])):
-                if isinstance(existing, dict) and not existing.get("annotation_id"):
-                    legacy_seed = json.dumps([
-                        claim.get("claim_id"), index, existing.get("source_id"),
-                        existing.get("relation"), existing.get("reviewer_id"),
-                        existing.get("reviewed_at"),
-                    ], ensure_ascii=False, separators=(",", ":"))
-                    existing["annotation_id"] = "legacy_" + hashlib.sha256(legacy_seed.encode("utf-8")).hexdigest()[:32]
-                    existing.setdefault("status", "active")
+        _ensure_annotation_ids(base)
 
         for item in payload.annotations:
             has_correction = item.supersedes_annotation_id is not None or item.correction_reason is not None
@@ -451,14 +459,17 @@ def get_evidence_review(
           ORDER BY review_id DESC LIMIT 1
         """, (principal.tenant_id, plan_id, bundle_step_id)).fetchone()
         if row is None:
+            _ensure_annotation_ids(original)
             return {"status": "awaiting_review", "plan_id": plan_id,
                     "bundle_step_id": bundle_step_id, "revision": 0, "bundle": original}
+        reviewed_bundle = json.loads(row["bundle_json"])
+        _ensure_annotation_ids(reviewed_bundle)
         return {"status": "reviewed", "plan_id": plan_id,
                 "bundle_step_id": bundle_step_id, "revision": row["review_id"],
                 "reviewer_id": row["reviewer_id"], "reviewed_at": row["reviewed_at"],
                 "supersedes_review_id": row["supersedes_review_id"],
                 "revision_kind": row["revision_kind"], "revision_reason": row["revision_reason"],
-                "bundle": json.loads(row["bundle_json"])}
+                "bundle": reviewed_bundle}
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Evidence review access denied.") from None
     except TenantStepNotFound:
