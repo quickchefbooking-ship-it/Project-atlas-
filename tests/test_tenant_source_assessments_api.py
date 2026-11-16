@@ -1,7 +1,7 @@
 import hashlib
 import sqlite3
 
-from tests.test_tenant_approved_sources_api import _setup, _stage
+from test_tenant_approved_sources_api import _setup, _stage
 
 
 def _approved(client, headers):
