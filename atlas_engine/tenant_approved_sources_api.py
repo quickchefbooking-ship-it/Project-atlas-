@@ -48,9 +48,12 @@ def _tenant_database(request: Request):
     path = getattr(request.app.state, "tenant_data_path", None)
     if not path:
         raise HTTPException(status_code=503, detail="Tenant source storage is not configured.")
-    connection = sqlite3.connect(path, timeout=5)
-    connection.row_factory = sqlite3.Row
-    return connection
+    try:
+        connection = sqlite3.connect(path, timeout=5)
+        connection.row_factory = sqlite3.Row
+        return connection
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Tenant source storage is temporarily unavailable.") from None
 
 
 @router.post("/professor/tenant/sources")
