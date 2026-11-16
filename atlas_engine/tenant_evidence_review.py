@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, authorize_tenant_resource
 from .reviewer_annotations import apply_reviewer_annotations
+from .evidence_locators import resolve_approved_tenant_html_excerpt
 from .tenant_plan_repository import TenantPlanNotFound, TenantPlanRepository
 from .tenant_step_execution_repository import (
     TenantStepExecutionRepository, TenantStepNotFound,
@@ -33,6 +34,8 @@ class ReviewerAnnotationInput(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     source_id: str = Field(min_length=1, max_length=256)
     relation: str = Field(pattern="^(supports|challenges|mentions)$")
+    source_document_id: str | None = Field(default=None, min_length=1, max_length=128)
+    excerpt: str | None = Field(default=None, min_length=1, max_length=2000)
 
 
 class EvidenceReviewInput(BaseModel):
@@ -261,10 +264,51 @@ def submit_evidence_review(
         base = json.loads(latest["bundle_json"]) if latest else original
         reviewer_id = _reviewer_id(principal)
         reviewed_at = datetime.now(timezone.utc).isoformat()
+        annotation_inputs = []
+        traceability_by_key = {}
+        for item in payload.annotations:
+            linked = item.source_document_id is not None or item.excerpt is not None
+            if linked and (item.source_document_id is None or item.excerpt is None):
+                raise ValueError("A source_document_id and excerpt must be supplied together.")
+            annotation_inputs.append(item.model_dump(
+                exclude={"source_document_id", "excerpt"}, exclude_none=True,
+            ))
+            if linked:
+                source_record = next((
+                    source for source in base.get("sources", [])
+                    if isinstance(source, dict) and source.get("source_id") == item.source_id
+                ), None)
+                if source_record is None:
+                    raise ValueError("Reviewer annotation references an unknown source.")
+                bundle_uri = next((
+                    source_record.get(key) for key in ("source_uri", "uri", "url")
+                    if isinstance(source_record.get(key), str)
+                ), None)
+                traceability = resolve_approved_tenant_html_excerpt(
+                    connection, tenant_id=principal.tenant_id,
+                    source_document_id=item.source_document_id, excerpt=item.excerpt,
+                )
+                if bundle_uri != traceability["source_uri"]:
+                    raise ValueError("Approved tenant source URI does not match the evidence bundle source.")
+                if traceability["locator_status"] != "exact_excerpt_found":
+                    raise ValueError("The excerpt must resolve to exactly one block in the approved tenant source snapshot.")
+                traceability_by_key[(item.claim_id, item.source_id, item.relation)] = traceability
+
         reviewed = apply_reviewer_annotations(
-            base, [item.model_dump() for item in payload.annotations],
-            reviewer_id=reviewer_id, reviewed_at=reviewed_at,
+            base, annotation_inputs, reviewer_id=reviewer_id, reviewed_at=reviewed_at,
         )
+        if traceability_by_key:
+            for claim in reviewed.get("claims", []):
+                if not isinstance(claim, dict):
+                    continue
+                for annotation in claim.get("annotations", []):
+                    key = (claim.get("claim_id"), annotation.get("source_id"), annotation.get("relation"))
+                    if key in traceability_by_key:
+                        annotation["source_traceability"] = traceability_by_key[key]
+            reviewed["limitations"] = list(reviewed.get("limitations") or [])
+            reviewed["limitations"].append(
+                "Linked excerpts are located in approved tenant source snapshots; locator success does not establish claim support or source credibility."
+            )
         encoded = json.dumps(reviewed, ensure_ascii=False, allow_nan=False,
                              sort_keys=True, separators=(",", ":"))
         if len(encoded.encode("utf-8")) > 65536:
