@@ -76,6 +76,8 @@ def append_source_assessment(
         message = str(exc)
         if "Approved source document" in message:
             raise HTTPException(status_code=404, detail="Approved source document was not found for this tenant.") from None
+        if "Superseded assessment was not found" in message:
+            raise HTTPException(status_code=404, detail="Prior assessment was not found for this tenant and source.") from None
         raise HTTPException(status_code=422, detail=message) from None
     except sqlite3.Error:
         connection.rollback()
