@@ -28,7 +28,6 @@ def normalize_doi(value: str | None) -> str | None:
         if lowered.startswith(prefix):
             candidate = candidate[len(prefix):].strip()
             break
-    candidate = candidate.rstrip(" .")
     if not DOI_PATTERN.fullmatch(candidate):
         raise ValueError("DOI identifier is invalid.")
     return candidate.lower()
@@ -42,14 +41,15 @@ def normalize_canonical_uri(value: str) -> str:
         port = parsed.port
     except ValueError as exc:
         raise ValueError("Canonical source URI is invalid.") from exc
+    scheme = parsed.scheme.lower()
+    expected_port = 80 if scheme == "http" else 443
     if (
-        parsed.scheme.lower() not in {"http", "https"}
+        scheme not in {"http", "https"}
         or not parsed.hostname or parsed.username is not None
-        or parsed.password is not None or port not in (None, 80, 443)
+        or parsed.password is not None or port not in (None, expected_port)
         or parsed.fragment
     ):
         raise ValueError("Canonical source URI must be HTTP(S), without credentials, fragments or alternate ports.")
-    scheme = parsed.scheme.lower()
     host = parsed.hostname.lower()
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
