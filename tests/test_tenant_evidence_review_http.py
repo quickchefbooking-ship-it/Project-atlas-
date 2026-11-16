@@ -49,7 +49,7 @@ def _client(monkeypatch, tmp_path, *, review_scope=True):
     memberships = SQLiteMembershipRegistry(membership_path)
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
-    scopes = {"plans:read", "plans:write", "steps:read", "evidence:review"}
+    scopes = {"plans:read", "plans:write", "steps:read", "evidence:review", "evidence:source:write", "evidence:source:approve"}
     if not review_scope:
         scopes.remove("evidence:review")
     memberships.provision_membership(ISSUER, "reviewer-a", "tenant-a", scopes)
@@ -290,5 +290,132 @@ def test_ask_professor_rejects_unexpected_fields_and_oversized_question(monkeypa
         )
         assert unexpected.status_code == 422
         assert oversized.status_code == 422
+    finally:
+        client.__exit__(None, None, None)
+
+
+def _set_bundle_source_uri(tmp_path, uri):
+    tenant_path = str(tmp_path / "tenant.sqlite")
+    db = sqlite3.connect(tenant_path)
+    row = db.execute("""
+      SELECT result_json FROM tenant_professor_step_runs
+      WHERE tenant_id='tenant-a' AND plan_id='review-plan' AND step_id='bundle'
+    """).fetchone()
+    bundle = json.loads(row[0])
+    bundle["sources"][0]["uri"] = uri
+    db.execute("""
+      UPDATE tenant_professor_step_runs SET result_json=?
+      WHERE tenant_id='tenant-a' AND plan_id='review-plan' AND step_id='bundle'
+    """, (json.dumps(bundle, separators=(",", ":")),))
+    db.commit()
+    db.close()
+
+
+def test_review_links_annotation_to_exact_approved_tenant_html_excerpt(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    source_uri = "https://evidence.example.test/kitchen-checks"
+    excerpt = "Temperature records were checked daily."
+    try:
+        staged = client.post(
+            "/professor/tenant/sources", headers=headers,
+            json={
+                "title": "Kitchen temperature checks",
+                "uri": source_uri,
+                "content": "<html><body><p>Temperature records were checked daily.</p></body></html>",
+                "content_type": "text/html",
+            },
+        )
+        assert staged.status_code == 200
+        document_id = staged.json()["document_id"]
+        approved = client.post(
+            f"/professor/tenant/sources/{document_id}/review",
+            headers=headers, json={"decision": "approved", "trust_level": "reviewed"},
+        )
+        assert approved.status_code == 200
+        _set_bundle_source_uri(tmp_path, source_uri)
+
+        response = client.post(
+            "/professor/tenant/plans/review-plan/evidence/bundle/review",
+            headers=headers,
+            json={"annotations": [{
+                "claim_id": "claim-1", "text": "Temperature checks were completed",
+                "source_id": "source-1", "relation": "supports",
+                "source_document_id": document_id, "excerpt": excerpt,
+            }]},
+        )
+        assert response.status_code == 200
+        annotation = response.json()["bundle"]["claims"][0]["annotations"][0]
+        traceability = annotation["source_traceability"]
+        assert traceability["source_document_id"] == document_id
+        assert traceability["source_uri"] == source_uri
+        assert traceability["source_state"] == "approved"
+        assert traceability["locator_status"] == "exact_excerpt_found"
+        assert traceability["locator"] == "html/html[1]/body[1]/p[1]"
+        assert traceability["reviewer_identity_verified"] is False
+        assert "does not establish claim support" in response.json()["bundle"]["limitations"][-1]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_review_rejects_excerpt_from_pending_tenant_source(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    source_uri = "https://evidence.example.test/pending"
+    try:
+        staged = client.post(
+            "/professor/tenant/sources", headers=headers,
+            json={
+                "title": "Pending source", "uri": source_uri,
+                "content": "<html><body><p>Pending excerpt.</p></body></html>",
+                "content_type": "text/html",
+            },
+        )
+        assert staged.status_code == 200
+        document_id = staged.json()["document_id"]
+        _set_bundle_source_uri(tmp_path, source_uri)
+        response = client.post(
+            "/professor/tenant/plans/review-plan/evidence/bundle/review",
+            headers=headers,
+            json={"annotations": [{
+                "claim_id": "claim-1", "text": "Pending excerpt",
+                "source_id": "source-1", "relation": "supports",
+                "source_document_id": document_id, "excerpt": "Pending excerpt.",
+            }]},
+        )
+        assert response.status_code == 422
+        assert "Approved tenant HTML source document was not found" in response.json()["detail"]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_review_rejects_bundle_source_uri_mismatch(monkeypatch, tmp_path):
+    client, _verifier, headers = _client(monkeypatch, tmp_path)
+    source_uri = "https://evidence.example.test/approved"
+    try:
+        staged = client.post(
+            "/professor/tenant/sources", headers=headers,
+            json={
+                "title": "Approved source", "uri": source_uri,
+                "content": "<html><body><p>Unique excerpt.</p></body></html>",
+                "content_type": "text/html",
+            },
+        )
+        document_id = staged.json()["document_id"]
+        approved = client.post(
+            f"/professor/tenant/sources/{document_id}/review",
+            headers=headers, json={"decision": "approved", "trust_level": "reviewed"},
+        )
+        assert approved.status_code == 200
+        _set_bundle_source_uri(tmp_path, "https://different.example.test/source")
+        response = client.post(
+            "/professor/tenant/plans/review-plan/evidence/bundle/review",
+            headers=headers,
+            json={"annotations": [{
+                "claim_id": "claim-1", "text": "Unique excerpt",
+                "source_id": "source-1", "relation": "supports",
+                "source_document_id": document_id, "excerpt": "Unique excerpt.",
+            }]},
+        )
+        assert response.status_code == 422
+        assert "does not match the evidence bundle source" in response.json()["detail"]
     finally:
         client.__exit__(None, None, None)
