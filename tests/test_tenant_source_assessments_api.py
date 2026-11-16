@@ -44,7 +44,7 @@ def _setup(monkeypatch, tmp_path):
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
     memberships.create_tenant("tenant-b", "Tenant B")
-    full_scopes = {"evidence:source:write", "evidence:source:approve", "evidence:source:assess"}
+    full_scopes = {"evidence:source:write", "evidence:source:approve", "evidence:source:assess", "evidence:source:read"}
     memberships.provision_membership(ISSUER, "writer", "tenant-a", full_scopes)
     memberships.provision_membership(ISSUER, "other", "tenant-b", full_scopes)
     memberships.provision_membership(
