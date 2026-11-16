@@ -304,7 +304,7 @@ def build_default_capability_runtime() -> CapabilityRuntime:
                                     "arxiv": {"type": "string", "maxLength": 512},
                                     "semantic_scholar": {"type": "string", "maxLength": 512},
                                 },
-                                "additionalProperties": false,
+                                "additionalProperties": False,
                             },
                             "publisher": {"type": "string", "maxLength": 300},
                             "retrieved_at": {"type": "string", "maxLength": 64},
