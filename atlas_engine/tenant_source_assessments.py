@@ -65,9 +65,6 @@ def initialize_tenant_source_assessment_schema(db: sqlite3.Connection) -> None:
     );
     CREATE INDEX IF NOT EXISTS idx_tenant_source_assessments_history
       ON tenant_source_assessments(tenant_id, document_id, assessed_at DESC);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_source_assessment_one_successor
-      ON tenant_source_assessments(tenant_id, supersedes_assessment_id)
-      WHERE supersedes_assessment_id IS NOT NULL;
     CREATE TRIGGER IF NOT EXISTS tenant_source_assessment_no_update
       BEFORE UPDATE ON tenant_source_assessments BEGIN
       SELECT RAISE(ABORT, 'source assessments are append-only');
