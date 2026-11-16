@@ -168,7 +168,7 @@ class ProfessorReasoningPipeline:
 
         evidence_context = preparation.evidence_context or "No approved evidence was retrieved."
         memory_context = (
-            MEMORY_COMPOSITION_POLICY + "\\n"
+            MEMORY_COMPOSITION_POLICY + "\n"
             + (
                 "Lexical match fields and terms are relevance hints, not proof of relevance. "
                 + json.dumps(safe_memory, ensure_ascii=False)
