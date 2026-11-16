@@ -325,7 +325,7 @@ def build_default_capability_runtime() -> CapabilityRuntime:
                 "sources": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
                 "claims": {"type": "array", "maxItems": 400, "items": {"type": "object"}},
                 "duplicate_records": {"type": "array", "maxItems": 20, "items": {"type": "object"}},
-                "identifier_conflicts": {"type": "array", "maxItems": 190, "items": {"type": "object"}},
+                "identifier_conflicts": {"type": "array", "maxItems": 1330, "items": {"type": "object"}},
                 "summary": {"type": "object"},
                 "limitations": {"type": "array", "maxItems": 5, "items": {"type": "string"}},
             },
