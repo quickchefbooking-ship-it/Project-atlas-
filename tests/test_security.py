@@ -61,6 +61,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/tenant/sources", "POST"),
         ("/professor/tenant/sources/{document_id}/review", "POST"),
         ("/professor/tenant/sources/{document_id}/assessments", "POST"),
+        ("/professor/tenant/sources/{document_id}/assessments", "GET"),
         ("/professor/conversation", "POST"),
         ("/professor/tenant/plans/suggest", "POST"),
         ("/professor/conversations", "GET"),
