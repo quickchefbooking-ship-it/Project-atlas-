@@ -59,3 +59,16 @@ def test_report_rejects_unsupported_evaluation_status():
     result["evaluations"][0]["status"] = "verified_true"
     with pytest.raises(ValueError, match="unsupported evaluation status"):
         build_professor_report(bundle(), result)
+
+
+def test_report_preserves_provider_aliases_and_identifier_conflicts():
+    source_bundle = bundle()
+    source_bundle["sources"][0]["identifiers"] = {"crossref": "10.1000/a"}
+    source_bundle["identifier_conflicts"] = [{
+        "identifier_key": "id:pubmed:123",
+        "source_ids": ["source-1", "source-2"],
+        "status": "conflicting_identifiers_not_merged",
+    }]
+    report = build_professor_report(source_bundle, evaluation())
+    assert report["sources"][0]["identifiers"] == {"crossref": "10.1000/a"}
+    assert report["identifier_conflicts"][0]["status"] == "conflicting_identifiers_not_merged"
