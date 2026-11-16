@@ -56,6 +56,8 @@ from atlas_engine.professor_lesson_review_api import router as professor_lesson_
 from atlas_engine.professor_conversation_api import router as professor_conversation_router
 from atlas_engine.professor_plan_suggestion_api import router as professor_plan_suggestion_router
 from atlas_engine.tenant_approved_sources import initialize_tenant_approved_source_schema
+from atlas_engine.tenant_source_assessments import initialize_tenant_source_assessment_schema
+from atlas_engine.tenant_source_assessments_api import router as tenant_source_assessments_router
 from atlas_engine.tenant_approved_sources_api import router as tenant_approved_sources_router
 from atlas_engine.tenant_evidence_review import (
     router as tenant_evidence_review_router,
@@ -144,6 +146,7 @@ app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
 app.include_router(tenant_approved_sources_router)
+app.include_router(tenant_source_assessments_router)
 app.include_router(professor_conversation_router)
 app.include_router(professor_memory_router)
 app.include_router(professor_reasoning_audit_router)
@@ -197,6 +200,7 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_step_schema(connection)
         initialize_tenant_evidence_review_schema(connection)
         initialize_tenant_approved_source_schema(connection)
+        initialize_tenant_source_assessment_schema(connection)
         initialize_tenant_conversation_schema(connection)
         initialize_tenant_evaluation_schema(connection)
         initialize_reasoning_audit_schema(connection)
