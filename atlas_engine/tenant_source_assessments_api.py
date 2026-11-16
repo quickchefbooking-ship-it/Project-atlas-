@@ -21,6 +21,8 @@ class TenantSourceAssessmentInput(BaseModel):
     study_design: str = Field(default="unknown", pattern="^(randomized_trial|observational|systematic_review|meta_analysis|case_report|qualitative|guideline|other|unknown)$")
     evidence_references: list[str] = Field(default_factory=list, max_length=10)
     rationale: str = Field(min_length=1, max_length=4000)
+    supersedes_assessment_id: str | None = Field(default=None, min_length=1, max_length=128)
+    revision_reason: str | None = Field(default=None, min_length=1, max_length=1000)
 
 
 def _reviewer_id(principal) -> str:
@@ -64,6 +66,8 @@ def append_source_assessment(
             study_design=payload.study_design,
             evidence_references=payload.evidence_references,
             rationale=payload.rationale,
+            supersedes_assessment_id=payload.supersedes_assessment_id,
+            revision_reason=payload.revision_reason,
         )
         connection.commit()
         return {"status": "assessment_recorded", **result}
