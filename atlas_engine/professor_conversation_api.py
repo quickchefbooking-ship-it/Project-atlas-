@@ -81,9 +81,6 @@ def professor_conversation(
         )
         from .cognitive_kernel import CognitiveRequest
 
-        prior_context = "\\n".join(
-            f"{item.role}: {item.content}" for item in prior_messages
-        )[-8_000:]
         approved_memory = ()
         if "memory:read" in principal.scopes:
             memory_repository = TenantProfessorMemoryRepository(db, principal)
@@ -92,8 +89,9 @@ def professor_conversation(
                 for item in memory_repository.retrieve(payload.message, limit=5)
             )
         reasoning = service.reason(
-            CognitiveRequest(task=payload.message, context=prior_context),
+            CognitiveRequest(task=payload.message),
             approved_memory=approved_memory,
+            conversation_history=tuple(conversation.messages[:-1]),
         )
         response_text = reasoning.answer
         evidence = list(reasoning.preparation.evidence)
