@@ -146,3 +146,34 @@ def test_expiry_cleanup_requires_delete_scope_and_bounded_limit(memory_repos):
     )
     with pytest.raises(AuthorizationDenied):
         owner_without_delete.purge_expired()
+
+
+def test_memory_retrieval_prefers_more_recent_record_when_relevance_is_equal(memory_repos):
+    db, owner, _other, _tenant = memory_repos
+    owner.propose("older", category="project", title="Atlas project notes", content="Architecture context.")
+    owner.decide("older", decision="approved")
+    owner.propose("newer", category="project", title="Atlas project notes", content="Updated architecture context.")
+    owner.decide("newer", decision="approved")
+    db.execute(
+        "UPDATE tenant_professor_memory_proposals SET created_at=? WHERE proposal_id=?",
+        ("2026-01-01T00:00:00+00:00", "older"),
+    )
+    db.execute(
+        "UPDATE tenant_professor_memory_proposals SET created_at=? WHERE proposal_id=?",
+        ("2026-02-01T00:00:00+00:00", "newer"),
+    )
+    results = owner.retrieve("Atlas project", limit=2)
+    assert [item["proposal_id"] for item in results] == ["newer", "older"]
+    assert results[0]["matched_fields"] == ["title", "category"]
+
+
+def test_memory_retrieval_supports_unicode_terms_and_explains_matches(memory_repos):
+    _db, owner, _other, _tenant = memory_repos
+    owner.propose("unicode", category="preference", title="Café préféré",
+                  content="Répondre avec des explications claires.")
+    owner.decide("unicode", decision="approved")
+    results = owner.retrieve("café préféré")
+    assert len(results) == 1
+    assert results[0]["proposal_id"] == "unicode"
+    assert results[0]["matched_terms"] == ["café", "préféré"]
+    assert results[0]["matched_fields"] == ["title"]
