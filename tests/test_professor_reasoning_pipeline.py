@@ -280,7 +280,7 @@ def test_pipeline_rejects_invalid_memory_match_explanations():
 
 def test_memory_composition_keeps_current_context_ahead_of_conflicting_durable_memory():
     provider = TwoPassProvider(
-        answer="I will follow the current request and clarify the conflicting saved preferences."
+        answer="Here is a short informal update about the project. I will follow the current request and clarify conflicting saved preferences."
     )
     history = (
         ConversationMessage("user", "I used to prefer formal writing."),
