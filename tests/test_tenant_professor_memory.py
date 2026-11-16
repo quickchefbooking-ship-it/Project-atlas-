@@ -230,6 +230,7 @@ def test_supersession_rejects_cross_owner_and_invalid_records(memory_repos):
         other.confirm_supersession("old", "new", confirmed=True)
     with pytest.raises(ValueError, match="cannot supersede itself"):
         owner.confirm_supersession("old", "old", confirmed=True)
+    owner.confirm_supersession("old", "new", confirmed=True)
     with pytest.raises(ValueError, match="already superseded or linked"):
         owner.confirm_supersession("old", "new", confirmed=True)
     owner.propose("pending", category="preference", title="Style", content="Pending style.")
