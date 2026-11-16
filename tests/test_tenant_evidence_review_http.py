@@ -522,3 +522,25 @@ def test_review_correction_requires_existing_same_claim_source_and_reason(monkey
         assert missing_reason.status_code == 422
     finally:
         client.__exit__(None, None, None)
+
+
+def test_review_schema_adds_supersession_columns_to_existing_history_table():
+    from atlas_engine.tenant_evidence_review import initialize_tenant_evidence_review_schema
+
+    db = sqlite3.connect(":memory:")
+    db.execute("""
+      CREATE TABLE tenant_evidence_reviews (
+        review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        bundle_step_id TEXT NOT NULL,
+        reviewer_id TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        bundle_json TEXT NOT NULL,
+        annotation_count INTEGER NOT NULL
+      )
+    """)
+    initialize_tenant_evidence_review_schema(db)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(tenant_evidence_reviews)")}
+    assert {"supersedes_review_id", "revision_kind", "revision_reason"}.issubset(columns)
+    db.close()
