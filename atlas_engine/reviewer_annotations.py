@@ -6,6 +6,7 @@ authorized the reviewer. It never extracts claims or assigns relations itself.
 from __future__ import annotations
 
 from copy import deepcopy
+import uuid
 from typing import Any
 
 MAX_ANNOTATIONS = 400
@@ -79,12 +80,15 @@ def apply_reviewer_annotations(
             raise ValueError("A claim_id must refer to one consistent claim text.")
         if any(
             existing.get("source_id") == source_id and existing.get("relation") == relation
+            and existing.get("status", "active") != "superseded"
             for existing in claim["annotations"]
         ):
             raise ValueError("This source relation is already annotated for the claim.")
         claim["annotations"].append({
+            "annotation_id": "ann_" + uuid.uuid4().hex,
             "source_id": source_id,
             "relation": relation,
+            "status": "active",
             "reviewer_id": reviewer_id.strip(),
             "reviewed_at": reviewed_at.strip(),
         })
