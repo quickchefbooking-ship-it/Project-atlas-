@@ -155,7 +155,11 @@ class ProfessorReasoningPipeline:
             )
 
         evidence_context = preparation.evidence_context or "No approved evidence was retrieved."
-        memory_context = (\n            "Lexical match fields and terms are relevance hints, not proof of relevance. "\n            + json.dumps(safe_memory, ensure_ascii=False)\n            if safe_memory else "No approved user memories were retrieved."\n        )
+        memory_context = (
+            "Lexical match fields and terms are relevance hints, not proof of relevance. "
+            + json.dumps(safe_memory, ensure_ascii=False)
+            if safe_memory else "No approved user memories were retrieved."
+        )
         plan_prompt = (
             "You are THE PROFESSOR's planning stage. Return ONLY valid JSON with exactly "
             '{"steps":[{"step_id":"step_1","objective":"...","depends_on":[]}]} . '
