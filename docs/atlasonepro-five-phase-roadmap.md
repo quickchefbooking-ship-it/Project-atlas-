@@ -149,6 +149,15 @@ Acceptance gates:
 7. Revisit per-attempt timeout semantics only with an executor that can stop safely or prove side-effect reconciliation; do not imply a thread timeout can undo work.
 8. Continue persistent-memory/evaluation regression coverage and record exact PR/push CI evidence after each meaningful change. Do not enable runtime capability invocation or specialist arms until the Phase 2 gates and Phase 3 security/contract gates pass.
 
+## Separate commercial workstream — live payments readiness
+
+**Status: blocked before provider integration.** Billing is deliberately separate from Professor reasoning and capability execution. PR #12's design-only requirements have been carried into `docs/atlasonepro-billing-readiness.md`; the current branch adds a deterministic checklist model that fails closed and can never authorize live activation.
+
+- B0 owner decisions are outstanding: dedicated provider/account, customer type, products, prices, currency, cadence, tax treatment, cancellation/refund and entitlement policy.
+- B1–B4 remain gated on B0 plus verified identity/tenant ownership, durable audit, test-only provider integration, signed/idempotent webhooks, reconciliation, entitlement tests, operations and independent security review.
+- B5 requires separate explicit human approval. No live credentials, checkout, webhook or charging may be enabled by a green checklist.
+- Quick Chef payment accounts, credentials, customer records and provider resources must never be reused.
+
 ## Current project references
 
 - Repository: https://github.com/quickchefbooking-ship-it/Project-atlas-
