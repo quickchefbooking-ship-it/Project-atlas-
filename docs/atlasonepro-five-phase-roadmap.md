@@ -153,3 +153,14 @@ Acceptance gates:
 - Phase 1 design: docs/task-crash-recovery-phase-1.md
 - Working branch: atlas/repair-baseline-2026-11-12
 - Production/main remains unchanged.
+
+
+## Separate commercial workstream — billing and live-payment readiness
+
+Billing remains outside Professor reasoning and capability execution, and does not change the priority of the core brain/security roadmap. The detailed staged specification is `docs/atlasonepro-billing-readiness.md`.
+
+**Current status:** PR #12 remains the design-only specification. A provider-neutral readiness evidence evaluator is now added in the current draft at `atlas_engine/billing_readiness.py`. It requires a referenced pass for each required gate, fails closed for missing/malformed/unreferenced evidence, emits no evidence references or secrets, and can only report readiness for human release review. It always reports `live_release_approval: not_requested` and `live_charging_enabled: false`. Unit tests cover the blocked default, all-gates pass, missing/false/malformed evidence, bounded references and secret non-disclosure.
+
+**Still blocked:** provider/account selection and independent verification; product/customer model; approved products, prices, currency and cadence; tax and cancellation/refund/dispute policy; provider-backed test checkout; signed webhooks and replay/idempotency; subscription reconciliation; tenant-owned entitlements; customer portal; operational and independent security review. No provider-specific code, checkout route, webhook endpoint, billing database, payment secret or live setting has been created.
+
+**Next gates:** obtain the B0 owner decisions without guessing commercial terms; then implement only a dedicated test-mode adapter after provider selection. Keep all Quick Chef accounts and data isolated. Live credentials, live webhook registration and charging require a separate explicit release approval after every readiness gate passes.
