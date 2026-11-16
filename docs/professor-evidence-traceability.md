@@ -49,6 +49,8 @@ Tests cover approved-only lookup, pending/rejected rejection, missing IDs, diges
 
 The existing `POST /professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review` route requires `require_verified_principal` and the `evidence:review` scope. It derives a stable pseudonymous reviewer ID from the verified issuer and subject; the request schema forbids extra fields, including a caller-supplied reviewer ID. Review records are tenant-scoped and append-only. A regression test now checks the exact digest-derived attribution rather than only checking its prefix.
 
+A follow-on draft adds stable annotation IDs and explicit `active`/`superseded` states. A correction must identify an existing annotation on the same claim and source and provide a reason; the prior annotation is retained with a supersession pointer, and the replacement is separately attributed. Each review revision links to the preceding revision with `supersedes_review_id`, `revision_kind` and a bounded reason. Earlier revision snapshots remain immutable. Evaluation excludes superseded annotations from the current classification while retaining a separate audit list, so a corrected label does not continue influencing the latest result.
+
 This identity gate already existed before the current locator work. It authenticates the reviewer at the tenant review endpoint; it does not yet bind source-document ingestion review to that same principal or connect the approved-source traceability helper to the tenant evidence-review route.
 
 ## HTML locator resolution — draft implementation
