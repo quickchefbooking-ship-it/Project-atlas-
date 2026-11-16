@@ -201,7 +201,7 @@ def test_pipeline_rejects_unbounded_provider_metadata():
 
 
 def test_pipeline_preserves_prior_user_and_assistant_turns_as_structured_messages():
-    provider = TwoPassProvider()
+    provider = TwoPassProvider(answer="Your project is called AtlasOnePro.")
     history = (
         ConversationMessage("user", "My project is called AtlasOnePro."),
         ConversationMessage("assistant", "I will remember the project name in this conversation."),
