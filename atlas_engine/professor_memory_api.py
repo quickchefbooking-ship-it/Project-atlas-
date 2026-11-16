@@ -35,7 +35,9 @@ class MemorySupersessionInput(BaseModel):
     replacement_proposal_id: str = Field(min_length=1, max_length=128)
     confirmed: StrictBool
     rationale: str = Field(default="", max_length=500)
-\n\nclass MemoryQueryInput(BaseModel):
+
+
+class MemoryQueryInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=1, max_length=1000)
     limit: int = Field(default=5, ge=1, le=20)
