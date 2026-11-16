@@ -192,3 +192,85 @@ def resolve_approved_html_excerpt(
             "This resolver does not fetch URLs, execute scripts, render CSS, or resolve PDF page coordinates.",
         ],
     }
+
+
+def resolve_approved_tenant_html_excerpt(
+    db, *, tenant_id: str, source_document_id: str, excerpt: str,
+) -> dict[str, Any]:
+    """Resolve an excerpt only from this tenant's approved immutable HTML snapshot.
+
+    This path deliberately never consults the legacy global source store.
+    """
+    from .tenant_approved_sources import get_approved_tenant_source_document
+
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        raise ValueError("An authenticated tenant identity is required.")
+    if not isinstance(source_document_id, str) or not source_document_id.strip():
+        raise ValueError("A source_document_id is required.")
+    if not isinstance(excerpt, str) or not excerpt.strip() or len(excerpt) > MAX_EXCERPT_CHARS:
+        raise ValueError("Excerpt must be non-empty text of at most 2,000 characters.")
+
+    document = get_approved_tenant_source_document(
+        db, tenant_id=tenant_id, document_id=source_document_id,
+    )
+    if document is None:
+        raise ValueError("Approved tenant HTML source document was not found.")
+    if document.get("content_type") != "text/html":
+        raise ValueError("Tenant source document is not registered as text/html.")
+
+    parsed_uri = urlparse(document.get("uri") or "")
+    try:
+        valid_port = parsed_uri.port in (None, 443)
+    except ValueError:
+        valid_port = False
+    if (
+        parsed_uri.scheme != "https" or not parsed_uri.hostname
+        or parsed_uri.username is not None or parsed_uri.password is not None
+        or not valid_port
+    ):
+        raise ValueError("Stored tenant HTML source URI must be an absolute HTTPS URI without credentials or alternate ports.")
+
+    source_text = document.get("content")
+    stored_digest = document.get("content_sha256")
+    if not isinstance(source_text, str) or not isinstance(stored_digest, str):
+        raise ValueError("Stored tenant HTML source snapshot is incomplete.")
+    actual_digest = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+    if actual_digest != stored_digest:
+        raise ValueError("Stored tenant HTML source snapshot digest does not match its content.")
+
+    quote = _normalise_text(excerpt)
+    matches = [
+        block for block in extract_html_blocks(source_text)
+        if quote in block["text"]
+    ]
+    if len(matches) == 0:
+        status = "excerpt_not_found"
+        locator = None
+    elif len(matches) == 1:
+        status = "exact_excerpt_found"
+        locator = matches[0]["locator"]
+    else:
+        status = "ambiguous_excerpt"
+        locator = None
+
+    return {
+        "schema_version": 1,
+        "source_document_id": document["document_id"],
+        "source_title": document["title"],
+        "source_uri": document["uri"],
+        "source_state": document["state"],
+        "source_trust_level": document["trust_level"],
+        "source_content_sha256": stored_digest,
+        "excerpt_sha256": hashlib.sha256(quote.encode("utf-8")).hexdigest(),
+        "locator_status": status,
+        "locator": locator,
+        "matching_block_count": len(matches),
+        "locator_method": "semantic_html_block_exact_text_v1",
+        "reviewer_identity_verified": False,
+        "limitations": [
+            "The locator is derived from this tenant's immutable approved HTML snapshot, not a live website.",
+            "The structural path is deterministic for this snapshot but may change in a later source version.",
+            "Exact text location does not establish that the excerpt supports a claim.",
+            "The resolver does not fetch URLs, execute scripts, render CSS, or resolve PDF page coordinates.",
+        ],
+    }
