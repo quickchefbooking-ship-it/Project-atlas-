@@ -36,6 +36,8 @@ class ReviewerAnnotationInput(BaseModel):
     relation: str = Field(pattern="^(supports|challenges|mentions)$")
     source_document_id: str | None = Field(default=None, min_length=1, max_length=128)
     excerpt: str | None = Field(default=None, min_length=1, max_length=2000)
+    supersedes_annotation_id: str | None = Field(default=None, min_length=1, max_length=64)
+    correction_reason: str | None = Field(default=None, min_length=1, max_length=1000)
 
 
 class EvidenceReviewInput(BaseModel):
@@ -183,6 +185,9 @@ def initialize_tenant_evidence_review_schema(db: sqlite3.Connection) -> None:
       reviewed_at TEXT NOT NULL,
       bundle_json TEXT NOT NULL,
       annotation_count INTEGER NOT NULL CHECK(annotation_count BETWEEN 1 AND 400),
+      supersedes_review_id INTEGER,
+      revision_kind TEXT NOT NULL DEFAULT 'initial' CHECK(revision_kind IN ('initial','addition','correction')),
+      revision_reason TEXT,
       FOREIGN KEY(tenant_id,plan_id,bundle_step_id)
         REFERENCES tenant_professor_step_runs(tenant_id,plan_id,step_id)
         ON DELETE RESTRICT
@@ -198,6 +203,13 @@ def initialize_tenant_evidence_review_schema(db: sqlite3.Connection) -> None:
       SELECT RAISE(ABORT,'evidence review history is append-only');
     END;
     """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(tenant_evidence_reviews)").fetchall()}
+    if "supersedes_review_id" not in columns:
+        db.execute("ALTER TABLE tenant_evidence_reviews ADD COLUMN supersedes_review_id INTEGER")
+    if "revision_kind" not in columns:
+        db.execute("ALTER TABLE tenant_evidence_reviews ADD COLUMN revision_kind TEXT NOT NULL DEFAULT 'initial'")
+    if "revision_reason" not in columns:
+        db.execute("ALTER TABLE tenant_evidence_reviews ADD COLUMN revision_reason TEXT")
 
 
 def _reviewer_id(principal) -> str:
@@ -207,6 +219,25 @@ def _reviewer_id(principal) -> str:
     ).hexdigest()
     return "reviewer:" + digest[:32]
 
+
+
+
+def _ensure_annotation_ids(bundle: dict[str, Any]) -> None:
+    """Give pre-ID legacy annotations stable IDs in the returned revision copy."""
+    for claim in bundle.get("claims", []):
+        if not isinstance(claim, dict):
+            continue
+        for index, annotation in enumerate(claim.get("annotations", [])):
+            if isinstance(annotation, dict) and not annotation.get("annotation_id"):
+                legacy_seed = json.dumps([
+                    claim.get("claim_id"), index, annotation.get("source_id"),
+                    annotation.get("relation"), annotation.get("reviewer_id"),
+                    annotation.get("reviewed_at"),
+                ], ensure_ascii=False, separators=(",", ":"))
+                annotation["annotation_id"] = "legacy_" + hashlib.sha256(
+                    legacy_seed.encode("utf-8")
+                ).hexdigest()[:32]
+                annotation.setdefault("status", "active")
 
 def _load_bundle(db, tenant_id: str, plan_id: str, step_id: str):
     row = db.execute("""
@@ -257,7 +288,7 @@ def submit_evidence_review(
         original = _load_bundle(connection, principal.tenant_id, plan_id, bundle_step_id)
         connection.execute("BEGIN IMMEDIATE")
         latest = connection.execute("""
-          SELECT bundle_json FROM tenant_evidence_reviews
+          SELECT review_id,bundle_json FROM tenant_evidence_reviews
           WHERE tenant_id=? AND plan_id=? AND bundle_step_id=?
           ORDER BY review_id DESC LIMIT 1
         """, (principal.tenant_id, plan_id, bundle_step_id)).fetchone()
@@ -266,12 +297,45 @@ def submit_evidence_review(
         reviewed_at = datetime.now(timezone.utc).isoformat()
         annotation_inputs = []
         traceability_by_key = {}
+        correction_by_key = {}
+        superseded_annotations = {}
+        correction_reasons = []
+        _ensure_annotation_ids(base)
+
         for item in payload.annotations:
+            has_correction = item.supersedes_annotation_id is not None or item.correction_reason is not None
+            if has_correction and (item.supersedes_annotation_id is None or item.correction_reason is None):
+                raise ValueError("A supersedes_annotation_id and correction_reason must be supplied together.")
+            if item.supersedes_annotation_id is not None:
+                target = None
+                for claim in base.get("claims", []):
+                    if not isinstance(claim, dict):
+                        continue
+                    for existing in claim.get("annotations", []):
+                        if isinstance(existing, dict) and existing.get("annotation_id") == item.supersedes_annotation_id:
+                            target = (claim, existing)
+                            break
+                    if target:
+                        break
+                if target is None:
+                    raise ValueError("The annotation selected for correction was not found in this tenant review history.")
+                target_claim, target_annotation = target
+                if target_claim.get("claim_id") != item.claim_id or target_annotation.get("source_id") != item.source_id:
+                    raise ValueError("A correction must refer to the same claim and source as the annotation it supersedes.")
+                if target_annotation.get("status", "active") == "superseded":
+                    raise ValueError("An already superseded annotation cannot be superseded again.")
+                target_annotation["status"] = "superseded"
+                superseded_annotations[(item.claim_id, item.source_id, item.relation)] = item.supersedes_annotation_id
+                correction_by_key[(item.claim_id, item.source_id, item.relation)] = item.correction_reason
+                correction_reasons.append(item.correction_reason)
+            elif item.correction_reason is not None:
+                raise ValueError("A correction reason is only valid when superseding an existing annotation.")
+
             linked = item.source_document_id is not None or item.excerpt is not None
             if linked and (item.source_document_id is None or item.excerpt is None):
                 raise ValueError("A source_document_id and excerpt must be supplied together.")
             annotation_inputs.append(item.model_dump(
-                exclude={"source_document_id", "excerpt"}, exclude_none=True,
+                exclude={"source_document_id", "excerpt", "supersedes_annotation_id", "correction_reason"}, exclude_none=True,
             ))
             if linked:
                 source_record = next((
@@ -297,14 +361,25 @@ def submit_evidence_review(
         reviewed = apply_reviewer_annotations(
             base, annotation_inputs, reviewer_id=reviewer_id, reviewed_at=reviewed_at,
         )
+        for claim in reviewed.get("claims", []):
+            if not isinstance(claim, dict):
+                continue
+            for annotation in claim.get("annotations", []):
+                key = (claim.get("claim_id"), annotation.get("source_id"), annotation.get("relation"))
+                if key in traceability_by_key:
+                    annotation["source_traceability"] = traceability_by_key[key]
+                if key in correction_by_key and annotation.get("reviewer_id") == reviewer_id and annotation.get("reviewed_at") == reviewed_at:
+                    annotation["supersedes_annotation_id"] = superseded_annotations[key]
+                    annotation["correction_reason"] = correction_by_key[key]
+                    for old_claim in reviewed.get("claims", []):
+                        if not isinstance(old_claim, dict):
+                            continue
+                        for old_annotation in old_claim.get("annotations", []):
+                            if isinstance(old_annotation, dict) and old_annotation.get("annotation_id") == superseded_annotations[key]:
+                                old_annotation["superseded_by"] = annotation.get("annotation_id")
+                                old_annotation["superseded_at"] = reviewed_at
+                                old_annotation["superseded_by_reviewer_id"] = reviewer_id
         if traceability_by_key:
-            for claim in reviewed.get("claims", []):
-                if not isinstance(claim, dict):
-                    continue
-                for annotation in claim.get("annotations", []):
-                    key = (claim.get("claim_id"), annotation.get("source_id"), annotation.get("relation"))
-                    if key in traceability_by_key:
-                        annotation["source_traceability"] = traceability_by_key[key]
             reviewed["limitations"] = list(reviewed.get("limitations") or [])
             reviewed["limitations"].append(
                 "Linked excerpts are located in approved tenant source snapshots; locator success does not establish claim support or source credibility."
@@ -313,12 +388,16 @@ def submit_evidence_review(
                              sort_keys=True, separators=(",", ":"))
         if len(encoded.encode("utf-8")) > 65536:
             raise ValueError("Reviewed evidence bundle exceeds the 64 KiB limit.")
+        revision_kind = "initial" if latest is None else ("correction" if correction_reasons else "addition")
+        revision_reason = "; ".join(correction_reasons) if correction_reasons else None
         connection.execute("""
           INSERT INTO tenant_evidence_reviews
-            (tenant_id,plan_id,bundle_step_id,reviewer_id,reviewed_at,bundle_json,annotation_count)
-          VALUES(?,?,?,?,?,?,?)
+            (tenant_id,plan_id,bundle_step_id,reviewer_id,reviewed_at,bundle_json,
+             annotation_count,supersedes_review_id,revision_kind,revision_reason)
+          VALUES(?,?,?,?,?,?,?,?,?,?)
         """, (principal.tenant_id, plan_id, bundle_step_id, reviewer_id,
-              reviewed_at, encoded, len(payload.annotations)))
+              reviewed_at, encoded, len(payload.annotations),
+              latest["review_id"] if latest else None, revision_kind, revision_reason))
         connection.commit()
         revision = connection.execute("""
           SELECT MAX(review_id) AS revision FROM tenant_evidence_reviews
@@ -328,6 +407,9 @@ def submit_evidence_review(
             "status": "review_recorded", "plan_id": plan_id,
             "bundle_step_id": bundle_step_id, "revision": revision,
             "annotation_count": len(payload.annotations),
+            "revision_kind": revision_kind,
+            "supersedes_review_id": latest["review_id"] if latest else None,
+            "revision_reason": revision_reason,
             "reviewer_id": reviewer_id, "reviewed_at": reviewed_at,
             "bundle": reviewed,
         }
@@ -371,18 +453,23 @@ def get_evidence_review(
             raise ValueError("Only a completed evidence bundle can be retrieved for review.")
         original = _load_bundle(connection, principal.tenant_id, plan_id, bundle_step_id)
         row = connection.execute("""
-          SELECT review_id,reviewer_id,reviewed_at,bundle_json
+          SELECT review_id,reviewer_id,reviewed_at,bundle_json,supersedes_review_id,revision_kind,revision_reason
           FROM tenant_evidence_reviews
           WHERE tenant_id=? AND plan_id=? AND bundle_step_id=?
           ORDER BY review_id DESC LIMIT 1
         """, (principal.tenant_id, plan_id, bundle_step_id)).fetchone()
         if row is None:
+            _ensure_annotation_ids(original)
             return {"status": "awaiting_review", "plan_id": plan_id,
                     "bundle_step_id": bundle_step_id, "revision": 0, "bundle": original}
+        reviewed_bundle = json.loads(row["bundle_json"])
+        _ensure_annotation_ids(reviewed_bundle)
         return {"status": "reviewed", "plan_id": plan_id,
                 "bundle_step_id": bundle_step_id, "revision": row["review_id"],
                 "reviewer_id": row["reviewer_id"], "reviewed_at": row["reviewed_at"],
-                "bundle": json.loads(row["bundle_json"])}
+                "supersedes_review_id": row["supersedes_review_id"],
+                "revision_kind": row["revision_kind"], "revision_reason": row["revision_reason"],
+                "bundle": reviewed_bundle}
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Evidence review access denied.") from None
     except TenantStepNotFound:
