@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, authorize_tenant_resource
-from .tenant_source_assessments import append_tenant_source_assessment
+from .tenant_source_assessments import append_tenant_source_assessment, list_tenant_source_assessments
 
 router = APIRouter()
 
@@ -79,6 +79,40 @@ def append_source_assessment(
         raise HTTPException(status_code=422, detail=message) from None
     except sqlite3.Error:
         connection.rollback()
+        raise HTTPException(status_code=503, detail="Tenant source storage is temporarily unavailable.") from None
+    finally:
+        connection.close()
+
+
+
+@router.get("/professor/tenant/sources/{document_id}/assessments")
+def get_source_assessment_history(
+    document_id: str,
+    request: Request,
+    principal=Depends(require_verified_principal),
+):
+    """Read assessment history inside the verified tenant boundary."""
+    try:
+        authorize_tenant_resource(
+            principal, principal.tenant_id, {"evidence:source:read"}
+        )
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Tenant source assessment access denied.") from None
+
+    path = getattr(request.app.state, "tenant_data_path", None)
+    if not path:
+        raise HTTPException(status_code=503, detail="Tenant source storage is not configured.")
+    try:
+        connection = sqlite3.connect(path, timeout=5)
+        connection.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Tenant source storage is temporarily unavailable.") from None
+    try:
+        history = list_tenant_source_assessments(
+            connection, tenant_id=principal.tenant_id, document_id=document_id,
+        )
+        return {"status": "assessment_history", "assessments": history}
+    except sqlite3.Error:
         raise HTTPException(status_code=503, detail="Tenant source storage is temporarily unavailable.") from None
     finally:
         connection.close()
