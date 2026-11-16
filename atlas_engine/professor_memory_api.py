@@ -5,7 +5,7 @@ import sqlite3
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied
@@ -28,7 +28,14 @@ class MemoryDecisionInput(BaseModel):
     rationale: str = Field(default="", max_length=500)
 
 
-class MemoryQueryInput(BaseModel):
+
+
+class MemorySupersessionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    replacement_proposal_id: str = Field(min_length=1, max_length=128)
+    confirmed: StrictBool
+    rationale: str = Field(default="", max_length=500)
+\n\nclass MemoryQueryInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=1, max_length=1000)
     limit: int = Field(default=5, ge=1, le=20)
@@ -149,6 +156,51 @@ def cleanup_expired_memory(request: Request, limit: int = 100,
         return {"deleted": deleted, "status": "expired_memory_cleanup_complete"}
     except AuthorizationDenied:
         raise HTTPException(status_code=403, detail="Memory cleanup access denied.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Professor memory storage is temporarily unavailable.") from None
+    finally:
+        db.close()
+
+
+@router.post("/professor/memory/proposals/{prior_proposal_id}/supersession")
+def confirm_memory_supersession(prior_proposal_id: str, payload: MemorySupersessionInput,
+                                 request: Request,
+                                 principal=Depends(require_verified_principal)):
+    """Replace an approved memory only after an explicit owner confirmation."""
+    db, repository = _repository(request, principal)
+    try:
+        repository.confirm_supersession(
+            prior_proposal_id, payload.replacement_proposal_id,
+            confirmed=payload.confirmed, rationale=payload.rationale,
+        )
+        return {
+            "prior_proposal_id": prior_proposal_id,
+            "replacement_proposal_id": payload.replacement_proposal_id,
+            "status": "superseded",
+            "retrieval_updated": True,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Memory supersession access denied.") from None
+    except MemoryNotFound:
+        raise HTTPException(status_code=404, detail="Both memory proposals must belong to this owner.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Professor memory storage is temporarily unavailable.") from None
+    finally:
+        db.close()
+
+
+@router.get("/professor/memory/supersessions")
+def list_memory_supersessions(request: Request, limit: int = 50,
+                              principal=Depends(require_verified_principal)):
+    db, repository = _repository(request, principal)
+    try:
+        return {"supersessions": list(repository.list_supersessions(limit=limit))}
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Memory access denied.") from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except sqlite3.Error:
