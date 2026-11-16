@@ -276,3 +276,62 @@ def test_pipeline_rejects_invalid_memory_match_explanations():
             CognitiveRequest(task="Explain the preference"),
             approved_memory=({**base, "matched_terms": ["x" * 65]},),
         )
+
+
+def test_memory_composition_keeps_current_context_ahead_of_conflicting_durable_memory():
+    provider = TwoPassProvider(
+        answer="Here is a short informal update about the project. I will follow the current request and clarify conflicting saved preferences."
+    )
+    history = (
+        ConversationMessage("user", "I used to prefer formal writing."),
+        ConversationMessage("assistant", "Understood."),
+        ConversationMessage("user", "I now prefer concise and informal writing."),
+    )
+    approved = (
+        {
+            "proposal_id": "old-style",
+            "category": "preference",
+            "title": "Writing tone",
+            "content": "Prefer formal writing.",
+        },
+        {
+            "proposal_id": "new-style",
+            "category": "preference",
+            "title": "Writing tone",
+            "content": "Prefer very detailed writing.",
+        },
+    )
+    result = ProfessorReasoningPipeline(provider).run(
+        CognitiveRequest(task="Draft a short informal update."),
+        retrieve_evidence=False,
+        approved_memory=approved,
+        conversation_history=history,
+    )
+    assert result.status in {"ready", "held_for_review"}
+    assert len(provider.calls) == 2
+    for call in provider.calls:
+        prompt = call.messages[0].content
+        assert "current explicit user request takes priority" in prompt
+        assert "Recent conversation history is short-term working context" in prompt
+        assert "approved memories are durable but historical reference" in prompt
+        assert "preserve the distinction, state the uncertainty, and ask" in prompt
+        assert "Prefer formal writing." in prompt
+        assert "Prefer very detailed writing." in prompt
+        assert call.messages[1:4] == history
+        assert call.messages[-1].content in {
+            "Create the structured reasoning decomposition now.",
+            "Draft a short informal update.",
+        }
+
+
+def test_memory_composition_policy_is_present_even_without_approved_memories():
+    provider = TwoPassProvider()
+    result = ProfessorReasoningPipeline(provider).run(
+        CognitiveRequest(task="Explain the architecture"),
+        retrieve_evidence=False,
+    )
+    assert result.status == "ready"
+    for call in provider.calls:
+        prompt = call.messages[0].content
+        assert "current explicit user request takes priority" in prompt
+        assert "No approved user memories were retrieved." in prompt

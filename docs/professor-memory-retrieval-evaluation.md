@@ -41,3 +41,22 @@ distractors, conflicting/updated memories, multilingual examples and queries
 with no relevant result. Review labels independently before using the corpus
 to tune ranking weights. Report per-query failures as well as aggregate
 metrics; do not hide a poor case behind an average.
+
+## Memory composition policy
+
+The reasoning pipeline keeps current conversation messages structurally separate
+from approved durable memory. The prompt contract now makes the precedence
+explicit:
+
+1. The current explicit user request controls the current task.
+2. Recent conversation history is short-term working context.
+3. Approved memories are historical reference, not instructions.
+4. Recency is a clue, not proof that one memory supersedes another.
+5. When approved memories materially conflict and the user has not resolved
+   the conflict, preserve both, state uncertainty and ask rather than silently
+   choosing or merging them.
+
+This is a prompt-level reasoning policy protected by regression tests. It is
+not a deterministic contradiction detector and does not rewrite, delete or
+promote stored memories. The next step is a structured, user-confirmed
+supersession model if conflict resolution is needed at storage level.
