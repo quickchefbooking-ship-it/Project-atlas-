@@ -10,6 +10,7 @@ import hashlib
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from .capability_runtime import CapabilityExecutionError, CapabilityRuntime
 from .http_identity import require_verified_principal
@@ -21,8 +22,71 @@ from .tenant_execution_audit_repository import TenantExecutionAuditRepository
 from .tenant_step_execution_repository import (
     TenantStepError, TenantStepExecutionRepository,
 )
+from .tenant_plan_cancellation import (
+    CancellationPlanNotActive, CancellationPlanNotFound,
+    TenantPlanCancellationRepository,
+)
 
 router = APIRouter()
+
+
+class CancelTenantPlanRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+def _finalize_requested_cancellation(plans, steps, cancellations, plan_id: str):
+    """Stop future claims; let already-claimed bounded work finish safely."""
+    if not cancellations.is_requested(plan_id):
+        return None
+
+    plan = plans.get(plan_id)
+    records = ()
+    if plan.state in {PlanState.RUNNING, PlanState.CANCELLED}:
+        records = steps.list_steps(plan_id)
+    states = {item.step_id: item.state for item in records}
+
+    if plan.state is PlanState.RUNNING and any(
+        item.state == "claimed" for item in records
+    ):
+        return {
+            "status": "cancellation_requested",
+            "plan_id": plan_id,
+            "plan_state": plan.state.value,
+            "step_states": states,
+            "execution_enabled": True,
+            "next_action": (
+                "An already-claimed step may finish; no additional steps will be claimed."
+            ),
+        }
+
+    if plan.state in {PlanState.READY, PlanState.RUNNING}:
+        plan = plans.transition(
+            plan_id, expected_state=plan.state, new_state=PlanState.CANCELLED
+        )
+
+    if plan.state is PlanState.CANCELLED:
+        recovery_required = any(
+            item.state == "recovery_required" for item in records
+        )
+        return {
+            "status": "cancelled",
+            "plan_id": plan_id,
+            "plan_state": plan.state.value,
+            "step_states": states,
+            "execution_enabled": True,
+            "next_action": (
+                "Operator review is required for an uncertain expired lease; no automatic replay is performed."
+                if recovery_required else None
+            ),
+        }
+
+    return {
+        "status": "already_terminal",
+        "plan_id": plan_id,
+        "plan_state": plan.state.value,
+        "execution_enabled": True,
+        "next_action": None,
+    }
 
 
 def _worker_id(principal) -> str:
@@ -30,6 +94,41 @@ def _worker_id(principal) -> str:
         (principal.issuer + "\\0" + principal.subject).encode("utf-8")
     ).hexdigest()[:32]
     return "http:" + digest
+
+
+@router.post("/professor/tenant/plans/{plan_id}/cancel")
+def request_tenant_professor_plan_cancellation(
+    plan_id: str,
+    body: CancelTenantPlanRequest,
+    request: Request,
+    principal=Depends(require_verified_principal),
+):
+    """Persist a tenant-authorized stop request without interrupting a live handler."""
+    database_path = getattr(request.app.state, "tenant_data_path", None)
+    if not database_path:
+        raise HTTPException(status_code=503, detail="Professor execution storage is not configured.")
+    connection = sqlite3.connect(database_path, timeout=5)
+    connection.row_factory = sqlite3.Row
+    try:
+        cancellations = TenantPlanCancellationRepository(connection, principal)
+        record = cancellations.request(plan_id, reason=body.reason)
+        return {
+            "status": "cancellation_requested",
+            "plan_id": record.plan_id,
+            "requested_at": record.requested_at,
+        }
+    except AuthorizationDenied:
+        raise HTTPException(status_code=403, detail="Plan cancellation denied.") from None
+    except CancellationPlanNotFound:
+        raise HTTPException(status_code=404, detail="Plan was not found.") from None
+    except CancellationPlanNotActive:
+        raise HTTPException(status_code=409, detail="Plan is not cancellable in its current state.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except sqlite3.Error:
+        raise HTTPException(status_code=503, detail="Tenant execution storage is temporarily unavailable.") from None
+    finally:
+        connection.close()
 
 
 @router.post("/professor/tenant/plans/{plan_id}/execute-next")
@@ -62,7 +161,14 @@ def execute_next_tenant_professor_step(
     try:
         plans = TenantPlanRepository(connection, principal)
         steps = TenantStepExecutionRepository(connection, principal)
+        cancellations = TenantPlanCancellationRepository(connection, principal)
         plan = plans.get(plan_id)
+        cancellation_result = _finalize_requested_cancellation(
+            plans, steps, cancellations, plan_id
+        )
+        if cancellation_result is not None:
+            return cancellation_result
+
         if plan.state is PlanState.READY:
             preview = preview_plan(plan, runtime.registry, granted_scopes=principal.scopes)
             if preview.blocked_step_ids:
@@ -112,12 +218,25 @@ def execute_next_tenant_professor_step(
         worker_id = _worker_id(principal)
         lease = steps.claim_next_step(plan_id, worker_id, lease_seconds=60)
         if lease is None:
+            cancellation_result = _finalize_requested_cancellation(
+                plans, steps, cancellations, plan_id
+            )
+            if cancellation_result is not None:
+                return cancellation_result
             records = steps.list_steps(plan_id)
             states = {item.state for item in records}
             if states == {"succeeded"}:
-                completed = plans.transition(
-                    plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
-                )
+                try:
+                    completed = plans.transition(
+                        plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
+                    )
+                except TenantPlanConflict:
+                    cancellation_result = _finalize_requested_cancellation(
+                        plans, steps, cancellations, plan_id
+                    )
+                    if cancellation_result is not None:
+                        return cancellation_result
+                    raise
                 return {
                     "status": "completed", "plan_id": plan_id,
                     "plan_state": completed.state.value, "execution_enabled": True,
@@ -131,6 +250,17 @@ def execute_next_tenant_professor_step(
                     "next_action": "Operator review is required; no automatic replay is performed.",
                 }
             raise HTTPException(status_code=409, detail="No dependency-ready step is available.")
+
+        # A cancellation may arrive after the HTTP-level preflight but before
+        # the lease is dispatched. Release this claim as a failed-before-run
+        # attempt; it must never be replayed automatically.
+        if cancellations.is_requested(plan_id):
+            steps.complete(lease, error_code="cancelled_before_dispatch")
+            cancellation_result = _finalize_requested_cancellation(
+                plans, steps, cancellations, plan_id
+            )
+            if cancellation_result is not None:
+                return cancellation_result
 
         step = next(item for item in plan.steps if item.step_id == lease.step_id)
         version = step.capability_version
@@ -190,6 +320,22 @@ def execute_next_tenant_professor_step(
                 fencing_token=lease.fencing_token,
                 capability_input=capability_input,
             )
+            # Recheck after the durable audit reservation and immediately
+            # before dispatch. A later request is treated as an in-flight step
+            # and may finish, but no subsequent step can be claimed.
+            if cancellations.is_requested(plan_id):
+                audit.record_outcome(
+                    reservation_event_id,
+                    event_type="handler_failed",
+                    error_code="cancelled_before_dispatch",
+                )
+                steps.complete(lease, error_code="cancelled_before_dispatch")
+                cancellation_result = _finalize_requested_cancellation(
+                    plans, steps, cancellations, plan_id
+                )
+                if cancellation_result is not None:
+                    return cancellation_result
+
             result = runtime.execute(
                 step.capability, version, capability_input,
                 timeout_seconds=step.timeout_seconds,
@@ -206,6 +352,16 @@ def execute_next_tenant_professor_step(
                     error_code="capability_execution_failed",
                 )
             steps.complete(lease, error_code="capability_execution_failed")
+            cancellation_result = _finalize_requested_cancellation(
+                plans, steps, cancellations, plan_id
+            )
+            if cancellation_result is not None:
+                cancellation_result.update({
+                    "step_id": lease.step_id,
+                    "step_state": "failed",
+                    "error_code": "capability_execution_failed",
+                })
+                return cancellation_result
             plans.transition(
                 plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
             )
@@ -216,14 +372,38 @@ def execute_next_tenant_professor_step(
                 "execution_enabled": True,
             }
 
+        cancellation_result = _finalize_requested_cancellation(
+            plans, steps, cancellations, plan_id
+        )
+        if cancellation_result is not None:
+            cancellation_result.update({
+                "step_id": record.step_id,
+                "step_state": record.state,
+                "result": record.result,
+            })
+            return cancellation_result
+
         records = steps.list_steps(plan_id)
         all_succeeded = all(item.state == "succeeded" for item in records)
         plan_state = PlanState.RUNNING.value
         if all_succeeded:
-            completed = plans.transition(
-                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
-            )
-            plan_state = completed.state.value
+            try:
+                completed = plans.transition(
+                    plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED
+                )
+                plan_state = completed.state.value
+            except TenantPlanConflict:
+                cancellation_result = _finalize_requested_cancellation(
+                    plans, steps, cancellations, plan_id
+                )
+                if cancellation_result is not None:
+                    cancellation_result.update({
+                        "step_id": record.step_id,
+                        "step_state": record.state,
+                        "result": record.result,
+                    })
+                    return cancellation_result
+                raise
         return {
             "status": "completed" if all_succeeded else "step_succeeded",
             "plan_id": plan_id,
