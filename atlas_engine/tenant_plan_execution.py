@@ -362,9 +362,22 @@ def execute_next_tenant_professor_step(
                     "error_code": "capability_execution_failed",
                 })
                 return cancellation_result
-            plans.transition(
-                plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
-            )
+            try:
+                plans.transition(
+                    plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.FAILED
+                )
+            except TenantPlanConflict:
+                cancellation_result = _finalize_requested_cancellation(
+                    plans, steps, cancellations, plan_id
+                )
+                if cancellation_result is not None:
+                    cancellation_result.update({
+                        "step_id": lease.step_id,
+                        "step_state": "failed",
+                        "error_code": "capability_execution_failed",
+                    })
+                    return cancellation_result
+                raise
             return {
                 "status": "failed", "plan_id": plan_id, "step_id": lease.step_id,
                 "plan_state": PlanState.FAILED.value,
