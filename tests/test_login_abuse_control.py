@@ -166,3 +166,11 @@ def test_non_ip_network_sources_are_rejected(tmp_path):
     guard = make_guard(tmp_path, Clock())
     with pytest.raises(ValueError, match="network IP address"):
         guard.check("person@example.test", "203.0.113.10, 198.51.100.2")
+
+
+def test_scoped_ipv6_network_sources_are_rejected(tmp_path):
+    import pytest
+
+    guard = make_guard(tmp_path, Clock())
+    with pytest.raises(ValueError, match="Scoped"):
+        guard.check("person@example.test", "fe80::1%eth0")
