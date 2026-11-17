@@ -7,6 +7,7 @@ from atlas_engine.account_identity import Argon2idCredentialHasher, SQLiteAccoun
 from atlas_engine.atlas_session_identity import ATLAS_IDENTITY_ISSUER, AtlasSessionIdentityService
 from atlas_engine.oidc_account_link import (
     IDENTITY_LINK_SCOPE,
+    InactiveAtlasAccount,
     OIDCAccountLinkNotFound,
     OIDCAccountLinkService,
     SQLiteOIDCAccountLinkRepository,
@@ -41,13 +42,13 @@ def _attempt(transactions, *, subject="provider-subject", issuer=ISSUER):
     return claims, consumed
 
 
-def _active_session_count(database):
+def _session_count(database, *, active_only=False):
     conn = sqlite3.connect(database)
     try:
-        return conn.execute(
-            """SELECT count(*) FROM atlas_sessions
-               WHERE revoked_at IS NULL AND rotated_to_session_id IS NULL"""
-        ).fetchone()[0]
+        query = "SELECT count(*) FROM atlas_sessions"
+        if active_only:
+            query += " WHERE revoked_at IS NULL AND rotated_to_session_id IS NULL"
+        return conn.execute(query).fetchone()[0]
     finally:
         conn.close()
 
@@ -134,7 +135,7 @@ def test_complete_login_issues_opaque_session_and_session_bound_csrf(setup):
 
 
 def test_unknown_external_identity_does_not_issue_an_atlas_session(setup):
-    before = _active_session_count(setup["database"])
+    before = _session_count(setup["database"], active_only=True)
     claims, transaction = _attempt(
         setup["transactions"], subject="not-explicitly-linked"
     )
@@ -142,7 +143,7 @@ def test_unknown_external_identity_does_not_issue_an_atlas_session(setup):
     with pytest.raises(OIDCAccountLinkNotFound):
         setup["login"].complete_login(claims, transaction)
 
-    assert _active_session_count(setup["database"]) == before
+    assert _session_count(setup["database"], active_only=True) == before
 
 
 def test_inactive_membership_blocks_login_before_session_issuance(setup):
@@ -151,13 +152,13 @@ def test_inactive_membership_blocks_login_before_session_issuance(setup):
     assert memberships.revoke_membership(
         ATLAS_IDENTITY_ISSUER, account_id, "tenant-a"
     )
-    before = _active_session_count(setup["database"])
+    before = _session_count(setup["database"], active_only=True)
     claims, transaction = _attempt(setup["transactions"])
 
     with pytest.raises(InactiveMembershipError):
         setup["login"].complete_login(claims, transaction)
 
-    assert _active_session_count(setup["database"]) == before
+    assert _session_count(setup["database"], active_only=True) == before
 
 
 def test_ambiguous_active_tenant_memberships_block_login(setup):
@@ -170,33 +171,26 @@ def test_ambiguous_active_tenant_memberships_block_login(setup):
         "tenant-b",
         {"professor:chat"},
     )
-    before = _active_session_count(setup["database"])
+    before = _session_count(setup["database"], active_only=True)
     claims, transaction = _attempt(setup["transactions"])
 
     with pytest.raises(AmbiguousMembershipError):
         setup["login"].complete_login(claims, transaction)
 
-    assert _active_session_count(setup["database"]) == before
+    assert _session_count(setup["database"], active_only=True) == before
 
 
 def test_suspended_atlas_account_cannot_receive_an_oidc_session(setup):
-    before = sqlite3.connect(setup["database"]).execute(
-        "SELECT count(*) FROM atlas_sessions"
-    ).fetchone()[0]
+    before = _session_count(setup["database"])
     setup["accounts"].set_account_status(
         setup["account"].account_id, "suspended"
     )
     claims, transaction = _attempt(setup["transactions"])
 
-    from atlas_engine.oidc_account_link import InactiveAtlasAccount
-
     with pytest.raises(InactiveAtlasAccount):
         setup["login"].complete_login(claims, transaction)
 
-    after = sqlite3.connect(setup["database"]).execute(
-        "SELECT count(*) FROM atlas_sessions"
-    ).fetchone()[0]
-    assert after == before
+    assert _session_count(setup["database"]) == before
 
 
 def test_membership_revoked_during_issuance_causes_new_session_to_be_revoked(
