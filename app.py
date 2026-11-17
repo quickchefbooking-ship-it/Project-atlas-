@@ -27,6 +27,7 @@ from atlas_engine.public_research_adapters import fetch_github_repository, fetch
 import logging
 from atlas_engine.public_web_retrieval import fetch_public_web_page
 from atlas_engine.http_identity import VerifiedIdentityService, require_verified_principal
+from atlas_engine.oidc_browser_routes import router as oidc_browser_router
 from atlas_engine.oidc_contract import OIDCProviderConfig
 from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
@@ -142,6 +143,11 @@ app.state.tenant_data_path = None
 app.state.capability_execution_enabled = _capability_execution_enabled_from_environment()
 app.state.tenant_capability_runtime = build_default_capability_runtime()
 app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
+app.state.oidc_login_initiator = None
+app.state.oidc_browser_login_service = None
+app.state.atlas_session_identity_service = None
+app.state.atlas_trusted_origins = frozenset()
+app.include_router(oidc_browser_router)
 app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
@@ -407,6 +413,7 @@ def identity_login_readiness():
     required_login_routes = (
         ("GET", "/identity/login"),
         ("GET", "/identity/callback"),
+        ("POST", "/identity/logout"),
     )
     registered_routes = {
         (method, getattr(route, "path", None))
@@ -418,13 +425,20 @@ def identity_login_readiness():
         for method, path in required_login_routes
         if (method, path) not in registered_routes
     ]
+    route_services = (
+        ("authorization_redirect_service", getattr(app.state, "oidc_login_initiator", None)),
+        ("callback_session_service", getattr(app.state, "oidc_browser_login_service", None)),
+    )
+    missing_services = [name for name, service in route_services if service is None]
 
     if missing_verifier or missing_login:
         readiness_status = "not_configured"
     elif missing_routes:
         readiness_status = "not_implemented"
+    elif missing_services:
+        readiness_status = "routes_registered_unconfigured"
     else:
-        # Route registration is not proof of a successful provider round trip.
+        # Registration and service injection are not proof of a live provider round trip.
         readiness_status = "routes_registered_unverified"
 
     return {
@@ -435,14 +449,17 @@ def identity_login_readiness():
         },
         "hosted_login": {
             "configured": not missing_login,
-            "implemented": not missing_routes,
+            "implemented": not missing_routes and not missing_services,
+            "routes_registered": not missing_routes,
+            "services_configured": not missing_services,
             "missing_settings": missing_login,
             "missing_routes": missing_routes,
+            "missing_services": missing_services,
             "flow": "authorization_code_pkce",
         },
         "note": (
-            "This endpoint reports configuration and route registration only; "
-            "it does not prove a successful sign-in or callback round trip."
+            "This endpoint reports configuration, service injection and route "
+            "registration only; it does not prove a successful sign-in or callback round trip."
         ),
     }
 
