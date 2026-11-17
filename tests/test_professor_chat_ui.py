@@ -5,10 +5,16 @@ def test_professor_chat_page_uses_verified_bearer_api_without_persisting_token()
     page = Path(__file__).resolve().parents[1] / "static" / "professor_chat.html"
     html = page.read_text(encoding="utf-8")
 
-    assert 'Authorization:"Bearer "+token' in html
+    assert 'token?{Authorization:"Bearer "+token}:{}' in html
+    assert 'credentials:"same-origin"' in html
+    assert 'headers["X-Atlas-CSRF"]=csrf' in html
+    assert 'window.location.assign("/identity/login")' in html
+    assert 'request("/identity/logout",{method:"POST"})' in html
+    assert 'const CSRF_COOKIE="__Host-atlas_csrf"' in html
     assert 'request("/identity/me")' in html
-    assert 'fetch("/identity/login-readiness")' in html
-    assert "Hosted organisation sign-in is the target." in html
+    assert 'fetch("/identity/login-readiness",{credentials:"same-origin"})' in html
+    assert "Use organisation sign-in when hosted OIDC is configured." in html
+    assert 'id="signIn"' in html
     assert '"conversations:read"' in html
     assert '"conversations:write"' in html
     assert '"/professor/conversation"' in html
