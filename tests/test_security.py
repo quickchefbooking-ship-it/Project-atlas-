@@ -37,12 +37,15 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/voice", "GET"),
         ("/professor/chat", "GET"),
         ("/identity/login-readiness", "GET"),
+        ("/identity/login", "GET"),
+        ("/identity/callback", "GET"),
         ("/launch/readiness", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
     verified_identity_routes = {
         ("/identity/me", "GET"),
+        ("/identity/logout", "POST"),
         ("/professor/tenant/plans/{plan_id}", "GET"),
         ("/professor/tenant/plans", "POST"),
         ("/professor/tenant/plans/{plan_id}/prepare", "POST"),
