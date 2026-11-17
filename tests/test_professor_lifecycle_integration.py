@@ -25,6 +25,7 @@ from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schem
 
 ALICE_SCOPES = frozenset({
     "conversations:read", "conversations:write", "conversations:delete",
+    "professor:chat",
     "evaluations:read", "evaluations:write",
     "lessons:propose", "lessons:read",
     "plans:read", "plans:write", "public.research.read",
