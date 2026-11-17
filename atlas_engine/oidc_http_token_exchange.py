@@ -101,7 +101,7 @@ class HTTPSOIDCAuthorizationCodeExchanger:
         if self.client_secret is not None and (
             not isinstance(self.client_secret, str)
             or not 1 <= len(self.client_secret) <= 4096
-            or _VISIBLE_ASCII.fullmatch(self.client_secret) is None
+            or any(ord(char) < 0x20 or ord(char) > 0x7e for char in self.client_secret)
         ):
             raise ValueError("A valid confidential-client secret is required.")
         if (
