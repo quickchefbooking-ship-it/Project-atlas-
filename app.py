@@ -425,11 +425,24 @@ def identity_login_readiness():
         for method, path in required_login_routes
         if (method, path) not in registered_routes
     ]
-    route_services = (
-        ("authorization_redirect_service", getattr(app.state, "oidc_login_initiator", None)),
-        ("callback_session_service", getattr(app.state, "oidc_browser_login_service", None)),
+    login_initiator = getattr(app.state, "oidc_login_initiator", None)
+    callback_service = getattr(app.state, "oidc_browser_login_service", None)
+    services_match = (
+        login_initiator is not None
+        and callable(getattr(login_initiator, "begin_login", None))
+        and callback_service is not None
+        and callable(getattr(callback_service, "complete_callback", None))
+        and getattr(callback_service, "transactions", None)
+        is getattr(login_initiator, "transactions", None)
+        and getattr(callback_service, "redirect_uri", None)
+        == getattr(login_initiator, "redirect_uri", None)
+        and getattr(callback_service, "login_sessions", None) is not None
     )
-    missing_services = [name for name, service in route_services if service is None]
+    missing_services = (
+        []
+        if services_match
+        else ["authorization_redirect_service", "callback_session_service"]
+    )
 
     if missing_verifier or missing_login:
         readiness_status = "not_configured"
