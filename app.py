@@ -344,6 +344,27 @@ def health():
     return api.health()
 
 
+def _build_revision_from_environment() -> Optional[str]:
+    """Return only a full Git SHA supplied by the trusted build environment."""
+    revision = os.getenv("ATLAS_BUILD_REVISION", "").strip()
+    if len(revision) != 40 or any(
+        character not in "0123456789abcdefABCDEF" for character in revision
+    ):
+        return None
+    return revision.lower()
+
+
+@app.get("/build-info")
+def build_info():
+    """Expose only the validated source revision; never echo arbitrary environment data."""
+    revision = _build_revision_from_environment()
+    return {
+        "revision": revision,
+        "status": "known" if revision is not None else "unknown",
+    }
+
+
+
 @app.get("/launch/readiness")
 def launch_readiness():
     """Return a non-secret launch checklist; configuration is not a live health check."""
