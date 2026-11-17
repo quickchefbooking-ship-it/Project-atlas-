@@ -143,7 +143,7 @@ def test_redirect_must_be_the_fixed_identity_callback_before_store_initializatio
         ("ATLAS_OIDC_TOKEN_ENDPOINT", "http://identity.example.test/token"),
         ("ATLAS_OIDC_AUTHORIZATION_ENDPOINT", "http://identity.example.test/authorize"),
         ("ATLAS_OIDC_REDIRECT_URI", "https://atlas.example.test/not-the-callback"),
-        ("ATLAS_OIDC_CLIENT_ID", ""),
+        ("ATLAS_OIDC_CLIENT_ID", "atlas browser client"),
         ("ATLAS_OIDC_ALLOWED_ALGORITHMS", "none"),
     ],
 )
