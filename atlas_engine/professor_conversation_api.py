@@ -55,6 +55,8 @@ def professor_conversation(
     principal: RequestPrincipal = Depends(require_verified_principal),
 ):
     """Create or continue one private conversation and return one text answer."""
+    if "professor:chat" not in principal.scopes:
+        raise HTTPException(status_code=403, detail="Professor chat access denied.")
     service = getattr(request.app.state, "conversation_service", None)
     if service is None or not service.is_configured:
         raise HTTPException(
