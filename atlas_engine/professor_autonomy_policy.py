@@ -23,6 +23,8 @@ class AutonomyAction(str, Enum):
     INSPECT_TEST_RESULTS = "inspect_test_results"
     RUN_TESTS = "run_tests"
     SAVE_VALIDATED_LESSON = "save_validated_lesson"
+    EXECUTE_REGISTERED_LOCAL_CAPABILITY = "execute_registered_local_capability"
+    CREATE_EVIDENCE_REPORT = "create_evidence_report"
     WRITE_ISOLATED_SANDBOX = "write_isolated_sandbox"
     CREATE_FEATURE_BRANCH = "create_feature_branch"
     OPEN_DRAFT_PULL_REQUEST = "open_draft_pull_request"
@@ -52,6 +54,8 @@ _BASE_ACTIONS = frozenset({
 _SANDBOX_ACTIONS = _BASE_ACTIONS | frozenset({
     AutonomyAction.SAVE_VALIDATED_LESSON,
     AutonomyAction.WRITE_ISOLATED_SANDBOX,
+    AutonomyAction.EXECUTE_REGISTERED_LOCAL_CAPABILITY,
+    AutonomyAction.CREATE_EVIDENCE_REPORT,
 })
 
 _DRAFT_ACTIONS = _SANDBOX_ACTIONS | frozenset({

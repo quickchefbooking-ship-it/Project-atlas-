@@ -20,6 +20,8 @@ def test_observe_mode_allows_read_only_engineering_actions(action):
 def test_observe_mode_cannot_write_or_create_delivery_artifacts():
     policy = ProfessorAutonomyPolicy(AutonomyMode.OBSERVE)
     assert not policy.permits(AutonomyAction.WRITE_ISOLATED_SANDBOX)
+    assert not policy.permits(AutonomyAction.EXECUTE_REGISTERED_LOCAL_CAPABILITY)
+    assert not policy.permits(AutonomyAction.CREATE_EVIDENCE_REPORT)
     assert not policy.permits(AutonomyAction.CREATE_FEATURE_BRANCH)
     assert not policy.permits(AutonomyAction.OPEN_DRAFT_PULL_REQUEST)
 
@@ -28,6 +30,8 @@ def test_sandbox_mode_can_build_in_isolation_and_save_validated_learning():
     policy = ProfessorAutonomyPolicy(AutonomyMode.SANDBOX_BUILD)
     assert policy.permits(AutonomyAction.WRITE_ISOLATED_SANDBOX)
     assert policy.permits(AutonomyAction.SAVE_VALIDATED_LESSON)
+    assert policy.permits(AutonomyAction.EXECUTE_REGISTERED_LOCAL_CAPABILITY)
+    assert policy.permits(AutonomyAction.CREATE_EVIDENCE_REPORT)
     assert not policy.permits(AutonomyAction.CREATE_FEATURE_BRANCH)
     assert not policy.permits(AutonomyAction.OPEN_DRAFT_PULL_REQUEST)
 
@@ -35,6 +39,8 @@ def test_sandbox_mode_can_build_in_isolation_and_save_validated_learning():
 def test_draft_delivery_mode_can_create_reviewable_git_artifacts():
     policy = ProfessorAutonomyPolicy(AutonomyMode.DRAFT_DELIVERY)
     assert policy.permits(AutonomyAction.WRITE_ISOLATED_SANDBOX)
+    assert policy.permits(AutonomyAction.EXECUTE_REGISTERED_LOCAL_CAPABILITY)
+    assert policy.permits(AutonomyAction.CREATE_EVIDENCE_REPORT)
     assert policy.permits(AutonomyAction.CREATE_FEATURE_BRANCH)
     assert policy.permits(AutonomyAction.OPEN_DRAFT_PULL_REQUEST)
 
