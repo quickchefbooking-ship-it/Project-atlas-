@@ -12,7 +12,7 @@ def test_professor_chat_page_uses_verified_bearer_api_without_persisting_token()
     assert 'request("/identity/logout",{method:"POST"})' in html
     assert 'const CSRF_COOKIE="__Host-atlas_csrf"' in html
     assert 'request("/identity/me")' in html
-    assert 'fetch("/identity/login-readiness")' in html
+    assert 'fetch("/identity/login-readiness",{credentials:"same-origin"})' in html
     assert "Use organisation sign-in when hosted OIDC is configured." in html
     assert 'id="signIn"' in html
     assert '"conversations:read"' in html
