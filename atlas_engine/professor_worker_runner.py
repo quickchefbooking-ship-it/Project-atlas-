@@ -7,6 +7,8 @@ repository/runtime composition before a worker tick can dispatch a capability.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+from threading import RLock
 from typing import Callable
 
 from .capability_runtime import CapabilityExecutionError, CapabilityRuntime
@@ -39,6 +41,70 @@ class ProfessorWorkerGate:
         for name in ("worker_enabled", "global_execution_enabled", "isolation_verified"):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f"{name} must be a boolean.")
+
+
+class WorkerLifecycleState(str, Enum):
+    STOPPED = "stopped"
+    STARTING = "starting"
+    READY = "ready"
+    DRAINING = "draining"
+    FAILED = "failed"
+
+
+class WorkerLifecycleError(RuntimeError):
+    """An invalid Professor worker lifecycle transition was requested."""
+
+
+class ProfessorWorkerLifecycle:
+    """Thread-safe lifecycle gate; this is state coordination, not a supervisor."""
+
+    def __init__(self) -> None:
+        self._state = WorkerLifecycleState.STOPPED
+        self._lock = RLock()
+
+    @property
+    def state(self) -> WorkerLifecycleState:
+        with self._lock:
+            return self._state
+
+    @property
+    def accepting_work(self) -> bool:
+        return self.state is WorkerLifecycleState.READY
+
+    def begin_startup(self) -> None:
+        with self._lock:
+            if self._state is not WorkerLifecycleState.STOPPED:
+                raise WorkerLifecycleError("Worker can start only from stopped state.")
+            self._state = WorkerLifecycleState.STARTING
+
+    def mark_ready(self, gate: ProfessorWorkerGate) -> None:
+        with self._lock:
+            if self._state is not WorkerLifecycleState.STARTING:
+                raise WorkerLifecycleError("Worker must be starting before it can become ready.")
+            if not isinstance(gate, ProfessorWorkerGate) or not (
+                gate.worker_enabled and gate.global_execution_enabled and gate.isolation_verified
+            ):
+                self._state = WorkerLifecycleState.FAILED
+                raise WorkerLifecycleError("Worker readiness gates are not all satisfied.")
+            self._state = WorkerLifecycleState.READY
+
+    def begin_drain(self) -> None:
+        with self._lock:
+            if self._state not in {WorkerLifecycleState.STARTING, WorkerLifecycleState.READY}:
+                raise WorkerLifecycleError("Worker can drain only while starting or ready.")
+            self._state = WorkerLifecycleState.DRAINING
+
+    def stop(self) -> None:
+        with self._lock:
+            if self._state not in {WorkerLifecycleState.DRAINING, WorkerLifecycleState.FAILED}:
+                raise WorkerLifecycleError("Worker must drain or fail before it can stop.")
+            self._state = WorkerLifecycleState.STOPPED
+
+    def fail(self) -> None:
+        with self._lock:
+            if self._state is WorkerLifecycleState.STOPPED:
+                raise WorkerLifecycleError("A stopped worker cannot transition to failed.")
+            self._state = WorkerLifecycleState.FAILED
 
 
 @dataclass(frozen=True)
@@ -75,6 +141,7 @@ class ProfessorWorkerRunner:
         runtime: CapabilityRuntime,
         policy: ProfessorAutonomyPolicy,
         read_gate: Callable[[], ProfessorWorkerGate],
+        lifecycle: ProfessorWorkerLifecycle,
     ) -> None:
         if not isinstance(identity, ProfessorWorkerIdentityService):
             raise TypeError("Trusted worker identity service is required.")
@@ -84,17 +151,21 @@ class ProfessorWorkerRunner:
             raise TypeError("Application-owned capability runtime is required.")
         if not isinstance(policy, ProfessorAutonomyPolicy):
             raise TypeError("A trusted autonomy policy is required.")
+        if not isinstance(lifecycle, ProfessorWorkerLifecycle):
+            raise TypeError("A trusted worker lifecycle controller is required.")
         self._identity = identity
         self._repositories_for = repositories_for
         self._runtime = runtime
         self._policy = policy
         self._read_gate = read_gate
+        self._lifecycle = lifecycle
 
     def _enabled(self) -> bool:
         gate = self._read_gate()
         if not isinstance(gate, ProfessorWorkerGate):
             raise TypeError("The deployment gate provider returned an invalid snapshot.")
-        return gate.worker_enabled and gate.global_execution_enabled and gate.isolation_verified
+        return (self._lifecycle.accepting_work and gate.worker_enabled
+                and gate.global_execution_enabled and gate.isolation_verified)
 
     def tick_once(self, tenant_id: str, plan_id: str) -> ProfessorWorkerResult:
         """Claim and process no more than one step; never loops or auto-replays."""
