@@ -10,6 +10,7 @@ from atlas_engine.tenant_plan_cancellation import (
     CancellationPlanNotFound,
     TenantPlanCancellationRepository,
 )
+from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository
 
 
 @pytest.fixture
@@ -96,3 +97,21 @@ def test_cancellation_history_cannot_be_updated_or_deleted(setup):
         db.execute(
             "DELETE FROM tenant_professor_cancellation_requests WHERE tenant_id='tenant-a'"
         )
+
+
+def test_claim_next_step_refuses_new_work_after_cancellation(setup):
+    db, owner, _, plan = setup
+    worker = RequestPrincipal(
+        "issuer", "worker", "tenant-a", True, frozenset({"steps:claim"})
+    )
+    cancellations = TenantPlanCancellationRepository(db, owner)
+    cancellations.request(plan.plan_id, reason="Stop before next claim")
+    steps = TenantStepExecutionRepository(db, worker)
+
+    assert steps.claim_next_step(plan.plan_id, "worker-a") is None
+    state = db.execute(
+        """SELECT state FROM tenant_professor_step_runs
+           WHERE tenant_id='tenant-a' AND plan_id=? AND step_id='step-a'""",
+        (plan.plan_id,),
+    ).fetchone()
+    assert state is None
