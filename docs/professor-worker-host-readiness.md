@@ -62,3 +62,28 @@ After execution it must re-check cancellation and lease/fencing ownership before
 ## Current decision
 
 Until the host capability report and isolation proof exist, the worker remains **not runnable**. The safe deliverable is the tested worker contract and preflight evidence, not a pretend background process. This is an intentional security gate, not a blocker to continued offline development.
+
+
+## Initial ATLAS Replit host inspection — 17 November 2026
+
+A read-only inspection of the user's existing Replit app named **ATLAS** found the following. No packages were installed, no containers or workers were started, no deployment settings or secrets were changed, and no cost was incurred.
+
+### Verified in the inspected project/workspace
+
+- The app is configured for an **Autoscale** deployment. Replit's documented Autoscale behaviour permits scale-to-zero; this is not a guarantee of a continuously running worker.
+- The existing Brain queue worker is started as an asyncio task inside the API application's lifespan. It is not a separately supervised production service.
+- The scheduled learning runner is explicitly reported as not configured.
+- The development workspace has Docker CLI and an accessible Docker socket; a read-only Docker information check succeeded. No containers were started, listed or created.
+- The development workspace reports 4 CPUs and an 8 GiB memory cgroup limit. These are workspace observations, not published Autoscale resource guarantees.
+- Replit documentation says published deployment filesystems are ephemeral/reset on republish. The inspected API deployment config did not establish a persistent volume or external database for the SQLite fallback.
+- The production deployment's access to Docker, privileged OCI execution, CPU/RAM sizing, persistent background processes and account-specific billing limits remains unknown.
+
+### Decision from this inspection
+
+**Do not run the Professor worker inside the current Autoscale API process.** It could stop when the service scales down, and the development Docker socket does not prove a production isolation boundary. A Reserved VM or another always-on host may support continuous execution, but its cost and suitability are not established and must not be selected automatically.
+
+Continue with disabled-by-default worker contracts and offline tests. Before any live worker, obtain deployment-specific evidence for an isolated non-root container runtime, durable queue/database storage, bounded resources, shutdown/cleanup, and a cost estimate showing £0 incremental spend. If the existing Replit plan cannot satisfy these requirements for £0, stop and present the options for explicit owner approval.
+
+### Source-revision reconciliation required
+
+The Replit inspection reported the ATLAS workspace on `main` at `2f182eaa87ee4ecab41e26963b1ff5b9050387d8`. The connected GitHub repository's default `main` ref was independently observed at `32471ea720edb5f10ca51aafaf9d45113d4e736c` during this work. These are different commit IDs. Confirm that the Replit app is linked to the intended authoritative repository and branch before assuming a GitHub draft PR is reflected in the running app. No deployment URL or successful build metadata proves that the currently served app contains either commit.
