@@ -17,6 +17,8 @@ from atlas_engine.professor_worker_runner import (
     ProfessorWorkerGate,
     ProfessorWorkerRepositories,
     ProfessorWorkerRunner,
+    ProfessorWorkerLifecycle,
+    WorkerLifecycleState,
 )
 from atlas_engine.tenant_execution_audit_repository import TenantExecutionAuditRepository
 from atlas_engine.tenant_plan_cancellation import TenantPlanCancellationRepository
@@ -34,7 +36,7 @@ def make_plan(capability="math.calculate", version="1.0.0",
 
 def setup_runner(*, gate=None, capability="math.calculate", version="1.0.0",
                  risk=RiskClass.LOCAL_COMPUTATION, scopes=("compute:local",),
-                 enabled=True):
+                 enabled=True, lifecycle_ready=True):
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
     initialize_tenant_plan_schema(db)
@@ -67,14 +69,43 @@ def setup_runner(*, gate=None, capability="math.calculate", version="1.0.0",
         )
 
     gate_reader = gate or (lambda: ProfessorWorkerGate(True, True, True))
+    lifecycle = ProfessorWorkerLifecycle()
+    if lifecycle_ready:
+        lifecycle.begin_startup()
+        lifecycle.mark_ready(ProfessorWorkerGate(True, True, True))
     runner = ProfessorWorkerRunner(
         identity=identity,
         repositories_for=repositories_for,
         runtime=build_default_capability_runtime(),
         policy=ProfessorAutonomyPolicy(AutonomyMode.SANDBOX_BUILD),
         read_gate=gate_reader,
+        lifecycle=lifecycle,
     )
     return db, human, runner, repositories_for, plan
+
+
+def test_lifecycle_starts_stopped_and_requires_all_readiness_gates():
+    lifecycle = ProfessorWorkerLifecycle()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+    assert not lifecycle.accepting_work
+    lifecycle.begin_startup()
+    with pytest.raises(RuntimeError, match="readiness gates"):
+        lifecycle.mark_ready(ProfessorWorkerGate(True, True, False))
+    assert lifecycle.state is WorkerLifecycleState.FAILED
+    lifecycle.stop()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+
+
+def test_draining_lifecycle_rejects_new_work():
+    _, _, runner, _, plan = setup_runner()
+    runner._lifecycle.begin_drain()
+    assert runner._lifecycle.state is WorkerLifecycleState.DRAINING
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "disabled"
+
+
+def test_stopped_lifecycle_blocks_work_even_if_deployment_gates_are_true():
+    _, _, runner, _, plan = setup_runner(lifecycle_ready=False)
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "disabled"
 
 
 def test_worker_is_disabled_by_default_and_does_not_claim():
