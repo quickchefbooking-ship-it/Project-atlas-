@@ -6,7 +6,7 @@ from atlas_engine.identity_policy import RequestPrincipal
 
 TEST_PRINCIPAL = RequestPrincipal(
     "https://issuer.example.test", "voice-test-user", "voice-test-tenant", True,
-    frozenset({"conversations:read", "conversations:write", "conversations:delete"}),
+    frozenset({"conversations:read", "conversations:write", "conversations:delete", "professor:chat"}),
 )
 
 
