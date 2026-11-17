@@ -176,10 +176,15 @@ def test_callback_from_another_browser_does_not_consume_valid_state(tmp_path):
     client = TestClient(_app(initiator, callback), base_url="https://atlas.example.test")
     start = transactions.begin()
 
+    client.cookies.set(
+        ATLAS_OIDC_STATE_COOKIE,
+        "x" * 43,
+        domain="atlas.example.test",
+        path="/",
+    )
     response = client.get(
         "/identity/callback",
         params={"code": "provider-one-time-code", "state": start.state},
-        cookies={ATLAS_OIDC_STATE_COOKIE: "x" * 43},
         follow_redirects=False,
     )
 
@@ -266,12 +271,20 @@ def test_logout_revokes_session_and_clears_both_host_only_cookies():
     application.dependency_overrides[require_verified_principal] = lambda: object()
     client = TestClient(application, base_url="https://atlas.example.test")
 
+    client.cookies.set(
+        ATLAS_SESSION_COOKIE,
+        "s" * 64,
+        domain="atlas.example.test",
+        path="/",
+    )
+    client.cookies.set(
+        ATLAS_CSRF_COOKIE,
+        "c" * 64,
+        domain="atlas.example.test",
+        path="/",
+    )
     response = client.post(
         "/identity/logout",
-        cookies={
-            ATLAS_SESSION_COOKIE: "s" * 64,
-            ATLAS_CSRF_COOKIE: "c" * 64,
-        },
         headers={
             "Origin": "https://atlas.example.test",
             "Sec-Fetch-Site": "same-origin",
