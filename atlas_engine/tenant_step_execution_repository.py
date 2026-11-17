@@ -357,6 +357,77 @@ class TenantStepExecutionRepository:
             if self.db.in_transaction: self.db.rollback()
             raise
 
+    def resolve_recovery_as_failed(
+        self, plan_id: str, step_id: str, *,
+        expected_fencing_token: int, reason: str,
+    ) -> TenantStepRecord:
+        """Resolve uncertain work to terminal failure; never authorise replay.
+
+        This is an explicit tenant-operator decision. The expected fencing token
+        prevents a stale review from resolving a different execution attempt.
+        """
+        tenant_id = self._auth("steps:recover")
+        if not isinstance(plan_id, str) or not plan_id.strip() or len(plan_id) > 128:
+            raise ValueError("plan_id must be a non-empty bounded string.")
+        if not isinstance(step_id, str) or not step_id.strip() or len(step_id) > 128:
+            raise ValueError("step_id must be a non-empty bounded string.")
+        if (isinstance(expected_fencing_token, bool)
+                or not isinstance(expected_fencing_token, int)
+                or expected_fencing_token < 1):
+            raise ValueError("expected_fencing_token must be a positive integer.")
+        if not isinstance(reason, str) or not reason.strip() or len(reason.strip()) > 500:
+            raise ValueError("reason must contain 1 to 500 characters.")
+        reason = reason.strip()
+        now = time.time()
+        try:
+            self.db.execute("BEGIN IMMEDIATE")
+            row = self.db.execute("""
+              SELECT r.*,p.ordinal,p.capability,p.capability_version,p.risk
+              FROM tenant_professor_step_runs r JOIN tenant_professor_plan_steps p
+                ON p.tenant_id=r.tenant_id AND p.plan_id=r.plan_id AND p.step_id=r.step_id
+              WHERE r.tenant_id=? AND r.plan_id=? AND r.step_id=?
+            """, (tenant_id, plan_id, step_id)).fetchone()
+            if row is None:
+                raise TenantStepNotFound("Plan step was not found.")
+            if row["state"] != "recovery_required":
+                raise TenantStepConflict("Only recovery-required work can be resolved.")
+            if row["fencing_token"] != expected_fencing_token:
+                raise TenantStepConflict("Recovery decision refers to a stale fencing token.")
+
+            cur = self.db.execute("""
+              UPDATE tenant_professor_step_runs
+              SET state='failed',worker_id=NULL,lease_expires_at=NULL,
+                  result_json=NULL,error_code='operator_marked_failed',
+                  updated_at=CURRENT_TIMESTAMP
+              WHERE tenant_id=? AND plan_id=? AND step_id=?
+                AND state='recovery_required' AND fencing_token=?
+            """, (tenant_id, plan_id, step_id, expected_fencing_token))
+            if cur.rowcount != 1:
+                raise TenantStepConflict("Recovery state changed before the decision was committed.")
+            self._event(
+                tenant_id, plan_id, step_id, "failed", row["attempt_number"], None,
+                expected_fencing_token,
+                {
+                    "decision": "operator_marked_failed",
+                    "reason": reason,
+                    "actor_issuer": self.principal.issuer,
+                    "actor_subject": self.principal.subject,
+                    "automatic_replay": False,
+                },
+            )
+            resolved = self.db.execute("""
+              SELECT r.*,p.ordinal,p.capability,p.capability_version,p.risk
+              FROM tenant_professor_step_runs r JOIN tenant_professor_plan_steps p
+                ON p.tenant_id=r.tenant_id AND p.plan_id=r.plan_id AND p.step_id=r.step_id
+              WHERE r.tenant_id=? AND r.plan_id=? AND r.step_id=?
+            """, (tenant_id, plan_id, step_id)).fetchone()
+            self.db.commit()
+            return self._record(resolved)
+        except Exception:
+            if self.db.in_transaction:
+                self.db.rollback()
+            raise
+
     def dependency_results(self, plan_id: str, step_id: str) -> dict[str, Any]:
         """Return only completed direct-dependency outputs for this tenant and step.
 
