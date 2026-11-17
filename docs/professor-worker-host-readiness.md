@@ -87,3 +87,21 @@ Continue with disabled-by-default worker contracts and offline tests. Before any
 ### Source-revision reconciliation required
 
 The Replit inspection reported the ATLAS workspace on `main` at `2f182eaa87ee4ecab41e26963b1ff5b9050387d8`. The connected GitHub repository's default `main` ref was independently observed at `32471ea720edb5f10ca51aafaf9d45113d4e736c` during this work. These are different commit IDs. Confirm that the Replit app is linked to the intended authoritative repository and branch before assuming a GitHub draft PR is reflected in the running app. No deployment URL or successful build metadata proves that the currently served app contains either commit.
+
+
+## Implementation checkpoint — one-step coordinator
+
+The draft now includes `atlas_engine/professor_worker_runner.py` and focused tests. This is a **coordinator contract**, not a background process or isolation backend.
+
+- A tick handles at most one step and never loops or retries.
+- It requires three independent trusted gates: worker enabled, global execution enabled, and isolation verified. All default to false.
+- It obtains the internal tenant principal from the existing worker identity service and uses trusted server composition for tenant repositories.
+- It accepts only `math.calculate@1.0.0`, with local-computation risk, no side effects, no approval requirement, and a plan-declared scope matching the capability definition.
+- It rejects unsupported plans before claiming a step.
+- It checks cancellation and stop gates before claim, after claim, and after the durable audit reservation immediately before dispatch; it checks again before result commit.
+- It reserves append-only audit before handler invocation, uses the existing fenced lease, and stores only bounded validated JSON results.
+- If a stop arrives after claim/dispatch and the existing repository cannot safely mark the step cancelled, the runner deliberately leaves the lease for expiry and explicit `recovery_required` handling. It does not replay uncertain work.
+
+**CI evidence:** GitHub Actions run [44142092882](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44142092882) completed successfully on commit `28584bbb10080db0796e1b4e1ee66b54a2b465ed`: **1,161 tests passed, 1 warning**.
+
+The implementation remains non-runnable in production until a real isolated host and durable storage are verified. It does not provide container isolation, process supervision, a queue consumer loop, or production configuration.
