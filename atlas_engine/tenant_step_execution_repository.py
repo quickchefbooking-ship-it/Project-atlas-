@@ -210,6 +210,17 @@ class TenantStepExecutionRepository:
                 raise TenantStepNotFound("Plan step was not found.")
             if plan["state"] != "running":
                 raise TenantStepPlanNotRunning("Tenant plan must be running before steps can be claimed.")
+            cancellation_table = self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_professor_cancellation_requests'"
+            ).fetchone()
+            if cancellation_table is not None:
+                cancellation = self.db.execute(
+                    "SELECT 1 FROM tenant_professor_cancellation_requests WHERE tenant_id=? AND plan_id=?",
+                    (tenant_id, plan_id),
+                ).fetchone()
+                if cancellation is not None:
+                    self.db.commit()
+                    return None
             self._seed_runs(tenant_id, plan_id)
             self._expire(tenant_id, plan_id, now)
             plan_steps = {
