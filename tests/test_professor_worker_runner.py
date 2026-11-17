@@ -123,6 +123,14 @@ def test_unsupported_networked_capability_is_rejected_before_claim():
     assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
 
 
+def test_step_must_declare_registered_capability_scopes():
+    db, _, runner, _, plan = setup_runner(scopes=())
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "denied"
+    assert result.error_code == "capability_contract_denied"
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
+
+
 def test_disabled_worker_identity_fails_closed():
     _, _, runner, _, plan = setup_runner(enabled=False)
     with pytest.raises(WorkerIdentityUnavailable):
