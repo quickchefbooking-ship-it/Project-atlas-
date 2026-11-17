@@ -60,6 +60,7 @@ class ProfessorWorkerLifecycle:
 
     def __init__(self) -> None:
         self._state = WorkerLifecycleState.STOPPED
+        self._active_dispatches = 0
         self._lock = RLock()
 
     @property
@@ -70,6 +71,26 @@ class ProfessorWorkerLifecycle:
     @property
     def accepting_work(self) -> bool:
         return self.state is WorkerLifecycleState.READY
+
+    @property
+    def active_dispatches(self) -> int:
+        with self._lock:
+            return self._active_dispatches
+
+    def begin_dispatch(self) -> bool:
+        """Atomically admit one dispatch only while the worker is ready."""
+        with self._lock:
+            if self._state is not WorkerLifecycleState.READY:
+                return False
+            self._active_dispatches += 1
+            return True
+
+    def end_dispatch(self) -> None:
+        """Release one previously admitted dispatch."""
+        with self._lock:
+            if self._active_dispatches <= 0:
+                raise WorkerLifecycleError("No active dispatch is available to release.")
+            self._active_dispatches -= 1
 
     def begin_startup(self) -> None:
         with self._lock:
@@ -98,6 +119,8 @@ class ProfessorWorkerLifecycle:
         with self._lock:
             if self._state not in {WorkerLifecycleState.DRAINING, WorkerLifecycleState.FAILED}:
                 raise WorkerLifecycleError("Worker must drain or fail before it can stop.")
+            if self._active_dispatches:
+                raise WorkerLifecycleError("Worker cannot stop while dispatches remain active.")
             self._state = WorkerLifecycleState.STOPPED
 
     def fail(self) -> None:
@@ -247,8 +270,9 @@ class ProfessorWorkerRunner:
             capability_input=payload,
         )
 
-        # Re-read both stop controls after the durable reservation and
-        # immediately before invoking the fixed handler.
+        # Re-read stop controls after the durable reservation. Lifecycle
+        # admission below is atomic with begin_drain(), closing the check/use
+        # race that could otherwise start a handler after draining began.
         if not self._enabled() or repositories.cancellation.is_requested(plan_id):
             repositories.audit.record_outcome(
                 reservation, event_type="handler_failed",
@@ -257,32 +281,54 @@ class ProfessorWorkerRunner:
             return ProfessorWorkerResult("stopped_before_dispatch", tenant_id, plan_id,
                                          lease.step_id)
 
+        if not self._lifecycle.begin_dispatch():
+            repositories.audit.record_outcome(
+                reservation, event_type="handler_failed",
+                error_code="stopped_before_dispatch",
+            )
+            return ProfessorWorkerResult("stopped_before_dispatch", tenant_id, plan_id,
+                                         lease.step_id)
+
         try:
-            result = self._runtime.execute(
-                step.capability, step.capability_version, payload,
-                timeout_seconds=min(step.timeout_seconds, 10),
-            )
-        except CapabilityExecutionError:
-            repositories.audit.record_outcome(
-                reservation, event_type="handler_failed",
-                error_code="capability_execution_failed",
-            )
-            repositories.steps.complete(lease, error_code="capability_execution_failed")
-            return ProfessorWorkerResult("failed", tenant_id, plan_id,
-                                         lease.step_id, "capability_execution_failed")
+            # Recheck deployment and cancellation controls while holding an
+            # admitted dispatch slot. A concurrent drain cannot admit new work.
+            if not self._enabled() or repositories.cancellation.is_requested(plan_id):
+                repositories.audit.record_outcome(
+                    reservation, event_type="handler_failed",
+                    error_code="stopped_before_dispatch",
+                )
+                return ProfessorWorkerResult("stopped_before_dispatch", tenant_id, plan_id,
+                                             lease.step_id)
 
-        # Never commit a result after cancellation or a global stop. The
-        # claimed lease remains fenced and will require explicit recovery.
-        if not self._enabled() or repositories.cancellation.is_requested(plan_id):
-            repositories.audit.record_outcome(
-                reservation, event_type="handler_failed",
-                error_code="stopped_after_execution",
-            )
-            return ProfessorWorkerResult("recovery_required", tenant_id, plan_id,
-                                         lease.step_id, "stopped_after_execution")
+            try:
+                result = self._runtime.execute(
+                    step.capability, step.capability_version, payload,
+                    timeout_seconds=min(step.timeout_seconds, 10),
+                )
+            except CapabilityExecutionError:
+                repositories.audit.record_outcome(
+                    reservation, event_type="handler_failed",
+                    error_code="capability_execution_failed",
+                )
+                repositories.steps.complete(lease, error_code="capability_execution_failed")
+                return ProfessorWorkerResult("failed", tenant_id, plan_id,
+                                             lease.step_id, "capability_execution_failed")
 
-        repositories.audit.record_outcome(
-            reservation, event_type="handler_succeeded", output=result
-        )
-        repositories.steps.complete(lease, result=result)
-        return ProfessorWorkerResult("succeeded", tenant_id, plan_id, lease.step_id)
+            # A drain or kill switch during execution prevents result commit.
+            # The admitted dispatch is released in finally; its lease remains
+            # fenced for explicit recovery rather than automatic replay.
+            if not self._enabled() or repositories.cancellation.is_requested(plan_id):
+                repositories.audit.record_outcome(
+                    reservation, event_type="handler_failed",
+                    error_code="stopped_after_execution",
+                )
+                return ProfessorWorkerResult("recovery_required", tenant_id, plan_id,
+                                             lease.step_id, "stopped_after_execution")
+
+            repositories.audit.record_outcome(
+                reservation, event_type="handler_succeeded", output=result
+            )
+            repositories.steps.complete(lease, result=result)
+            return ProfessorWorkerResult("succeeded", tenant_id, plan_id, lease.step_id)
+        finally:
+            self._lifecycle.end_dispatch()
