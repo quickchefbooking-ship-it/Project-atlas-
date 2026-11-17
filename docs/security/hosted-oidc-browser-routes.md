@@ -38,16 +38,22 @@ application code, which must echo it in X-Atlas-CSRF. Unsafe cookie-authenticate
 requests still require the exact server-configured Origin and session-bound
 CSRF validation. The temporary state cookie is cleared after a valid callback.
 
+The Professor chat page now prefers the Atlas cookie session, sends the CSRF
+header for unsafe same-origin requests, attempts a session connection on page
+load, and uses the protected logout route. The temporary bearer-token bridge
+remains available for controlled testing and is not persisted in browser storage.
+
 Logout is a POST protected by the existing verified-principal dependency. It
 revokes the current server-side session and clears the session, CSRF and
 temporary OIDC state cookies.
 
 ## Remaining launch requirements
 
-The router does not create or provision identity-provider credentials, database
-paths, the dedicated 32-byte transaction-encryption key, or a provider token
-endpoint client. The application startup composition and browser UI still need
-to be connected to these services. Route registration is not proof of a live
+The router and browser UI do not create or provision identity-provider
+credentials, account/session database paths, the dedicated 32-byte transaction
+encryption key, or a provider token-endpoint client. The application startup
+composition still needs to build and inject these services from deployment-owned
+configuration. Route registration and service injection are not proof of a live
 provider round trip. Public login must remain disabled until deployment
 configuration, real-provider testing, browser-session tests and operational
 review are complete.
