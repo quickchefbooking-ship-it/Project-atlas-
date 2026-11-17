@@ -105,3 +105,10 @@ The draft now includes `atlas_engine/professor_worker_runner.py` and focused tes
 **CI evidence:** GitHub Actions run [44142092882](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44142092882) completed successfully on commit `28584bbb10080db0796e1b4e1ee66b54a2b465ed`: **1,161 tests passed, 1 warning**.
 
 The implementation remains non-runnable in production until a real isolated host and durable storage are verified. It does not provide container isolation, process supervision, a queue consumer loop, or production configuration.
+
+
+### Lifecycle checkpoint
+
+The runner now also requires a thread-safe lifecycle controller to be in `READY` state. The lifecycle transitions are `STOPPED → STARTING → READY → DRAINING → STOPPED`, with a fail-closed `FAILED` state. Readiness cannot be declared unless all three deployment gates are true; draining immediately blocks new work and is re-checked at each runner checkpoint. This state machine does not supervise an operating-system process or wait for in-flight work to drain; a real host supervisor must provide those behaviours.
+
+**Latest exact-head CI:** [GitHub Actions run 44142901212](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44142901212) passed on commit `81b6b1e73483d9252b89cc31ea403e56ce109da5`: **1,164 tests passed, 1 warning**.
