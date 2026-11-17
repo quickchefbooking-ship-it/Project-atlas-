@@ -77,14 +77,10 @@ def test_missing_scopes_are_denied(setup):
 
 def test_only_ready_or_running_plans_can_be_cancelled(setup):
     db, owner, _, plan = setup
+    plans = TenantPlanRepository(db, owner)
+    plans.transition(plan.plan_id, expected_state=PlanState.RUNNING, new_state=PlanState.SUCCEEDED)
     repo = TenantPlanCancellationRepository(db, owner)
-    # The first request is valid while running; cancellation cannot be rewritten.
-    repo.request(plan.plan_id, reason="Stop")
     with pytest.raises(CancellationPlanNotActive):
-        # A second fixture-independent terminal state is created for this check.
-        db.execute(
-            "UPDATE tenant_professor_plans SET state='succeeded' WHERE tenant_id='tenant-a' AND plan_id='plan-a'"
-        )
         repo.request(plan.plan_id, reason="Too late")
 
 
