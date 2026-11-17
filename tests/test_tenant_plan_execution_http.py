@@ -11,6 +11,7 @@ from atlas_engine.oidc_contract import OIDCProviderConfig, VerifiedTokenClaims
 from atlas_engine.plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.tenant_plan_repository import TenantPlanRepository
+from atlas_engine.tenant_plan_cancellation import TenantPlanCancellationRepository
 from atlas_engine.source_adapters import SourceDocument
 
 ISSUER = "https://identity.execution.test/"
@@ -517,5 +518,161 @@ def test_execution_audit_reservation_failure_blocks_handler_dispatch(monkeypatch
             "Tenant execution storage is temporarily unavailable."
         )
         assert calls == []
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_stops_ready_plan_before_any_step_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        requested = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Owner requested a stop"},
+        )
+        assert requested.status_code == 200
+        assert requested.json()["status"] == "cancellation_requested"
+
+        stopped = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert stopped.status_code == 200
+        assert stopped.json()["status"] == "cancelled"
+        assert stopped.json()["plan_state"] == "cancelled"
+        assert calls == []
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            state = connection.execute(
+                "SELECT state FROM tenant_professor_plans WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+            run_count = connection.execute(
+                "SELECT COUNT(*) FROM tenant_professor_step_runs WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        assert state == "cancelled"
+        assert run_count == 0
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancellation_during_handler_allows_current_step_to_finish_but_blocks_next(
+    monkeypatch, tmp_path
+):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        original_execute = runtime.execute
+        calls = []
+
+        def cancel_during_first_step(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+                try:
+                    principal = RequestPrincipal(
+                        ISSUER, "operator", "tenant-a", True,
+                        frozenset({
+                            "plans:read", "plans:write", "plans:execute",
+                            "steps:read", "steps:claim", "steps:heartbeat",
+                            "steps:complete", "compute:local", "research:public",
+                        }),
+                    )
+                    TenantPlanCancellationRepository(
+                        connection, principal
+                    ).request("math-plan", reason="Stop after the active step")
+                finally:
+                    connection.close()
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", cancel_during_first_step)
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.json()["status"] == "cancelled"
+        assert first.json()["plan_state"] == "cancelled"
+        assert first.json()["step_id"] == "first"
+        assert first.json()["step_state"] == "succeeded"
+        assert first.json()["result"] == {"value": 4, "kind": "number"}
+
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert second.status_code == 200
+        assert second.json()["status"] == "cancelled"
+        assert len(calls) == 1
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            states = connection.execute(
+                """SELECT step_id,state FROM tenant_professor_step_runs
+                   WHERE tenant_id='tenant-a' AND plan_id='math-plan' ORDER BY step_id"""
+            ).fetchall()
+            plan_state = connection.execute(
+                "SELECT state FROM tenant_professor_plans WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        assert states == [("first", "succeeded"), ("second", "pending")]
+        assert plan_state == "cancelled"
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_requires_plan_write_scope(monkeypatch, tmp_path):
+    client, verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        memberships = SQLiteMembershipRegistry(str(tmp_path / "members.sqlite"))
+        memberships.provision_membership(
+            ISSUER, "read-only",
+            "tenant-a",
+            {
+                "plans:read", "plans:execute",
+                "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+                "compute:local", "research:public",
+            },
+        )
+        verifier.subject = "read-only"
+        response = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Not authorised"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Plan cancellation denied."
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_rejects_a_terminal_plan(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json()["plan_state"] == "succeeded"
+
+        cancelled = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Too late"},
+        )
+        assert cancelled.status_code == 409
     finally:
         client.__exit__(None, None, None)
