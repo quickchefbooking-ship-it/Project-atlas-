@@ -114,15 +114,6 @@ def build_oidc_browser_login_services(
     account_path = paths["account"]
     transaction_path = paths["login transaction"]
 
-    if membership_registry is not None:
-        if not isinstance(membership_registry, SQLiteMembershipRegistry):
-            raise TypeError("A trusted SQLiteMembershipRegistry is required.")
-        if os.path.realpath(membership_registry.database_path) != membership_path:
-            raise ValueError("The supplied membership registry must use ATLAS_MEMBERSHIP_DB_PATH.")
-        memberships = membership_registry
-    else:
-        memberships = SQLiteMembershipRegistry(membership_path)
-
     algorithms = frozenset(
         item.strip()
         for item in values["ATLAS_OIDC_ALLOWED_ALGORITHMS"].split(",")
@@ -137,15 +128,14 @@ def build_oidc_browser_login_services(
 
     client_id = values["ATLAS_OIDC_CLIENT_ID"]
     redirect_uri = values["ATLAS_OIDC_REDIRECT_URI"]
-    accounts = SQLiteAccountRepository(account_path)
-    sessions = SQLiteSessionRepository(account_path)
+
+    # Construct and validate every provider-facing adapter before creating or
+    # opening any SQLite repository. These constructors perform only pure
+    # configuration validation; no provider request or persistent I/O occurs.
     transactions = SQLiteOIDCLoginTransactionStore(
         transaction_path,
         transaction_key,
     )
-    account_link_repository = SQLiteOIDCAccountLinkRepository(accounts)
-    account_links = OIDCAccountLinkService(account_link_repository, transactions)
-    login_sessions = OIDCLoginSessionService(account_links, sessions, memberships)
     exchanger = HTTPSOIDCAuthorizationCodeExchanger(
         token_endpoint=values["ATLAS_OIDC_TOKEN_ENDPOINT"],
         client_id=client_id,
@@ -153,17 +143,35 @@ def build_oidc_browser_login_services(
         client_secret=settings.get("ATLAS_OIDC_CLIENT_SECRET") or None,
     )
     id_token_verifier = PyJWTIDTokenVerifier(provider_config, client_id)
+    initiator = OIDCBrowserLoginInitiator(
+        transactions=transactions,
+        authorization_endpoint=values["ATLAS_OIDC_AUTHORIZATION_ENDPOINT"],
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+    )
+
+    # Only after all provider URLs, algorithms, client identifiers, callback
+    # path, key material and database separation have passed validation may
+    # repository objects be composed and their schemas initialized.
+    if membership_registry is not None:
+        if not isinstance(membership_registry, SQLiteMembershipRegistry):
+            raise TypeError("A trusted SQLiteMembershipRegistry is required.")
+        if os.path.realpath(membership_registry.database_path) != membership_path:
+            raise ValueError("The supplied membership registry must use ATLAS_MEMBERSHIP_DB_PATH.")
+        memberships = membership_registry
+    else:
+        memberships = SQLiteMembershipRegistry(membership_path)
+
+    accounts = SQLiteAccountRepository(account_path)
+    sessions = SQLiteSessionRepository(account_path)
+    account_link_repository = SQLiteOIDCAccountLinkRepository(accounts)
+    account_links = OIDCAccountLinkService(account_link_repository, transactions)
+    login_sessions = OIDCLoginSessionService(account_links, sessions, memberships)
     callback = OIDCBrowserLoginService(
         transactions=transactions,
         exchanger=exchanger,
         id_token_verifier=id_token_verifier,
         login_sessions=login_sessions,
-        redirect_uri=redirect_uri,
-    )
-    initiator = OIDCBrowserLoginInitiator(
-        transactions=transactions,
-        authorization_endpoint=values["ATLAS_OIDC_AUTHORIZATION_ENDPOINT"],
-        client_id=client_id,
         redirect_uri=redirect_uri,
     )
 
