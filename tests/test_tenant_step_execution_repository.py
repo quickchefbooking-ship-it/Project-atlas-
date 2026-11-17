@@ -118,7 +118,7 @@ def test_recovery_resolution_requires_scope_and_marks_uncertain_work_failed(setu
 
     reviewer = RequestPrincipal(
         "issuer", "operator-1", "tenant-a", True,
-        frozenset({"steps:read", "steps:recover"}),
+        frozenset({"steps:read", "steps:recover", "steps:claim"}),
     )
     recovery = TenantStepExecutionRepository(db, reviewer)
     resolved = recovery.resolve_recovery_as_failed(
