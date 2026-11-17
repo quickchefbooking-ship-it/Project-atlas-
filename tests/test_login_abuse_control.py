@@ -134,3 +134,43 @@ def test_concurrent_distinct_accounts_share_network_abuse_threshold(tmp_path):
     assert sum(decision.allowed for decision in decisions) == 4
     assert sum(not decision.allowed for decision in decisions) == 8
     assert not guard.check("another-account@example.test", "198.51.100.88").allowed
+
+
+def test_equivalent_ipv6_text_forms_share_one_network_bucket(tmp_path):
+    clock = Clock()
+    guard = make_guard(tmp_path, clock, max_failures=1, lockout_seconds=60)
+
+    guard.record_failure(
+        "first@example.test", "2001:0db8:0000:0000:0000:ff00:0042:8329"
+    )
+
+    decision = guard.check("second@example.test", "2001:db8::ff00:42:8329")
+    assert not decision.allowed
+    assert decision.retry_after_seconds == 60
+
+
+def test_ipv4_mapped_ipv6_and_native_ipv4_share_one_network_bucket(tmp_path):
+    clock = Clock()
+    guard = make_guard(tmp_path, clock, max_failures=1, lockout_seconds=60)
+
+    guard.record_failure("first@example.test", "::ffff:192.0.2.44")
+
+    decision = guard.check("second@example.test", "192.0.2.44")
+    assert not decision.allowed
+    assert decision.retry_after_seconds == 60
+
+
+def test_non_ip_network_sources_are_rejected(tmp_path):
+    import pytest
+
+    guard = make_guard(tmp_path, Clock())
+    with pytest.raises(ValueError, match="network IP address"):
+        guard.check("person@example.test", "203.0.113.10, 198.51.100.2")
+
+
+def test_scoped_ipv6_network_sources_are_rejected(tmp_path):
+    import pytest
+
+    guard = make_guard(tmp_path, Clock())
+    with pytest.raises(ValueError, match="Scoped"):
+        guard.check("person@example.test", "fe80::1%eth0")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import math
 import sqlite3
 import time
@@ -78,13 +79,31 @@ class SQLiteLoginAbuseGuard:
             raise ValueError(f"A valid {label} is required.")
         return value.strip().casefold()
 
+    @staticmethod
+    def _normalize_network_source(value: str) -> str:
+        """Canonicalize a server-derived client IP before creating its bucket key."""
+        if not isinstance(value, str) or not value.strip() or len(value) > 512:
+            raise ValueError("A valid network IP address is required.")
+        try:
+            address = ipaddress.ip_address(value.strip())
+        except ValueError:
+            raise ValueError("A valid network IP address is required.") from None
+
+        if isinstance(address, ipaddress.IPv6Address):
+            if address.scope_id is not None:
+                raise ValueError("Scoped network IP addresses are not supported.")
+            # IPv4-mapped IPv6 and native IPv4 must share one abuse bucket.
+            if address.ipv4_mapped is not None:
+                address = address.ipv4_mapped
+        return address.compressed
+
     def _digest(self, kind: str, value: str) -> str:
         message = f"atlas-login-abuse-v1:{kind}:{value}".encode("utf-8")
         return hmac.new(self._key, message, hashlib.sha256).hexdigest()
 
     def _keys(self, identifier: str, source: str) -> tuple[str, str]:
         account = self._validate(identifier, "account identifier")
-        network = self._validate(source, "network source")
+        network = self._normalize_network_source(source)
         return self._digest("account", account), self._digest("network", network)
 
     def check(self, identifier: str, source: str) -> AbuseDecision:

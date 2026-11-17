@@ -9,6 +9,9 @@ Public authentication remains disabled.
 ## Behaviour
 
 - Counts failures in independent account-identifier and network-source buckets.
+- Canonicalizes IPv4 and IPv6 address text before HMAC keying. Equivalent expanded
+  and compressed IPv6 forms share a bucket, as do IPv4-mapped IPv6 and native
+  IPv4 forms. Scoped IPv6 addresses and non-IP network identifiers are rejected.
 - Uses atomic SQLite transactions so concurrent failures cannot silently bypass
   the configured threshold.
 - Uses HMAC-SHA-256 keyed digests for bucket identifiers; raw email addresses and
@@ -26,7 +29,7 @@ Public authentication remains disabled.
 
 Before enabling public authentication, route integration must:
 1. Load the HMAC key from deployment secret storage, never source control.
-2. Use a trusted server-derived client address; do not trust arbitrary
+2. Use a trusted server-derived client IP address; do not trust arbitrary
    forwarded-for headers unless the proxy chain is explicitly configured.
 3. Check both buckets before expensive password hashing/verification.
 4. Record failures for unknown accounts and incorrect passwords identically.
