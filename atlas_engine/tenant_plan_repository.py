@@ -90,7 +90,7 @@ class TenantPlanRepository:
             if r is None: raise TenantPlanNotFound("Plan was not found.")
             old=_decode_plan(r["plan_json"])
             if old.state is not expected_state: raise TenantPlanConflict("Tenant plan state changed.")
-            if new_state is PlanState.SUCCEEDED:
+            if new_state in {PlanState.SUCCEEDED, PlanState.FAILED}:
                 cancellation_table = self.db.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_professor_cancellation_requests'"
                 ).fetchone()
@@ -100,7 +100,7 @@ class TenantPlanRepository:
                         (self.principal.tenant_id, plan_id),
                     ).fetchone()
                     if requested is not None:
-                        raise TenantPlanConflict("A cancellation request prevents plan success.")
+                        raise TenantPlanConflict("A cancellation request prevents terminal plan completion.")
             new=ProfessorPlan(old.plan_id,old.objective,old.acceptance_criteria,old.steps,new_state,old.approval_reference)
             cur=self.db.execute("""UPDATE tenant_professor_plans SET state=?,plan_json=?,updated_at=CURRENT_TIMESTAMP
               WHERE tenant_id=? AND plan_id=? AND state=?""",
