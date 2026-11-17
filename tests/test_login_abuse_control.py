@@ -117,3 +117,20 @@ def test_concurrent_failures_cannot_bypass_account_or_network_threshold(tmp_path
     assert sum(decision.allowed for decision in decisions) == 4
     assert sum(not decision.allowed for decision in decisions) == 8
     assert not guard.check("person@example.test", "192.0.2.44").allowed
+
+
+def test_concurrent_distinct_accounts_share_network_abuse_threshold(tmp_path):
+    clock = Clock()
+    guard = make_guard(tmp_path, clock, max_failures=5, lockout_seconds=60)
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        decisions = list(pool.map(
+            lambda index: guard.record_failure(
+                f"person-{index}@example.test", "198.51.100.88"
+            ),
+            range(12),
+        ))
+
+    assert sum(decision.allowed for decision in decisions) == 4
+    assert sum(not decision.allowed for decision in decisions) == 8
+    assert not guard.check("another-account@example.test", "198.51.100.88").allowed
