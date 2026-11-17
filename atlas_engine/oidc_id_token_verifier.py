@@ -158,7 +158,7 @@ class PyJWTIDTokenVerifier:
             ):
                 raise ValueError("OIDC ID-token access-token hash cannot be validated.")
             try:
-                digest = jwt.get_algorithm_by_name(algorithm).compute_hash_digest(access_token)
+                digest = jwt.get_algorithm_by_name(algorithm).compute_hash_digest(access_token.encode("ascii"))
                 expected_at_hash = base64.urlsafe_b64encode(
                     digest[: len(digest) // 2]
                 ).rstrip(b"=").decode("ascii")
