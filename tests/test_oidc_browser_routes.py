@@ -19,7 +19,7 @@ from atlas_engine.oidc_login_transaction import (
     SQLiteOIDCLoginTransactionStore,
 )
 
-KEY = b"oidc-route-test-key-32-bytes-long!!"
+KEY = b"atlas-oidc-route-key-32-bytes!!!"
 AUTHORIZATION_ENDPOINT = "https://identity.example.test/authorize"
 REDIRECT_URI = "https://atlas.example.test/identity/callback"
 
