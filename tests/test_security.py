@@ -31,6 +31,7 @@ def test_every_private_api_route_declares_the_api_key_dependency():
 
     intentionally_public = {
         ("/health", "GET"),
+        ("/build-info", "GET"),
         ("/media/health", "GET"),
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
