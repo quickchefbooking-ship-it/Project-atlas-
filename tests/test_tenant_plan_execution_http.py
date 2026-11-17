@@ -548,6 +548,11 @@ def test_cancel_endpoint_stops_ready_plan_before_any_step_dispatch(monkeypatch, 
         assert stopped.status_code == 200
         assert stopped.json()["status"] == "cancelled"
         assert stopped.json()["plan_state"] == "cancelled"
+        repeated = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert repeated.status_code == 200
+        assert repeated.json()["status"] == "cancelled"
         assert calls == []
 
         connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
