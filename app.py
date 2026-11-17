@@ -404,18 +404,46 @@ def identity_login_readiness():
     )
     missing_verifier = [name for name in verifier_settings if not os.getenv(name)]
     missing_login = [name for name in hosted_login_settings if not os.getenv(name)]
+    required_login_routes = (
+        ("GET", "/identity/login"),
+        ("GET", "/identity/callback"),
+    )
+    registered_routes = {
+        (method, getattr(route, "path", None))
+        for route in app.routes
+        for method in (getattr(route, "methods", None) or ())
+    }
+    missing_routes = [
+        f"{method} {path}"
+        for method, path in required_login_routes
+        if (method, path) not in registered_routes
+    ]
+
+    if missing_verifier or missing_login:
+        readiness_status = "not_configured"
+    elif missing_routes:
+        readiness_status = "not_implemented"
+    else:
+        # Route registration is not proof of a successful provider round trip.
+        readiness_status = "routes_registered_unverified"
+
     return {
-        "status": "ready" if not missing_verifier and not missing_login else "not_configured",
+        "status": readiness_status,
         "api_verifier": {
             "configured": not missing_verifier,
             "missing_settings": missing_verifier,
         },
         "hosted_login": {
             "configured": not missing_login,
+            "implemented": not missing_routes,
             "missing_settings": missing_login,
+            "missing_routes": missing_routes,
             "flow": "authorization_code_pkce",
         },
-        "note": "This endpoint reports configuration presence only; it does not authenticate users.",
+        "note": (
+            "This endpoint reports configuration and route registration only; "
+            "it does not prove a successful sign-in or callback round trip."
+        ),
     }
 
 
