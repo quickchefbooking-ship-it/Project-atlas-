@@ -355,7 +355,7 @@ def test_pipeline_bounds_large_reference_context_without_dropping_task_or_proven
             "excerpt": "approved evidence excerpt " * 30,
         } for index in range(3)],
     )
-    provider = TwoPassProvider()
+    provider = TwoPassProvider(answer="I will explain the architecture. document-0 document-1 document-2")
     approved = tuple({
         "proposal_id": f"memory-{index}",
         "category": "note",
