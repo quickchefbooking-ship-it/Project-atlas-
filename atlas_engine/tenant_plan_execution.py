@@ -41,7 +41,7 @@ def _finalize_requested_cancellation(plans, steps, cancellations, plan_id: str):
 
     plan = plans.get(plan_id)
     records = ()
-    if plan.state in {PlanState.RUNNING, PlanState.CANCELLED}:
+    if plan.state is PlanState.RUNNING:
         records = steps.list_steps(plan_id)
     states = {item.step_id: item.state for item in records}
 
