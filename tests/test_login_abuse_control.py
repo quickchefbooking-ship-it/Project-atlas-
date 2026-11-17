@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from atlas_engine.login_abuse_control import SQLiteLoginAbuseGuard
 
 
@@ -100,3 +102,18 @@ def test_expired_buckets_can_be_purged(tmp_path):
 
     assert guard.purge_expired() == 2
     assert guard.check("person@example.test", "203.0.113.7").allowed
+
+
+def test_concurrent_failures_cannot_bypass_account_or_network_threshold(tmp_path):
+    clock = Clock()
+    guard = make_guard(tmp_path, clock, max_failures=5, lockout_seconds=60)
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        decisions = list(pool.map(
+            lambda _: guard.record_failure("person@example.test", "192.0.2.44"),
+            range(12),
+        ))
+
+    assert sum(decision.allowed for decision in decisions) == 4
+    assert sum(not decision.allowed for decision in decisions) == 8
+    assert not guard.check("person@example.test", "192.0.2.44").allowed
