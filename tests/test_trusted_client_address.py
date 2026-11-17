@@ -51,6 +51,13 @@ def test_chain_stops_at_first_untrusted_proxy_hop():
     ) == "192.0.2.1"
 
 
+def test_chain_with_only_trusted_hops_fails_closed():
+    resolver = TrustedProxyClientAddressResolver(("10.0.0.0/8",))
+
+    with pytest.raises(ValueError, match="did not identify an untrusted client"):
+        resolver.resolve("10.0.0.2", "10.0.0.1")
+
+
 def test_trusted_peer_without_forwarded_header_fails_closed():
     resolver = TrustedProxyClientAddressResolver(("10.0.0.0/8",))
 
