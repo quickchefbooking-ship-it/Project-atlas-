@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .capability_runtime import CapabilityExecutionError, CapabilityRuntime
+from .identity_policy import RequestPrincipal
 from .plan_contract import PlanState, RiskClass
 from .professor_autonomy_policy import (
     AutonomyAction,
@@ -70,7 +71,7 @@ class ProfessorWorkerRunner:
         self,
         *,
         identity: ProfessorWorkerIdentityService,
-        repositories_for: Callable[[object], ProfessorWorkerRepositories],
+        repositories_for: Callable[[RequestPrincipal], ProfessorWorkerRepositories],
         runtime: CapabilityRuntime,
         policy: ProfessorAutonomyPolicy,
         read_gate: Callable[[], ProfessorWorkerGate],
@@ -129,6 +130,10 @@ class ProfessorWorkerRunner:
             or definition.side_effects
             or definition.approval_required
             or not set(definition.required_scopes).issubset(principal.scopes)
+            or any(
+                not set(definition.required_scopes).issubset(set(step.required_scopes))
+                for step in plan.steps
+            )
         ):
             return ProfessorWorkerResult("denied", tenant_id, plan_id,
                                          error_code="capability_contract_denied")
