@@ -18,6 +18,7 @@ from atlas_engine.professor_worker_runner import (
     ProfessorWorkerRepositories,
     ProfessorWorkerRunner,
     ProfessorWorkerLifecycle,
+    WorkerLifecycleError,
     WorkerLifecycleState,
 )
 from atlas_engine.tenant_execution_audit_repository import TenantExecutionAuditRepository
@@ -203,3 +204,73 @@ def test_global_stop_after_audit_reservation_prevents_handler_dispatch():
     ).fetchall()
     assert [row[0] for row in events] == ["execution_reserved", "handler_failed"]
     assert "stopped_before_dispatch" in events[-1][1]
+
+
+
+def test_drain_blocks_new_dispatches_and_stop_waits_for_active_dispatches():
+    lifecycle = ProfessorWorkerLifecycle()
+    lifecycle.begin_startup()
+    lifecycle.mark_ready(ProfessorWorkerGate(True, True, True))
+
+    assert lifecycle.begin_dispatch()
+    assert lifecycle.active_dispatches == 1
+
+    lifecycle.begin_drain()
+    assert not lifecycle.begin_dispatch()
+    with pytest.raises(WorkerLifecycleError, match="dispatches remain active"):
+        lifecycle.stop()
+
+    lifecycle.end_dispatch()
+    assert lifecycle.active_dispatches == 0
+    lifecycle.stop()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+
+
+def test_drain_winning_dispatch_admission_prevents_handler_start(monkeypatch):
+    db, _, runner, _, plan = setup_runner()
+    executed = []
+    original_execute = runner._runtime.execute
+    original_begin_dispatch = runner._lifecycle.begin_dispatch
+
+    def track_execute(*args, **kwargs):
+        executed.append(True)
+        return original_execute(*args, **kwargs)
+
+    def drain_before_admission():
+        runner._lifecycle.begin_drain()
+        return original_begin_dispatch()
+
+    monkeypatch.setattr(runner._runtime, "execute", track_execute)
+    monkeypatch.setattr(runner._lifecycle, "begin_dispatch", drain_before_admission)
+
+    result = runner.tick_once("tenant-a", plan.plan_id)
+
+    assert result.status == "stopped_before_dispatch"
+    assert executed == []
+    assert runner._lifecycle.active_dispatches == 0
+    events = db.execute(
+        "SELECT event_type FROM tenant_professor_execution_audit ORDER BY event_id"
+    ).fetchall()
+    assert [row[0] for row in events] == ["execution_reserved", "handler_failed"]
+    runner._lifecycle.stop()
+
+
+def test_drain_during_admitted_dispatch_prevents_result_commit_and_releases_slot(monkeypatch):
+    db, _, runner, repositories_for, plan = setup_runner()
+    original_execute = runner._runtime.execute
+
+    def drain_during_execute(*args, **kwargs):
+        runner._lifecycle.begin_drain()
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(runner._runtime, "execute", drain_during_execute)
+
+    result = runner.tick_once("tenant-a", plan.plan_id)
+
+    assert result.status == "recovery_required"
+    assert result.error_code == "stopped_after_execution"
+    principal = runner._identity.principal_for_tenant("tenant-a")
+    step = repositories_for(principal).steps.get_step(plan.plan_id, "calculate")
+    assert step.state == "claimed"
+    assert runner._lifecycle.active_dispatches == 0
+    runner._lifecycle.stop()
