@@ -81,7 +81,6 @@ def test_worker_is_disabled_by_default_and_does_not_claim():
     db, _, runner, repos, plan = setup_runner(gate=lambda: ProfessorWorkerGate())
     result = runner.tick_once("tenant-a", plan.plan_id)
     assert result.status == "disabled"
-    worker = runner._identity.principal_for_tenant if False else None
     assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
 
 
@@ -142,3 +141,28 @@ def test_tenant_without_explicit_worker_grant_is_denied():
     _, _, runner, _, plan = setup_runner()
     with pytest.raises(WorkerIdentityUnavailable):
         runner.tick_once("tenant-b", plan.plan_id)
+
+def test_cancellation_before_claim_prevents_any_step_claim():
+    db, human, runner, repos, plan = setup_runner()
+    cancellation = TenantPlanCancellationRepository(db, human)
+    cancellation.request(plan.plan_id, reason="Owner requested stop")
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "cancelled"
+    assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
+
+
+def test_global_stop_after_audit_reservation_prevents_handler_dispatch():
+    snapshots = iter((
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(False, True, True),
+    ))
+    db, _, runner, repos, plan = setup_runner(gate=lambda: next(snapshots))
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "stopped_before_dispatch"
+    events = db.execute(
+        "SELECT event_type, details_json FROM tenant_professor_execution_audit ORDER BY event_id"
+    ).fetchall()
+    assert [row[0] for row in events] == ["execution_reserved", "handler_failed"]
+    assert "stopped_before_dispatch" in events[-1][1]
