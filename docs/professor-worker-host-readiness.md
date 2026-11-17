@@ -111,4 +111,18 @@ The implementation remains non-runnable in production until a real isolated host
 
 The runner now also requires a thread-safe lifecycle controller to be in `READY` state. The lifecycle transitions are `STOPPED → STARTING → READY → DRAINING → STOPPED`, with a fail-closed `FAILED` state. Readiness cannot be declared unless all three deployment gates are true; draining immediately blocks new work and is re-checked at each runner checkpoint. This state machine does not supervise an operating-system process or wait for in-flight work to drain; a real host supervisor must provide those behaviours.
 
-**Latest exact-head CI:** [GitHub Actions run 44142901212](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44142901212) passed on commit `81b6b1e73483d9252b89cc31ea403e56ce109da5`: **1,164 tests passed, 1 warning**.
+**Latest exact-head CI:** [GitHub Actions run 44143111746](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44143111746) passed on commit `7d9d0a6d086e1e46046e976feb1665e5506bf33f`: **1,164 tests passed, 1 warning**.
+
+### Published deployment and source reconciliation — 17 November 2026
+
+A second strictly read-only inspection of the ATLAS Replit app confirmed:
+
+- The published deployment exists, reports a successful build, and serves `https://wwe.atlasonepro.com` as a public Autoscale deployment.
+- Replit deployment metadata exposes no deployed commit or build revision. A revision-filtered deployment-log search returned no logs, so the source currently served at that URL cannot be matched to GitHub or the workspace.
+- The Replit workspace is on `main` at `2f182eaa87ee4ecab41e26963b1ff5b9050387d8`, with a clean working tree, but has no GitHub remote or upstream. Its configured remotes are `gitsafe-backup` and `subrepl-shared`.
+- GitHub `main` remains `32471ea720edb5f10ca51aafaf9d45113d4e736c`; it does not match the workspace HEAD. None of the 62 currently open draft PR heads matches the workspace HEAD.
+- The published success status does not prove that the deployment contains the workspace HEAD, GitHub `main`, or any active PR head.
+
+No Git fetch, local ref update, file change, build, publish, secret access or deployment change was performed.
+
+**Launch gate:** Before treating GitHub work as present in the live app, the owner must explicitly reconcile the Replit workspace with the authoritative repository and branch, then establish a reliable deployed source-revision signal. Do not overwrite the existing workspace or alter remotes automatically.
