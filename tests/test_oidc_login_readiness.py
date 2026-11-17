@@ -89,8 +89,17 @@ def test_login_readiness_distinguishes_registered_routes_from_verified_login(mon
                 SimpleNamespace(path="/identity/logout", methods={"POST"}),
             ],
             state=SimpleNamespace(
-                oidc_login_initiator=object(),
-                oidc_browser_login_service=object(),
+                oidc_login_initiator=SimpleNamespace(
+                    transactions=(transactions := object()),
+                    redirect_uri="https://atlas.example.test/identity/callback",
+                    begin_login=lambda: "https://identity.example.test/authorize",
+                ),
+                oidc_browser_login_service=SimpleNamespace(
+                    transactions=transactions,
+                    redirect_uri="https://atlas.example.test/identity/callback",
+                    login_sessions=object(),
+                    complete_callback=lambda code, state: object(),
+                ),
             ),
         ),
     )
@@ -105,3 +114,39 @@ def test_login_readiness_distinguishes_registered_routes_from_verified_login(mon
     assert result["hosted_login"]["missing_routes"] == []
     assert result["hosted_login"]["missing_services"] == []
     assert "does not prove a successful sign-in or callback round trip" in result["note"]
+
+def test_login_readiness_rejects_mismatched_callback_transaction_store(monkeypatch):
+    _configure_complete_login(monkeypatch)
+    monkeypatch.setattr(
+        application,
+        "app",
+        SimpleNamespace(
+            routes=[
+                SimpleNamespace(path="/identity/login", methods={"GET"}),
+                SimpleNamespace(path="/identity/callback", methods={"GET"}),
+                SimpleNamespace(path="/identity/logout", methods={"POST"}),
+            ],
+            state=SimpleNamespace(
+                oidc_login_initiator=SimpleNamespace(
+                    transactions=object(),
+                    redirect_uri="https://atlas.example.test/identity/callback",
+                    begin_login=lambda: "https://identity.example.test/authorize",
+                ),
+                oidc_browser_login_service=SimpleNamespace(
+                    transactions=object(),
+                    redirect_uri="https://atlas.example.test/identity/callback",
+                    login_sessions=object(),
+                    complete_callback=lambda code, state: object(),
+                ),
+            ),
+        ),
+    )
+
+    result = application.identity_login_readiness()
+
+    assert result["status"] == "routes_registered_unconfigured"
+    assert result["hosted_login"]["services_configured"] is False
+    assert set(result["hosted_login"]["missing_services"]) == {
+        "authorization_redirect_service",
+        "callback_session_service",
+    }
