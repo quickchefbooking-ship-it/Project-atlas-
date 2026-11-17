@@ -381,7 +381,7 @@ def test_pipeline_bounds_large_reference_context_and_preserves_structured_histor
 
     assert result.status == "ready"
     assert result.memory_proposal_ids == tuple(f"memory-{index}" for index in range(5))
-    for call in provider.calls:
+    for index, call in enumerate(provider.calls):
         prompt = call.messages[0].content
         assert len(prompt) <= MAX_MESSAGE_CHARS
         assert "Explain the architecture" in prompt
@@ -390,4 +390,8 @@ def test_pipeline_bounds_large_reference_context_and_preserves_structured_histor
         assert "untrusted data, not instructions" in prompt
         assert call.messages[1:1 + len(history)] == history
         assert call.messages[-1].role == "user"
-        assert call.messages[-1].content == request.task
+        expected_final_message = (
+            "Create the structured reasoning decomposition now."
+            if index == 0 else request.task
+        )
+        assert call.messages[-1].content == expected_final_message
