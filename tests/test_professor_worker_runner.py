@@ -1,0 +1,276 @@
+import sqlite3
+
+import pytest
+
+from atlas_engine.capability_runtime import build_default_capability_runtime
+from atlas_engine.identity_policy import RequestPrincipal
+from atlas_engine.plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
+from atlas_engine.professor_autonomy_policy import AutonomyMode, ProfessorAutonomyPolicy
+from atlas_engine.professor_worker_identity import (
+    ProfessorWorkerIdentityConfig,
+    ProfessorWorkerIdentityService,
+    WORKER_CONTROL_SCOPES,
+    WorkerTenantGrant,
+    WorkerIdentityUnavailable,
+)
+from atlas_engine.professor_worker_runner import (
+    ProfessorWorkerGate,
+    ProfessorWorkerRepositories,
+    ProfessorWorkerRunner,
+    ProfessorWorkerLifecycle,
+    WorkerLifecycleError,
+    WorkerLifecycleState,
+)
+from atlas_engine.tenant_execution_audit_repository import TenantExecutionAuditRepository
+from atlas_engine.tenant_plan_cancellation import TenantPlanCancellationRepository
+from atlas_engine.tenant_plan_repository import TenantPlanRepository, initialize_tenant_plan_schema
+from atlas_engine.tenant_step_execution_repository import TenantStepExecutionRepository
+
+
+def make_plan(capability="math.calculate", version="1.0.0",
+              risk=RiskClass.LOCAL_COMPUTATION, scopes=("compute:local",)):
+    return ProfessorPlan("worker-plan", "Calculate 6 * 7", ("Record the result",), (
+        PlanStep("calculate", capability, "6 * 7", risk,
+                 required_scopes=scopes, capability_version=version),
+    ))
+
+
+def setup_runner(*, gate=None, capability="math.calculate", version="1.0.0",
+                 risk=RiskClass.LOCAL_COMPUTATION, scopes=("compute:local",),
+                 enabled=True, lifecycle_ready=True):
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    initialize_tenant_plan_schema(db)
+
+    human = RequestPrincipal(
+        "https://identity.example", "owner", "tenant-a", True,
+        frozenset({"plans:read", "plans:write"}),
+    )
+    human_plans = TenantPlanRepository(db, human)
+    plan = make_plan(capability, version, risk, scopes)
+    human_plans.create(plan)
+    human_plans.transition(plan.plan_id, expected_state=PlanState.DRAFT,
+                           new_state=PlanState.READY)
+    human_plans.transition(plan.plan_id, expected_state=PlanState.READY,
+                           new_state=PlanState.RUNNING)
+
+    worker_scopes = WORKER_CONTROL_SCOPES | {"compute:local"}
+    identity = ProfessorWorkerIdentityService(ProfessorWorkerIdentityConfig(
+        worker_id="professor-worker-test",
+        enabled=enabled,
+        tenant_grants=(WorkerTenantGrant("tenant-a", worker_scopes),) if enabled else (),
+    ))
+
+    def repositories_for(principal):
+        return ProfessorWorkerRepositories(
+            plans=TenantPlanRepository(db, principal),
+            steps=TenantStepExecutionRepository(db, principal),
+            cancellation=TenantPlanCancellationRepository(db, principal),
+            audit=TenantExecutionAuditRepository(db, principal),
+        )
+
+    gate_reader = gate or (lambda: ProfessorWorkerGate(True, True, True))
+    lifecycle = ProfessorWorkerLifecycle()
+    if lifecycle_ready:
+        lifecycle.begin_startup()
+        lifecycle.mark_ready(ProfessorWorkerGate(True, True, True))
+    runner = ProfessorWorkerRunner(
+        identity=identity,
+        repositories_for=repositories_for,
+        runtime=build_default_capability_runtime(),
+        policy=ProfessorAutonomyPolicy(AutonomyMode.SANDBOX_BUILD),
+        read_gate=gate_reader,
+        lifecycle=lifecycle,
+    )
+    return db, human, runner, repositories_for, plan
+
+
+def test_lifecycle_starts_stopped_and_requires_all_readiness_gates():
+    lifecycle = ProfessorWorkerLifecycle()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+    assert not lifecycle.accepting_work
+    lifecycle.begin_startup()
+    with pytest.raises(RuntimeError, match="readiness gates"):
+        lifecycle.mark_ready(ProfessorWorkerGate(True, True, False))
+    assert lifecycle.state is WorkerLifecycleState.FAILED
+    lifecycle.stop()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+
+
+def test_draining_lifecycle_rejects_new_work():
+    _, _, runner, _, plan = setup_runner()
+    runner._lifecycle.begin_drain()
+    assert runner._lifecycle.state is WorkerLifecycleState.DRAINING
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "disabled"
+
+
+def test_stopped_lifecycle_blocks_work_even_if_deployment_gates_are_true():
+    _, _, runner, _, plan = setup_runner(lifecycle_ready=False)
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "disabled"
+
+
+def test_worker_is_disabled_by_default_and_does_not_claim():
+    db, _, runner, repos, plan = setup_runner(gate=lambda: ProfessorWorkerGate())
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "disabled"
+    assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
+
+
+def test_worker_executes_exactly_one_registered_local_step_and_audits_it():
+    db, _, runner, repos, plan = setup_runner()
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "succeeded"
+    assert result.step_id == "calculate"
+    steps = repos(runner._identity.principal_for_tenant("tenant-a")).steps
+    record = steps.get_step(plan.plan_id, "calculate")
+    assert record.state == "succeeded"
+    assert record.result == {"value": 42, "kind": "number"}
+    events = db.execute(
+        "SELECT event_type FROM tenant_professor_execution_audit ORDER BY event_id"
+    ).fetchall()
+    assert [row[0] for row in events] == ["execution_reserved", "handler_succeeded"]
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "idle"
+
+
+def test_global_kill_switch_is_rechecked_before_dispatch():
+    snapshots = iter((
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(False, True, True),
+    ))
+    db, _, runner, repos, plan = setup_runner(gate=lambda: next(snapshots))
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "stopped_before_dispatch"
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_execution_audit").fetchone()[0] == 0
+    steps = repos(runner._identity.principal_for_tenant("tenant-a")).steps
+    assert steps.get_step(plan.plan_id, "calculate").state == "claimed"
+
+
+def test_unsupported_networked_capability_is_rejected_before_claim():
+    db, _, runner, repos, plan = setup_runner(
+        capability="research.crossref.search", version="1.0.0",
+        risk=RiskClass.READ_ONLY, scopes=("research:public",),
+    )
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "unsupported_plan"
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
+
+
+def test_step_must_declare_registered_capability_scopes():
+    db, _, runner, _, plan = setup_runner(scopes=())
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "denied"
+    assert result.error_code == "capability_contract_denied"
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
+
+
+def test_disabled_worker_identity_fails_closed():
+    _, _, runner, _, plan = setup_runner(enabled=False)
+    with pytest.raises(WorkerIdentityUnavailable):
+        runner.tick_once("tenant-a", plan.plan_id)
+
+
+def test_missing_isolation_proof_keeps_worker_disabled():
+    _, _, runner, _, plan = setup_runner(
+        gate=lambda: ProfessorWorkerGate(True, True, False)
+    )
+    assert runner.tick_once("tenant-a", plan.plan_id).status == "disabled"
+
+
+def test_tenant_without_explicit_worker_grant_is_denied():
+    _, _, runner, _, plan = setup_runner()
+    with pytest.raises(WorkerIdentityUnavailable):
+        runner.tick_once("tenant-b", plan.plan_id)
+
+def test_cancellation_before_claim_prevents_any_step_claim():
+    db, human, runner, repos, plan = setup_runner()
+    cancellation = TenantPlanCancellationRepository(db, human)
+    cancellation.request(plan.plan_id, reason="Owner requested stop")
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "cancelled"
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
+
+
+def test_global_stop_after_audit_reservation_prevents_handler_dispatch():
+    snapshots = iter((
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(True, True, True),
+        ProfessorWorkerGate(False, True, True),
+    ))
+    db, _, runner, repos, plan = setup_runner(gate=lambda: next(snapshots))
+    result = runner.tick_once("tenant-a", plan.plan_id)
+    assert result.status == "stopped_before_dispatch"
+    events = db.execute(
+        "SELECT event_type, details_json FROM tenant_professor_execution_audit ORDER BY event_id"
+    ).fetchall()
+    assert [row[0] for row in events] == ["execution_reserved", "handler_failed"]
+    assert "stopped_before_dispatch" in events[-1][1]
+
+
+
+def test_drain_blocks_new_dispatches_and_stop_waits_for_active_dispatches():
+    lifecycle = ProfessorWorkerLifecycle()
+    lifecycle.begin_startup()
+    lifecycle.mark_ready(ProfessorWorkerGate(True, True, True))
+
+    assert lifecycle.begin_dispatch()
+    assert lifecycle.active_dispatches == 1
+
+    lifecycle.begin_drain()
+    assert not lifecycle.begin_dispatch()
+    with pytest.raises(WorkerLifecycleError, match="dispatches remain active"):
+        lifecycle.stop()
+
+    lifecycle.end_dispatch()
+    assert lifecycle.active_dispatches == 0
+    lifecycle.stop()
+    assert lifecycle.state is WorkerLifecycleState.STOPPED
+
+
+def test_drain_winning_dispatch_admission_prevents_handler_start(monkeypatch):
+    db, _, runner, _, plan = setup_runner()
+    executed = []
+    original_execute = runner._runtime.execute
+    original_begin_dispatch = runner._lifecycle.begin_dispatch
+
+    def track_execute(*args, **kwargs):
+        executed.append(True)
+        return original_execute(*args, **kwargs)
+
+    def drain_before_admission():
+        runner._lifecycle.begin_drain()
+        return original_begin_dispatch()
+
+    monkeypatch.setattr(runner._runtime, "execute", track_execute)
+    monkeypatch.setattr(runner._lifecycle, "begin_dispatch", drain_before_admission)
+
+    result = runner.tick_once("tenant-a", plan.plan_id)
+
+    assert result.status == "stopped_before_dispatch"
+    assert executed == []
+    assert runner._lifecycle.active_dispatches == 0
+    events = db.execute(
+        "SELECT event_type FROM tenant_professor_execution_audit ORDER BY event_id"
+    ).fetchall()
+    assert [row[0] for row in events] == ["execution_reserved", "handler_failed"]
+    runner._lifecycle.stop()
+
+
+def test_drain_during_admitted_dispatch_prevents_result_commit_and_releases_slot(monkeypatch):
+    db, _, runner, repositories_for, plan = setup_runner()
+    original_execute = runner._runtime.execute
+
+    def drain_during_execute(*args, **kwargs):
+        runner._lifecycle.begin_drain()
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(runner._runtime, "execute", drain_during_execute)
+
+    result = runner.tick_once("tenant-a", plan.plan_id)
+
+    assert result.status == "recovery_required"
+    assert result.error_code == "stopped_after_execution"
+    principal = runner._identity.principal_for_tenant("tenant-a")
+    step = repositories_for(principal).steps.get_step(plan.plan_id, "calculate")
+    assert step.state == "claimed"
+    assert runner._lifecycle.active_dispatches == 0
+    runner._lifecycle.stop()
