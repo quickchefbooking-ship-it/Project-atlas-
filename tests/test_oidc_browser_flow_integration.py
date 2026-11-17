@@ -245,6 +245,8 @@ def _build_browser_flow(tmp_path, monkeypatch, *, login_subject=SUBJECT):
         "starts": starts,
         "exchanger": exchanger,
         "verifier": verifier,
+        "application": application,
+        "login_sessions": login_sessions,
     }
 
 
@@ -390,3 +392,100 @@ def test_replayed_hosted_callback_cannot_issue_a_second_atlas_session(
     assert flow["sessions"].validate_session(session_token).account_id == (
         flow["account"].account_id
     )
+
+
+def test_hosted_browser_flow_uses_real_token_exchange_and_id_token_verification(
+    tmp_path, monkeypatch
+):
+    """Exercise the real adapters together without contacting a live provider."""
+    import httpx
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from types import SimpleNamespace
+
+    from atlas_engine.oidc_contract import OIDCProviderConfig
+    from atlas_engine.oidc_http_token_exchange import HTTPSOIDCAuthorizationCodeExchanger
+    from atlas_engine.oidc_id_token_verifier import PyJWTIDTokenVerifier
+
+    flow = _build_browser_flow(tmp_path, monkeypatch)
+    state, _parameters = _start_login(flow["client"])
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = int(time.time())
+    signed_id_token = jwt.encode(
+        {
+            "iss": ISSUER,
+            "sub": SUBJECT,
+            "aud": CLIENT_ID,
+            "exp": now + 300,
+            "iat": now,
+            "nonce": flow["starts"][0].nonce,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "atlas-test-key"},
+    )
+
+    requests = []
+
+    def token_endpoint(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id_token": signed_id_token,
+                "access_token": "provider-access-token",
+                "token_type": "Bearer",
+            },
+        )
+
+    exchanger = HTTPSOIDCAuthorizationCodeExchanger(
+        token_endpoint="https://identity.example.test/oauth/token",
+        client_id=CLIENT_ID,
+        redirect_uri=REDIRECT_URI,
+        transport=httpx.MockTransport(token_endpoint),
+    )
+
+    class LocalPinnedJWKS:
+        def get_signing_key_from_jwt(self, token):
+            assert token == signed_id_token
+            return SimpleNamespace(key=private_key.public_key())
+
+    verifier = PyJWTIDTokenVerifier(
+        OIDCProviderConfig(
+            issuer=ISSUER,
+            audience="atlas-api",
+            jwks_uri=ISSUER + ".well-known/jwks.json",
+            allowed_algorithms=frozenset({"RS256"}),
+            clock_skew_seconds=0,
+        ),
+        CLIENT_ID,
+        LocalPinnedJWKS(),
+    )
+    flow["application"].state.oidc_browser_login_service = OIDCBrowserLoginService(
+        transactions=flow["transactions"],
+        exchanger=exchanger,
+        id_token_verifier=verifier,
+        login_sessions=flow["login_sessions"],
+        redirect_uri=REDIRECT_URI,
+    )
+
+    callback = _callback(flow["client"], state)
+
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/professor/chat"
+    assert len(requests) == 1
+    form = parse_qs(requests[0].content.decode())
+    assert form == {
+        "grant_type": ["authorization_code"],
+        "code": ["one-time-provider-code"],
+        "redirect_uri": [REDIRECT_URI],
+        "code_verifier": [flow["starts"][0].code_verifier],
+        "client_id": [CLIENT_ID],
+    }
+
+    identity = flow["client"].get("/identity/me")
+    assert identity.status_code == 200
+    assert identity.json()["tenant_id"] == "tenant-a"
+    assert identity.json()["subject"] == flow["account"].account_id

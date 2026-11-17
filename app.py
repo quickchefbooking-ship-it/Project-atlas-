@@ -30,6 +30,10 @@ from atlas_engine.http_identity import VerifiedIdentityService, require_verified
 from atlas_engine.oidc_browser_routes import router as oidc_browser_router
 from atlas_engine.oidc_contract import OIDCProviderConfig
 from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
+from atlas_engine.oidc_startup import (
+    OIDC_BROWSER_LOGIN_REQUIRED_SETTINGS,
+    build_oidc_browser_login_services,
+)
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.identity_policy import AuthorizationDenied
 from atlas_engine.capability_registry import CapabilityRegistry
@@ -120,6 +124,26 @@ async def lifespan(app: FastAPI):
     except Exception:
         app.state.tenant_data_path = None
         logger.error("Tenant plan storage initialization failed; tenant plan routes remain disabled")
+    try:
+        initiator, callback = build_oidc_browser_login_services(
+            core_database_path=getattr(storage, "DB_PATH", None),
+            tenant_database_path=getattr(app.state, "tenant_data_path", None),
+            membership_registry=getattr(
+                getattr(app.state, "identity_service", None), "memberships", None
+            ),
+        )
+        app.state.oidc_login_initiator = initiator
+        app.state.oidc_browser_login_service = callback
+        app.state.oidc_browser_login_configuration_error = False
+        if initiator is not None:
+            logger.info("Hosted OIDC browser login services composed from deployment settings")
+    except Exception:
+        app.state.oidc_login_initiator = None
+        app.state.oidc_browser_login_service = None
+        app.state.oidc_browser_login_configuration_error = True
+        logger.error("Hosted OIDC browser login configuration is invalid; sign-in remains disabled")
+    app.state.atlas_session_identity_service = None
+    app.state.atlas_trusted_origins = frozenset()
     app.state.conversation_provider = None
     app.state.conversation_service = ConversationService()
     try:
@@ -145,6 +169,7 @@ app.state.tenant_capability_runtime = build_default_capability_runtime()
 app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
 app.state.oidc_login_initiator = None
 app.state.oidc_browser_login_service = None
+app.state.oidc_browser_login_configuration_error = False
 app.state.atlas_session_identity_service = None
 app.state.atlas_trusted_origins = frozenset()
 app.include_router(oidc_browser_router)
@@ -354,8 +379,10 @@ def launch_readiness():
         conversation_service is not None
         and getattr(conversation_service, "is_configured", False)
     )
-    hosted_login_settings = ("ATLAS_OIDC_CLIENT_ID", "ATLAS_OIDC_REDIRECT_URI")
-    hosted_login_configured = all(os.getenv(name) for name in hosted_login_settings)
+    hosted_login_configured = _hosted_login_services_match(
+        getattr(app.state, "oidc_login_initiator", None),
+        getattr(app.state, "oidc_browser_login_service", None),
+    ) and not getattr(app.state, "oidc_browser_login_configuration_error", False)
 
     checks = {
         "verified_api_identity": identity_configured,
@@ -390,6 +417,21 @@ def identity_me(principal=Depends(require_verified_principal)):
     }
 
 
+def _hosted_login_services_match(initiator, callback) -> bool:
+    """Require matching trusted startup services, not just environment strings."""
+    return (
+        initiator is not None
+        and callable(getattr(initiator, "begin_login", None))
+        and callback is not None
+        and callable(getattr(callback, "complete_callback", None))
+        and getattr(callback, "transactions", None)
+        is getattr(initiator, "transactions", None)
+        and getattr(callback, "redirect_uri", None)
+        == getattr(initiator, "redirect_uri", None)
+        and getattr(callback, "login_sessions", None) is not None
+    )
+
+
 @app.get("/identity/login-readiness")
 def identity_login_readiness():
     """Expose non-secret deployment readiness for hosted OIDC login.
@@ -404,10 +446,7 @@ def identity_login_readiness():
         "ATLAS_OIDC_ALLOWED_ALGORITHMS",
         "ATLAS_MEMBERSHIP_DB_PATH",
     )
-    hosted_login_settings = (
-        "ATLAS_OIDC_CLIENT_ID",
-        "ATLAS_OIDC_REDIRECT_URI",
-    )
+    hosted_login_settings = OIDC_BROWSER_LOGIN_REQUIRED_SETTINGS
     missing_verifier = [name for name in verifier_settings if not os.getenv(name)]
     missing_login = [name for name in hosted_login_settings if not os.getenv(name)]
     required_login_routes = (
@@ -427,16 +466,9 @@ def identity_login_readiness():
     ]
     login_initiator = getattr(app.state, "oidc_login_initiator", None)
     callback_service = getattr(app.state, "oidc_browser_login_service", None)
-    services_match = (
-        login_initiator is not None
-        and callable(getattr(login_initiator, "begin_login", None))
-        and callback_service is not None
-        and callable(getattr(callback_service, "complete_callback", None))
-        and getattr(callback_service, "transactions", None)
-        is getattr(login_initiator, "transactions", None)
-        and getattr(callback_service, "redirect_uri", None)
-        == getattr(login_initiator, "redirect_uri", None)
-        and getattr(callback_service, "login_sessions", None) is not None
+    services_match = _hosted_login_services_match(login_initiator, callback_service)
+    configuration_error = bool(
+        getattr(app.state, "oidc_browser_login_configuration_error", False)
     )
     missing_services = (
         []
@@ -448,6 +480,8 @@ def identity_login_readiness():
         readiness_status = "not_configured"
     elif missing_routes:
         readiness_status = "not_implemented"
+    elif configuration_error:
+        readiness_status = "configuration_invalid"
     elif missing_services:
         readiness_status = "routes_registered_unconfigured"
     else:
@@ -465,6 +499,7 @@ def identity_login_readiness():
             "implemented": not missing_routes and not missing_services,
             "routes_registered": not missing_routes,
             "services_configured": not missing_services,
+            "configuration_valid": not configuration_error,
             "missing_settings": missing_login,
             "missing_routes": missing_routes,
             "missing_services": missing_services,
