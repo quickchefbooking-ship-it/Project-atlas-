@@ -8,7 +8,7 @@ provider-neutral: deployment-owned startup code must inject the authorization
 initiator and callback service. Missing services return 503; the router never
 selects a provider or discovers endpoints from browser input.
 
-## Login initiation
+## Login initiation and browser binding
 
 The initiator uses a deployment-pinned HTTPS authorization endpoint, registered
 client ID and exact HTTPS callback URI. It creates state, nonce and an S256 PKCE
@@ -16,6 +16,13 @@ challenge through the encrypted server-side transaction store. Only the
 challenge, state and nonce are sent to the provider. The verifier remains in
 server-side storage. The requested scope is intentionally limited to openid;
 Atlas account linking does not rely on provider email claims.
+
+The route also sets a short-lived Secure, HttpOnly, SameSite=Lax host-only
+__Host-atlas_oidc_state cookie. The callback must present the same state in the
+query and cookie, compared in constant time. This binds the callback to the
+browser that initiated login and prevents a copied callback URL from silently
+signing another browser into the attacker's Atlas account. A mismatched browser
+does not consume the legitimate transaction.
 
 ## Callback and cookies
 
@@ -29,10 +36,11 @@ __Host-atlas_session cookie. The session-bound CSRF token is placed in a
 Secure, same-site, host-only __Host-atlas_csrf cookie readable by same-origin
 application code, which must echo it in X-Atlas-CSRF. Unsafe cookie-authenticated
 requests still require the exact server-configured Origin and session-bound
-CSRF validation.
+CSRF validation. The temporary state cookie is cleared after a valid callback.
 
 Logout is a POST protected by the existing verified-principal dependency. It
-revokes the current server-side session and clears both cookies.
+revokes the current server-side session and clears the session, CSRF and
+temporary OIDC state cookies.
 
 ## Remaining launch requirements
 
