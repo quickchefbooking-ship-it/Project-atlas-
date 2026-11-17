@@ -120,4 +120,8 @@ class TrustedProxyClientAddressResolver:
             if not self._is_trusted_proxy(candidate):
                 break
             candidate = hop
+
+        # A chain containing only trusted proxies does not identify the client.
+        if self._is_trusted_proxy(candidate):
+            raise ValueError("The forwarded client-address chain did not identify an untrusted client.")
         return candidate.compressed
