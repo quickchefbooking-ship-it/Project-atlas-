@@ -69,7 +69,7 @@ def test_formatted_evidence_is_valid_json_and_respects_prompt_budget():
     } for i in range(3)]
 
     prompt = context.format_evidence_context(evidence)
-    payload = json.loads(prompt.split("\\n")[-1])
+    payload = json.loads(prompt.split("\n")[-1])
 
     assert len(prompt) <= context.MAX_CONTEXT_CHARS
     assert payload[0]["document_id"] == "document-0"
