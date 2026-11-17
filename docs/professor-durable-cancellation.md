@@ -13,7 +13,7 @@ The cancellation repository records an immutable stop request for a tenant plan.
 - Cross-tenant requests and reads are denied without disclosing another tenant's plan.
 - Cancellation records cannot be updated or deleted.
 - The step-claim transaction checks the cancellation table before creating or claiming work, closing the race between the HTTP preflight and a concurrent cancellation request.
-- The plan repository refuses a transition to `succeeded` when a cancellation request has committed. The cancellation request and terminal-success transition serialize through SQLite write transactions.
+- The plan repository refuses a transition to `succeeded` or `failed` when a cancellation request has committed. The cancellation request and terminal transition serialize through SQLite write transactions.
 - If a step is already claimed, it may finish its bounded handler call. The executor then records that step's actual outcome and transitions the plan to `cancelled`; no subsequent step is claimed.
 - If an uncertain lease has expired, cancellation does not replay it. The response preserves the recovery-required state and calls for operator review.
 
