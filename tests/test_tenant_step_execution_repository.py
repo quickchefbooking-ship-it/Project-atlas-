@@ -101,6 +101,113 @@ def test_expired_lease_is_recovery_required_and_never_replayed(setup, monkeypatc
     assert events[-1].details["automatic_replay"] is False
 
 
+def test_recovery_resolution_requires_scope_and_marks_uncertain_work_failed(setup, monkeypatch):
+    db, plans, _, steps, _ = setup
+    p = running(plans)
+    now = 1_900_000_000.0
+    monkeypatch.setattr(step_module.time, "time", lambda: now)
+    lease = steps.claim_next_step(p.plan_id, "worker-a", 1)
+    monkeypatch.setattr(step_module.time, "time", lambda: now + 2)
+    assert steps.claim_next_step(p.plan_id, "worker-b") is None
+
+    with pytest.raises(AuthorizationDenied):
+        steps.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+            reason="Reviewed timeout; outcome cannot be established",
+        )
+
+    reviewer = RequestPrincipal(
+        "issuer", "operator-1", "tenant-a", True,
+        frozenset({"steps:read", "steps:recover"}),
+    )
+    recovery = TenantStepExecutionRepository(db, reviewer)
+    resolved = recovery.resolve_recovery_as_failed(
+        p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+        reason="Reviewed timeout; outcome cannot be established",
+    )
+    assert resolved.state == "failed"
+    assert resolved.error_code == "operator_marked_failed"
+    assert resolved.result is None
+    events = recovery.list_events(p.plan_id, "first")
+    assert events[-1].event_type == "failed"
+    assert events[-1].details == {
+        "decision": "operator_marked_failed",
+        "reason": "Reviewed timeout; outcome cannot be established",
+        "actor_issuer": "issuer",
+        "actor_subject": "operator-1",
+        "automatic_replay": False,
+    }
+    assert recovery.claim_next_step(p.plan_id, "worker-c") is None
+
+
+def test_recovery_resolution_rejects_stale_fencing_token_and_non_recovery_state(setup, monkeypatch):
+    db, plans, _, steps, _ = setup
+    p = running(plans)
+    now = 1_900_000_000.0
+    monkeypatch.setattr(step_module.time, "time", lambda: now)
+    lease = steps.claim_next_step(p.plan_id, "worker-a", 1)
+    monkeypatch.setattr(step_module.time, "time", lambda: now + 2)
+    assert steps.claim_next_step(p.plan_id, "worker-b") is None
+
+    reviewer = RequestPrincipal(
+        "issuer", "operator-1", "tenant-a", True,
+        frozenset({"steps:read", "steps:recover"}),
+    )
+    recovery = TenantStepExecutionRepository(db, reviewer)
+    with pytest.raises(TenantStepConflict, match="stale fencing token"):
+        recovery.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=lease.fencing_token + 1,
+            reason="Reviewed uncertain execution",
+        )
+    resolved = recovery.resolve_recovery_as_failed(
+        p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+        reason="Reviewed uncertain execution",
+    )
+    with pytest.raises(TenantStepConflict, match="Only recovery-required"):
+        recovery.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+            reason="Attempt to resolve twice",
+        )
+    assert resolved.state == "failed"
+
+
+def test_recovery_resolution_is_tenant_scoped_and_validates_reason(setup, monkeypatch):
+    db, plans_a, _, steps_a, steps_b = setup
+    p = running(plans_a)
+    now = 1_900_000_000.0
+    monkeypatch.setattr(step_module.time, "time", lambda: now)
+    lease = steps_a.claim_next_step(p.plan_id, "worker-a", 1)
+    monkeypatch.setattr(step_module.time, "time", lambda: now + 2)
+    assert steps_a.claim_next_step(p.plan_id, "worker-b") is None
+
+    operator_a = RequestPrincipal(
+        "issuer", "operator-a", "tenant-a", True,
+        frozenset({"steps:read", "steps:recover"}),
+    )
+    operator_b = RequestPrincipal(
+        "issuer", "operator-b", "tenant-b", True,
+        frozenset({"steps:read", "steps:recover"}),
+    )
+    recovery_a = TenantStepExecutionRepository(db, operator_a)
+    recovery_b = TenantStepExecutionRepository(db, operator_b)
+    with pytest.raises(TenantStepNotFound):
+        recovery_b.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+            reason="Cross tenant attempt",
+        )
+    with pytest.raises(ValueError, match="reason"):
+        recovery_a.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=lease.fencing_token,
+            reason="   ",
+        )
+    with pytest.raises(ValueError, match="positive integer"):
+        recovery_a.resolve_recovery_as_failed(
+            p.plan_id, "first", expected_fencing_token=True,
+            reason="Invalid token type",
+        )
+    assert recovery_a.get_step(p.plan_id, "first").state == "recovery_required"
+
+
 def test_worker_ownership_and_fencing_are_enforced(setup):
     _, plans, _, steps, _ = setup
     p = running(plans)
