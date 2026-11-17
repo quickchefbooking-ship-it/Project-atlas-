@@ -81,7 +81,7 @@ def test_worker_is_disabled_by_default_and_does_not_claim():
     db, _, runner, repos, plan = setup_runner(gate=lambda: ProfessorWorkerGate())
     result = runner.tick_once("tenant-a", plan.plan_id)
     assert result.status == "disabled"
-    assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
 
 
 def test_worker_executes_exactly_one_registered_local_step_and_audits_it():
@@ -121,7 +121,7 @@ def test_unsupported_networked_capability_is_rejected_before_claim():
     )
     result = runner.tick_once("tenant-a", plan.plan_id)
     assert result.status == "unsupported_plan"
-    assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
 
 
 def test_disabled_worker_identity_fails_closed():
@@ -148,7 +148,7 @@ def test_cancellation_before_claim_prevents_any_step_claim():
     cancellation.request(plan.plan_id, reason="Owner requested stop")
     result = runner.tick_once("tenant-a", plan.plan_id)
     assert result.status == "cancelled"
-    assert db.execute("SELECT name FROM sqlite_master WHERE name='tenant_professor_step_runs'").fetchone() is None
+    assert db.execute("SELECT COUNT(*) FROM tenant_professor_step_runs").fetchone()[0] == 0
 
 
 def test_global_stop_after_audit_reservation_prevents_handler_dispatch():
