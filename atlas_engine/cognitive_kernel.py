@@ -193,6 +193,7 @@ def prepare_for_reasoning(
         )
 
     from .professor_reasoning_context import (
+        MAX_CONTEXT_CHARS as MAX_EVIDENCE_CONTEXT_CHARS,
         build_reasoning_evidence,
         format_evidence_context,
     )
@@ -216,8 +217,8 @@ def prepare_for_reasoning(
         if isinstance(item, dict)
     )
     formatted = format_evidence_context(list(bounded_evidence))
-    if not isinstance(formatted, str) or len(formatted) > 3_500:
-        raise ValueError("Formatted evidence context exceeded its safety budget.")
+    if not isinstance(formatted, str) or len(formatted) > MAX_EVIDENCE_CONTEXT_CHARS:
+        raise ValueError("Formatted evidence context exceeded its prompt budget.")
     return CognitivePreparation(
         frame=frame,
         evidence=bounded_evidence,
