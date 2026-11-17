@@ -16,6 +16,8 @@ abuse guard. Public login remains disabled.
 - The chain is evaluated from right to left. Traversal stops at the first hop
   that is not itself in the trusted-proxy allowlist; values further to the left
   are not trusted.
+- The resulting client address must be outside the trusted-proxy allowlist. A
+  chain containing only trusted proxy hops is ambiguous and is rejected.
 - IPv4-mapped IPv6 values are normalized to native IPv4. IPv6 values use
   compressed canonical notation. Scoped IPv6 addresses, hostnames, ports,
   malformed chains and excessive hop counts are rejected.
@@ -33,8 +35,8 @@ Before a public authentication route uses this resolver:
 2. Load trusted proxy CIDRs from reviewed deployment configuration.
 3. Configure only the actual proxy hops controlled by the deployment.
 4. Do not trust all private networks or broad cloud ranges by default.
-5. Treat a malformed chain from a trusted proxy as a failed request; do not
-   fall back to caller-supplied values.
+5. Treat a malformed or ambiguous chain from a trusted proxy as a failed
+   request; do not fall back to caller-supplied values.
 6. Pass only the resolver's canonical result to the login abuse guard.
 7. Add route-level tests for the actual Replit/proxy topology before enabling
    public login.
