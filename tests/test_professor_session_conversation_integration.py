@@ -37,7 +37,12 @@ class IntegrationProvider:
         )
 
 
-def test_real_browser_session_reaches_tenant_scoped_professor_conversation(tmp_path):
+def test_real_browser_session_reaches_tenant_scoped_professor_conversation(tmp_path, monkeypatch):
+    from atlas_engine import professor_reasoning_context
+
+    # This test isolates the browser-session boundary; evidence citation behaviour
+    # is covered by the reasoning-pipeline and lifecycle tests.
+    monkeypatch.setattr(professor_reasoning_context, "build_reasoning_evidence", lambda query, limit: [])
     identity_path = str(tmp_path / "atlas-identity.sqlite")
     accounts = SQLiteAccountRepository(identity_path)
     accounts.initialize()
