@@ -4,12 +4,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi import FastAPI
-
 from fastapi.testclient import TestClient
 
 from atlas_engine.http_identity import require_verified_principal
 from atlas_engine.oidc_browser_routes import (
     ATLAS_CSRF_COOKIE,
+    ATLAS_OIDC_STATE_COOKIE,
     ATLAS_SESSION_COOKIE,
     OIDCBrowserLoginInitiator,
     router,
@@ -81,6 +81,12 @@ def _app(initiator=None, callback=None):
     return application
 
 
+def _start_login(client):
+    response = client.get("/identity/login", follow_redirects=False)
+    query = parse_qs(urlsplit(response.headers["location"]).query)
+    return query["state"][0], response
+
+
 def test_login_redirect_uses_server_generated_state_nonce_and_s256_without_verifier(tmp_path):
     transactions = _store(tmp_path)
     initiator = OIDCBrowserLoginInitiator(
@@ -92,7 +98,7 @@ def test_login_redirect_uses_server_generated_state_nonce_and_s256_without_verif
     callback = FakeCallbackService(transactions)
     client = TestClient(_app(initiator, callback), base_url="https://atlas.example.test")
 
-    response = client.get("/identity/login", follow_redirects=False)
+    state, response = _start_login(client)
 
     assert response.status_code == 302
     assert response.headers["cache-control"] == "no-store"
@@ -103,14 +109,22 @@ def test_login_redirect_uses_server_generated_state_nonce_and_s256_without_verif
     assert query["redirect_uri"] == [REDIRECT_URI]
     assert query["scope"] == ["openid"]
     assert query["code_challenge_method"] == ["S256"]
+    assert query["state"] == [state]
     assert len(query["state"][0]) >= 32
     assert len(query["nonce"][0]) >= 32
     assert len(query["code_challenge"][0]) == 43
     assert "code_verifier" not in query
-    assert "private" not in response.headers["location"]
+    state_cookie = next(
+        value for value in response.headers.get_list("set-cookie")
+        if value.startswith(ATLAS_OIDC_STATE_COOKIE + "=")
+    )
+    assert "Secure" in state_cookie
+    assert "HttpOnly" in state_cookie
+    assert "Path=/" in state_cookie
+    assert "SameSite=lax" in state_cookie
 
 
-def test_callback_consumes_state_sets_host_only_session_and_csrf_cookies(tmp_path):
+def test_callback_consumes_browser_bound_state_and_sets_session_and_csrf_cookies(tmp_path):
     transactions = _store(tmp_path)
     initiator = OIDCBrowserLoginInitiator(
         transactions,
@@ -121,11 +135,11 @@ def test_callback_consumes_state_sets_host_only_session_and_csrf_cookies(tmp_pat
     callback = FakeCallbackService(transactions)
     application = _app(initiator, callback)
     client = TestClient(application, base_url="https://atlas.example.test")
-    start = transactions.begin()
+    state, _ = _start_login(client)
 
     response = client.get(
         "/identity/callback",
-        params={"code": "provider-one-time-code", "state": start.state},
+        params={"code": "provider-one-time-code", "state": state},
         follow_redirects=False,
     )
 
@@ -135,6 +149,7 @@ def test_callback_consumes_state_sets_host_only_session_and_csrf_cookies(tmp_pat
     cookies = response.headers.get_list("set-cookie")
     session_cookie = next(value for value in cookies if value.startswith(ATLAS_SESSION_COOKIE + "="))
     csrf_cookie = next(value for value in cookies if value.startswith(ATLAS_CSRF_COOKIE + "="))
+    state_cookie = next(value for value in cookies if value.startswith(ATLAS_OIDC_STATE_COOKIE + "="))
     assert "Secure" in session_cookie
     assert "HttpOnly" in session_cookie
     assert "Path=/" in session_cookie
@@ -143,12 +158,13 @@ def test_callback_consumes_state_sets_host_only_session_and_csrf_cookies(tmp_pat
     assert "HttpOnly" not in csrf_cookie
     assert "Path=/" in csrf_cookie
     assert "SameSite=lax" in csrf_cookie
+    assert "Max-Age=0" in state_cookie
     assert application.state.atlas_trusted_origins == frozenset({"https://atlas.example.test"})
     assert application.state.atlas_session_identity_service is not None
-    assert callback.calls == [("provider-one-time-code", start.state)]
+    assert callback.calls == [("provider-one-time-code", state)]
 
 
-def test_provider_error_consumes_state_and_returns_generic_error(tmp_path):
+def test_callback_from_another_browser_does_not_consume_valid_state(tmp_path):
     transactions = _store(tmp_path)
     initiator = OIDCBrowserLoginInitiator(
         transactions,
@@ -162,18 +178,45 @@ def test_provider_error_consumes_state_and_returns_generic_error(tmp_path):
 
     response = client.get(
         "/identity/callback",
-        params={"error": "access_denied", "state": start.state},
+        params={"code": "provider-one-time-code", "state": start.state},
+        cookies={ATLAS_OIDC_STATE_COOKIE: "x" * 43},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Sign-in could not be completed."
+    assert callback.calls == []
+    consumed = transactions.consume(start.state)
+    assert consumed.expires_at > consumed.created_at
+
+
+def test_provider_error_consumes_browser_bound_state_and_returns_generic_error(tmp_path):
+    transactions = _store(tmp_path)
+    initiator = OIDCBrowserLoginInitiator(
+        transactions,
+        AUTHORIZATION_ENDPOINT,
+        "atlas-browser-client",
+        REDIRECT_URI,
+    )
+    callback = FakeCallbackService(transactions)
+    client = TestClient(_app(initiator, callback), base_url="https://atlas.example.test")
+    state, _ = _start_login(client)
+
+    response = client.get(
+        "/identity/callback",
+        params={"error": "access_denied", "state": state},
         follow_redirects=False,
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Sign-in was not completed."
+    assert response.headers["cache-control"] == "no-store"
     with pytest.raises(InvalidLoginTransaction):
-        transactions.consume(start.state)
+        transactions.consume(state)
     assert callback.calls == []
 
 
-def test_callback_failure_is_sanitized_and_does_not_set_cookies(tmp_path):
+def test_callback_failure_is_sanitized_and_does_not_set_session_cookies(tmp_path):
     transactions = _store(tmp_path)
     initiator = OIDCBrowserLoginInitiator(
         transactions,
@@ -184,18 +227,21 @@ def test_callback_failure_is_sanitized_and_does_not_set_cookies(tmp_path):
     callback = FakeCallbackService(transactions)
     callback.fail = True
     client = TestClient(_app(initiator, callback), base_url="https://atlas.example.test")
-    start = transactions.begin()
+    state, _ = _start_login(client)
 
     response = client.get(
         "/identity/callback",
-        params={"code": "provider-one-time-code", "state": start.state},
+        params={"code": "provider-one-time-code", "state": state},
         follow_redirects=False,
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Sign-in could not be completed."
     assert "private provider response" not in response.text
-    assert response.headers.get_list("set-cookie") == []
+    cookies = response.headers.get_list("set-cookie")
+    assert not any(value.startswith(ATLAS_SESSION_COOKIE + "=") for value in cookies)
+    assert not any(value.startswith(ATLAS_CSRF_COOKIE + "=") for value in cookies)
+    assert any(value.startswith(ATLAS_OIDC_STATE_COOKIE + "=") and "Max-Age=0" in value for value in cookies)
 
 
 def test_routes_fail_closed_until_server_services_are_injected():
@@ -238,6 +284,7 @@ def test_logout_revokes_session_and_clears_both_host_only_cookies():
     cookies = response.headers.get_list("set-cookie")
     assert any(value.startswith(ATLAS_SESSION_COOKIE + "=") and "Max-Age=0" in value for value in cookies)
     assert any(value.startswith(ATLAS_CSRF_COOKIE + "=") and "Max-Age=0" in value for value in cookies)
+    assert any(value.startswith(ATLAS_OIDC_STATE_COOKIE + "=") and "Max-Age=0" in value for value in cookies)
 
 
 @pytest.mark.parametrize(
@@ -246,9 +293,11 @@ def test_logout_revokes_session_and_clears_both_host_only_cookies():
         ("http://identity.example.test/authorize", REDIRECT_URI),
         ("https://user:pass@identity.example.test/authorize", REDIRECT_URI),
         ("https://identity.example.test/authorize#fragment", REDIRECT_URI),
+        ("https://identity.example.test/authorize#", REDIRECT_URI),
         ("https://identity.example.test/authorize?state=attacker", REDIRECT_URI),
         (AUTHORIZATION_ENDPOINT, "http://atlas.example.test/identity/callback"),
         (AUTHORIZATION_ENDPOINT, "https://atlas.example.test/auth/callback"),
+        (AUTHORIZATION_ENDPOINT, "https://atlas.example.test/identity/callback?"),
         (AUTHORIZATION_ENDPOINT, "https://atlas.example.test/identity/callback?next=https://evil.test"),
     ],
 )
