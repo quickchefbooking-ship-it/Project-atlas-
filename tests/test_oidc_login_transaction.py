@@ -12,7 +12,7 @@ from atlas_engine.oidc_login_transaction import (
 )
 
 
-KEY = b"atlas-test-login-key-32-bytes!!"
+KEY = b"atlas-test-login-key-32-bytes!!!"
 
 
 @pytest.fixture
