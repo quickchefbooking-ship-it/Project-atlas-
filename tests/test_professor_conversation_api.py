@@ -18,6 +18,7 @@ SCOPES = frozenset({
     "conversations:read",
     "conversations:write",
     "conversations:delete",
+    "professor:chat",
 })
 
 
@@ -345,3 +346,22 @@ def test_conversation_uses_only_approved_memory_when_read_scope_is_granted(tmp_p
     metadata = trace.json()["reasoning_audit"][0]["metadata"]
     assert metadata["memory_proposal_ids"] == ["pref-1"]
     assert trace.json()["audit_verification"]["valid"] is True
+
+
+def test_conversation_requires_explicit_professor_chat_scope(tmp_path):
+    principal = RequestPrincipal(
+        "https://issuer.example.test", "alice", "tenant-a", True,
+        frozenset({"conversations:read", "conversations:write"}),
+    )
+    client, db_path = make_client(tmp_path, principal=principal)
+    response = client.post("/professor/conversation", json={"message": "No chat scope"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Professor chat access denied."
+    assert client.app.state.test_provider.calls == []
+
+    db = sqlite3.connect(db_path)
+    count = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversations"
+    ).fetchone()[0]
+    db.close()
+    assert count == 0
