@@ -133,3 +133,37 @@ def test_redirect_must_be_the_fixed_identity_callback_before_store_initializatio
     assert not (tmp_path / "accounts.sqlite").exists()
     assert not (tmp_path / "membership.sqlite").exists()
     assert not (tmp_path / "login-transactions.sqlite").exists()
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "invalid_value"),
+    [
+        ("ATLAS_OIDC_ISSUER", "http://identity.example.test"),
+        ("ATLAS_OIDC_JWKS_URI", "http://identity.example.test/keys"),
+        ("ATLAS_OIDC_TOKEN_ENDPOINT", "http://identity.example.test/token"),
+        ("ATLAS_OIDC_AUTHORIZATION_ENDPOINT", "http://identity.example.test/authorize"),
+        ("ATLAS_OIDC_REDIRECT_URI", "https://atlas.example.test/not-the-callback"),
+        ("ATLAS_OIDC_CLIENT_ID", ""),
+        ("ATLAS_OIDC_ALLOWED_ALGORITHMS", "none"),
+    ],
+)
+def test_invalid_provider_configuration_leaves_all_configured_databases_uninitialized(
+    tmp_path, setting_name, invalid_value
+):
+    values = settings(tmp_path)
+    values[setting_name] = invalid_value
+    core_path = tmp_path / "core.sqlite"
+    tenant_path = tmp_path / "tenant.sqlite"
+
+    with pytest.raises((ValueError, TypeError)):
+        build_oidc_browser_login_services(
+            values,
+            core_database_path=str(core_path),
+            tenant_database_path=str(tenant_path),
+        )
+
+    assert not core_path.exists()
+    assert not tenant_path.exists()
+    assert not (tmp_path / "accounts.sqlite").exists()
+    assert not (tmp_path / "membership.sqlite").exists()
+    assert not (tmp_path / "login-transactions.sqlite").exists()
