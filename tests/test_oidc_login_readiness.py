@@ -79,6 +79,7 @@ def test_login_readiness_does_not_mark_configuration_as_implemented(monkeypatch)
 
 def test_login_readiness_distinguishes_registered_routes_from_verified_login(monkeypatch):
     _configure_complete_login(monkeypatch)
+    transaction_store = object()
     monkeypatch.setattr(
         application,
         "app",
@@ -90,12 +91,12 @@ def test_login_readiness_distinguishes_registered_routes_from_verified_login(mon
             ],
             state=SimpleNamespace(
                 oidc_login_initiator=SimpleNamespace(
-                    transactions=(transactions := object()),
+                    transactions=transaction_store,
                     redirect_uri="https://atlas.example.test/identity/callback",
                     begin_login=lambda: "https://identity.example.test/authorize",
                 ),
                 oidc_browser_login_service=SimpleNamespace(
-                    transactions=transactions,
+                    transactions=transaction_store,
                     redirect_uri="https://atlas.example.test/identity/callback",
                     login_sessions=object(),
                     complete_callback=lambda code, state: object(),
