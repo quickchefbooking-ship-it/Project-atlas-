@@ -140,7 +140,7 @@ def test_worker_configuration_is_immutable_and_validates_server_identity():
     with pytest.raises(FrozenInstanceError):
         config.enabled = False
     with pytest.raises(ValueError, match="server-assigned"):
-        ProfessorWorkerIdentityConfig(worker_id="owner-admin", enabled=True, tenant_grants=(grant(),))
+        ProfessorWorkerIdentityConfig(worker_id="owner admin", enabled=True, tenant_grants=(grant(),))
 
 
 def test_worker_grant_is_immutable():
