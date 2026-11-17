@@ -76,12 +76,14 @@ def test_login_readiness_does_not_mark_configuration_as_implemented(monkeypatch)
 def test_login_readiness_distinguishes_registered_routes_from_verified_login(monkeypatch):
     _configure_complete_login(monkeypatch)
     monkeypatch.setattr(
-        application.app,
-        "routes",
-        [
-            SimpleNamespace(path="/identity/login", methods={"GET"}),
-            SimpleNamespace(path="/identity/callback", methods={"GET"}),
-        ],
+        application,
+        "app",
+        SimpleNamespace(
+            routes=[
+                SimpleNamespace(path="/identity/login", methods={"GET"}),
+                SimpleNamespace(path="/identity/callback", methods={"GET"}),
+            ]
+        ),
     )
 
     result = application.identity_login_readiness()
