@@ -148,3 +148,56 @@ def test_login_readiness_rejects_mismatched_callback_transaction_store(monkeypat
         "authorization_redirect_service",
         "callback_session_service",
     }
+
+
+
+def test_login_readiness_reports_invalid_complete_startup_configuration(monkeypatch):
+    _configure_complete_login(monkeypatch)
+    monkeypatch.setattr(
+        application,
+        "app",
+        SimpleNamespace(
+            routes=[
+                SimpleNamespace(path="/identity/login", methods={"GET"}),
+                SimpleNamespace(path="/identity/callback", methods={"GET"}),
+                SimpleNamespace(path="/identity/logout", methods={"POST"}),
+            ],
+            state=SimpleNamespace(
+                oidc_login_initiator=None,
+                oidc_browser_login_service=None,
+                oidc_browser_login_configuration_error=True,
+            ),
+        ),
+    )
+
+    result = application.identity_login_readiness()
+
+    assert result["status"] == "configuration_invalid"
+    assert result["hosted_login"]["configured"] is True
+    assert result["hosted_login"]["configuration_valid"] is False
+    assert result["hosted_login"]["services_configured"] is False
+
+
+def test_launch_readiness_does_not_treat_environment_strings_as_composed_login(monkeypatch):
+    _configure_complete_login(monkeypatch)
+    monkeypatch.setattr(
+        application,
+        "app",
+        SimpleNamespace(
+            state=SimpleNamespace(
+                identity_service=object(),
+                tenant_data_path="/var/lib/atlas/tenant.sqlite",
+                conversation_service=SimpleNamespace(is_configured=True),
+                oidc_login_initiator=None,
+                oidc_browser_login_service=None,
+                oidc_browser_login_configuration_error=False,
+            )
+        ),
+    )
+
+    result = application.launch_readiness()
+
+    assert result["checks"]["hosted_browser_login_configuration"] is False
+    assert "hosted_browser_login_configuration" in result["blockers"]
+    assert result["checks"]["live_provider_round_trip_verified"] is False
+    assert result["execution_enabled"] is False
