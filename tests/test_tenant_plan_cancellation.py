@@ -4,7 +4,9 @@ import pytest
 
 from atlas_engine.identity_policy import AuthorizationDenied, RequestPrincipal
 from atlas_engine.plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
-from atlas_engine.tenant_plan_repository import TenantPlanRepository, initialize_tenant_plan_schema
+from atlas_engine.tenant_plan_repository import (
+    TenantPlanConflict, TenantPlanRepository, initialize_tenant_plan_schema,
+)
 from atlas_engine.tenant_plan_cancellation import (
     CancellationPlanNotActive,
     CancellationPlanNotFound,
@@ -115,3 +117,20 @@ def test_claim_next_step_refuses_new_work_after_cancellation(setup):
         (plan.plan_id,),
     ).fetchone()
     assert state is None
+
+
+@pytest.mark.parametrize("terminal_state", [PlanState.SUCCEEDED, PlanState.FAILED])
+def test_committed_cancellation_blocks_terminal_plan_completion(setup, terminal_state):
+    db, owner, _, plan = setup
+    plans = TenantPlanRepository(db, owner)
+    cancellations = TenantPlanCancellationRepository(db, owner)
+    cancellations.request(plan.plan_id, reason="Cancellation wins terminal race")
+
+    with pytest.raises(TenantPlanConflict, match="cancellation request"):
+        plans.transition(
+            plan.plan_id,
+            expected_state=PlanState.RUNNING,
+            new_state=terminal_state,
+        )
+
+    assert plans.get(plan.plan_id).state is PlanState.RUNNING
