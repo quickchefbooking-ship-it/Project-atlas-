@@ -55,7 +55,7 @@ def test_real_browser_session_reaches_tenant_scoped_professor_conversation(tmp_p
         ATLAS_IDENTITY_ISSUER,
         account.account_id,
         "company-a",
-        {"conversations:read", "conversations:write", "memory:read"},
+        {"conversations:read", "conversations:write", "memory:read", "professor:chat"},
     )
     identity_service = AtlasSessionIdentityService(sessions, memberships)
     issued = sessions.issue_session(account.account_id)
