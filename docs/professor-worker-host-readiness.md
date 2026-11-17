@@ -109,7 +109,7 @@ The implementation remains non-runnable in production until a real isolated host
 
 ### Lifecycle checkpoint
 
-The runner now also requires a thread-safe lifecycle controller to be in `READY` state. The lifecycle transitions are `STOPPED → STARTING → READY → DRAINING → STOPPED`, with a fail-closed `FAILED` state. Readiness cannot be declared unless all three deployment gates are true; draining immediately blocks new work and is re-checked at each runner checkpoint. This state machine does not supervise an operating-system process or wait for in-flight work to drain; a real host supervisor must provide those behaviours.
+The runner now also requires a thread-safe lifecycle controller to be in `READY` state. The lifecycle transitions are `STOPPED → STARTING → READY → DRAINING → STOPPED`, with a fail-closed `FAILED` state. Readiness cannot be declared unless all three deployment gates are true. Dispatch admission and draining share the lifecycle lock: once draining wins, no new dispatch can be admitted; already admitted work is counted, and `stop()` refuses to complete until every dispatch releases its slot. The controller does not wait for in-flight work or supervise an operating-system process; a real host supervisor must perform that wait/termination and cleanup.
 
 **Latest exact-head CI:** [GitHub Actions run 44143111746](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44143111746) passed on commit `7d9d0a6d086e1e46046e976feb1665e5506bf33f`: **1,164 tests passed, 1 warning**.
 
