@@ -86,7 +86,7 @@ def test_forwarded_chain_length_is_bounded():
         resolver.resolve("10.0.0.12", "203.0.113.1, 10.0.0.1, 10.0.0.2")
 
 
-def test_forwarded_header_byte_length_is_bounded():
+def test_forwarded_header_length_is_bounded():
     resolver = TrustedProxyClientAddressResolver(("10.0.0.0/8",))
 
     with pytest.raises(ValueError, match="trusted X-Forwarded-For"):
