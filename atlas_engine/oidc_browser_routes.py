@@ -6,12 +6,13 @@ tenant, role, or permission. No provider is selected by this module.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hmac
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .atlas_session_identity import AtlasSessionIdentityService
 from .http_identity import ATLAS_SESSION_COOKIE, require_verified_principal
@@ -19,6 +20,7 @@ from .oidc_jwt_verifier import OIDCVerifierUnavailable
 from .oidc_login_transaction import SQLiteOIDCLoginTransactionStore
 
 ATLAS_CSRF_COOKIE = "__Host-atlas_csrf"
+ATLAS_OIDC_STATE_COOKIE = "__Host-atlas_oidc_state"
 CALLBACK_PATH = "/identity/callback"
 CHAT_PATH = "/professor/chat"
 MAX_AUTHORIZATION_URL_LENGTH = 8192
@@ -44,6 +46,8 @@ def _validate_https_url(value: str, *, allow_query: bool) -> str:
         or len(value) > 2048
         or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)
         or "\\" in value
+        or "#" in value
+        or (not allow_query and "?" in value)
     ):
         raise ValueError("A deployment-pinned HTTPS OIDC URL is required.")
     try:
@@ -72,6 +76,15 @@ def _origin_from_redirect_uri(value: str) -> str:
     port = parsed.port
     suffix = f":{port}" if port is not None and port != 443 else ""
     return f"https://{host.lower()}{suffix}"
+
+
+@dataclass(frozen=True)
+class OIDCLoginRedirect:
+    """Short-lived redirect material; state and URL are omitted from repr."""
+
+    authorization_url: str = field(repr=False)
+    state: str = field(repr=False)
+    max_age: int
 
 
 @dataclass(frozen=True)
@@ -106,7 +119,7 @@ class OIDCBrowserLoginInitiator:
         object.__setattr__(self, "authorization_endpoint", authorization_endpoint)
         object.__setattr__(self, "redirect_uri", redirect_uri)
 
-    def begin_login(self) -> str:
+    def begin_login(self) -> OIDCLoginRedirect:
         """Create one server-side transaction and return its provider redirect URL."""
         transaction = self.transactions.begin()
         parsed = urlsplit(self.authorization_endpoint)
@@ -134,7 +147,11 @@ class OIDCBrowserLoginInitiator:
         )
         if len(location) > MAX_AUTHORIZATION_URL_LENGTH:
             raise ValueError("The configured OIDC authorization URL is too long.")
-        return location
+        return OIDCLoginRedirect(
+            authorization_url=location,
+            state=transaction.state,
+            max_age=self.transactions.ttl_seconds,
+        )
 
 
 router = APIRouter()
@@ -154,6 +171,7 @@ def _login_components(request: Request):
         raise HTTPException(
             status_code=503,
             detail="Hosted sign-in is not configured.",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
     return initiator, callback
 
@@ -179,18 +197,43 @@ def _no_store(response: Response) -> None:
     response.headers["Referrer-Policy"] = "no-referrer"
 
 
+def _callback_error(status_code: int, detail: str, *, clear_state: bool = False):
+    response = JSONResponse(status_code=status_code, content={"detail": detail})
+    if clear_state:
+        response.delete_cookie(
+            key=ATLAS_OIDC_STATE_COOKIE,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+    _no_store(response)
+    return response
+
+
 @router.get("/identity/login", include_in_schema=False)
 def identity_login(request: Request):
     """Start a server-generated Authorization Code + PKCE transaction."""
     initiator, _callback = _login_components(request)
     try:
-        location = initiator.begin_login()
+        redirect = initiator.begin_login()
     except Exception:
-        raise HTTPException(
+        response = JSONResponse(
             status_code=503,
-            detail="Hosted sign-in is temporarily unavailable.",
-        ) from None
-    response = RedirectResponse(location, status_code=302)
+            content={"detail": "Hosted sign-in is temporarily unavailable."},
+        )
+        _no_store(response)
+        return response
+    response = RedirectResponse(redirect.authorization_url, status_code=302)
+    response.set_cookie(
+        key=ATLAS_OIDC_STATE_COOKIE,
+        value=redirect.state,
+        max_age=redirect.max_age,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
     _no_store(response)
     return response
 
@@ -202,31 +245,36 @@ def identity_callback(
     state: str | None = Query(default=None, max_length=256),
     error: str | None = Query(default=None, max_length=128),
 ):
-    """Consume one callback and establish only an Atlas-owned browser session."""
+    """Consume one browser-bound callback and establish an Atlas-owned session."""
     initiator, callback = _login_components(request)
-    if not state:
-        raise HTTPException(status_code=400, detail="Sign-in could not be completed.")
+    state_cookie = request.cookies.get(ATLAS_OIDC_STATE_COOKIE)
+    if (
+        not isinstance(state, str)
+        or not state
+        or not isinstance(state_cookie, str)
+        or not hmac.compare_digest(state_cookie, state)
+    ):
+        # Do not consume a valid transaction when a callback arrives in another
+        # browser; this prevents login-CSRF while avoiding cross-browser DoS.
+        return _callback_error(400, "Sign-in could not be completed.")
 
     if error is not None or not code:
-        # Even provider-denied or incomplete callbacks consume valid state.
         try:
             callback.transactions.consume(state)
         except Exception:
             pass
-        raise HTTPException(status_code=400, detail="Sign-in was not completed.")
+        return _callback_error(400, "Sign-in was not completed.", clear_state=True)
 
     try:
         issued = callback.complete_callback(code, state)
     except OIDCVerifierUnavailable:
-        raise HTTPException(
-            status_code=503,
-            detail="Identity verification is temporarily unavailable.",
-        ) from None
+        return _callback_error(
+            503,
+            "Identity verification is temporarily unavailable.",
+            clear_state=True,
+        )
     except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Sign-in could not be completed.",
-        ) from None
+        return _callback_error(400, "Sign-in could not be completed.", clear_state=True)
 
     session = getattr(issued, "session", None)
     session_token = getattr(session, "token", None)
@@ -237,8 +285,10 @@ def identity_callback(
     if (
         not isinstance(session_token, str)
         or not 40 <= len(session_token) <= 256
+        or any(char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for char in session_token)
         or not isinstance(csrf_token, str)
         or not 40 <= len(csrf_token) <= 256
+        or any(char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for char in csrf_token)
         or sessions is None
         or memberships is None
     ):
@@ -247,7 +297,11 @@ def identity_callback(
                 sessions.revoke_session(session_token)
             except Exception:
                 pass
-        raise HTTPException(status_code=503, detail="Atlas browser session could not be established.")
+        return _callback_error(
+            503,
+            "Atlas browser session could not be established.",
+            clear_state=True,
+        )
 
     try:
         max_age = _session_max_age(getattr(session, "absolute_expires_at", None))
@@ -258,7 +312,11 @@ def identity_callback(
             sessions.revoke_session(session_token)
         except Exception:
             pass
-        raise HTTPException(status_code=503, detail="Atlas browser session could not be established.") from None
+        return _callback_error(
+            503,
+            "Atlas browser session could not be established.",
+            clear_state=True,
+        )
 
     request.app.state.atlas_session_identity_service = session_identity
     request.app.state.atlas_trusted_origins = frozenset({trusted_origin})
@@ -284,6 +342,13 @@ def identity_callback(
         samesite="lax",
         path="/",
     )
+    response.delete_cookie(
+        key=ATLAS_OIDC_STATE_COOKIE,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
     _no_store(response)
     return response
 
@@ -296,15 +361,27 @@ def identity_logout(
     """Revoke the current Atlas browser session after Origin and CSRF checks."""
     session_token = request.cookies.get(ATLAS_SESSION_COOKIE)
     if not isinstance(session_token, str) or not session_token:
-        raise HTTPException(status_code=401, detail="Atlas browser session is required.")
+        raise HTTPException(
+            status_code=401,
+            detail="Atlas browser session is required.",
+            headers={"Cache-Control": "no-store"},
+        )
     identity_service = getattr(request.app.state, "atlas_session_identity_service", None)
     sessions = getattr(identity_service, "sessions", None)
     if not callable(getattr(sessions, "revoke_session", None)):
-        raise HTTPException(status_code=503, detail="Atlas session service is unavailable.")
+        raise HTTPException(
+            status_code=503,
+            detail="Atlas session service is unavailable.",
+            headers={"Cache-Control": "no-store"},
+        )
     try:
         sessions.revoke_session(session_token)
     except Exception:
-        raise HTTPException(status_code=503, detail="Atlas session could not be revoked.") from None
+        raise HTTPException(
+            status_code=503,
+            detail="Atlas session could not be revoked.",
+            headers={"Cache-Control": "no-store"},
+        ) from None
 
     response = Response(status_code=204)
     response.delete_cookie(
@@ -319,6 +396,13 @@ def identity_logout(
         path="/",
         secure=True,
         httponly=False,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        key=ATLAS_OIDC_STATE_COOKIE,
+        path="/",
+        secure=True,
+        httponly=True,
         samesite="lax",
     )
     _no_store(response)
