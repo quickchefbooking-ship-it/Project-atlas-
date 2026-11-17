@@ -126,3 +126,15 @@ A second strictly read-only inspection of the ATLAS Replit app confirmed:
 No Git fetch, local ref update, file change, build, publish, secret access or deployment change was performed.
 
 **Launch gate:** Before treating GitHub work as present in the live app, the owner must explicitly reconcile the Replit workspace with the authoritative repository and branch, then establish a reliable deployed source-revision signal. Do not overwrite the existing workspace or alter remotes automatically.
+
+### Read-only build-revision endpoint
+
+The application now exposes `GET /build-info` for deployment-source verification. It returns only:
+
+- `revision`: a normalized 40-character Git SHA, or `null` when no valid revision is supplied;
+- `status`: `known` or `unknown`.
+
+The value is read only from `ATLAS_BUILD_REVISION`. Missing or malformed values are reported as unknown and are never echoed. The endpoint does not expose branch names, environment dumps, paths, credentials, or other deployment settings.
+
+For this endpoint to attest the running deployment, the deployment/build pipeline must inject the exact full SHA of the source tree used for that build. Manually entering a guessed or stale value is not proof. Until the Replit build process supplies and independently verifies that value, `/build-info` is expected to report `unknown` and the source-reconciliation gate remains open.
+
