@@ -49,11 +49,26 @@ temporary OIDC state cookies.
 
 ## Remaining launch requirements
 
-The router and browser UI do not create or provision identity-provider
-credentials, account/session database paths, the dedicated 32-byte transaction
-encryption key, or a provider token-endpoint client. The application startup
-composition still needs to build and inject these services from deployment-owned
-configuration. Route registration and service injection are not proof of a live
+The application now has a fail-closed startup factory that builds the matching
+authorization initiator and callback services only when the complete set of
+deployment-owned settings is present. It requires pinned issuer, JWKS,
+authorization and token endpoints; a registered browser client and exact
+`/identity/callback` redirect URI; a dedicated 32-byte transaction-encryption
+key; and separate file-backed account, membership and transaction databases.
+The optional client secret is used only for a confidential client; public
+clients rely on PKCE.
+
+Startup creates empty schemas only. It does not create Atlas accounts, external
+identity links, tenants or tenant memberships. Each external identity must
+already have an explicit account link, and the Atlas account must have one
+active server-provisioned membership under the Atlas identity issuer. No
+email-based matching or automatic provisioning is performed.
+
+The readiness endpoint now lists missing setting names and distinguishes
+invalid configuration, unconfigured services and a configured-but-unverified
+login flow. It never returns endpoint values, client secrets or key material.
+Configuration presence and service construction are not proof of a live
 provider round trip. Public login must remain disabled until deployment
-configuration, real-provider testing, browser-session tests and operational
-review are complete.
+settings, real-provider testing, browser-session tests and operational review
+are complete. No Replit deployment settings or secrets are changed by this
+code change.
