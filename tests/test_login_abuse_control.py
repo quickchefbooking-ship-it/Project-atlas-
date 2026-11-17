@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 from atlas_engine.login_abuse_control import SQLiteLoginAbuseGuard
 
 
@@ -100,3 +103,37 @@ def test_expired_buckets_can_be_purged(tmp_path):
 
     assert guard.purge_expired() == 2
     assert guard.check("person@example.test", "203.0.113.7").allowed
+
+
+def test_concurrent_failures_are_serialized_without_losing_bucket_updates(tmp_path):
+    import sqlite3
+
+    clock = Clock()
+    threshold = 4
+    worker_count = 12
+    guard = make_guard(
+        tmp_path, clock, max_failures=threshold, lockout_seconds=60
+    )
+    start = Barrier(worker_count)
+
+    def record_failure():
+        start.wait(timeout=10)
+        return guard.record_failure("person@example.test", "203.0.113.42")
+
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        decisions = list(pool.map(lambda _index: record_failure(), range(worker_count)))
+
+    assert sum(decision.allowed for decision in decisions) == threshold - 1
+    blocked = [decision for decision in decisions if not decision.allowed]
+    assert len(blocked) == worker_count - threshold + 1
+    assert all(decision.retry_after_seconds == 60 for decision in blocked)
+    assert guard.check("person@example.test", "203.0.113.42").retry_after_seconds == 60
+
+    with sqlite3.connect(guard.database_path) as conn:
+        rows = conn.execute(
+            "SELECT failures, blocked_until FROM atlas_login_abuse_buckets"
+        ).fetchall()
+
+    assert len(rows) == 2
+    assert {row[0] for row in rows} == {threshold}
+    assert {row[1] for row in rows} == {clock.value + 60}
