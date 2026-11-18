@@ -90,6 +90,12 @@ The five focused tests for `tools/source_manifest.py` passed in an isolated loca
 
 PR #65 also carries the same read-only `.github/workflows/tests.yml` workflow already used by the active worker branch, with actions pinned to full commit SHAs and only `contents: read` permission. No GitHub Actions run has yet been observed for PR #65's latest head after the API-authored commits. The local five-test result is not being represented as exact-head CI.
 
+### Baseline dependency-file finding
+
+A full-suite CI attempt on the main-based PR branch failed before tests started because `pip install -r requirements.txt` interpreted the first line, `import os`, as an invalid package requirement. Read-only inspection of GitHub `main` at `32471ea720edb5f10ca51aafaf9d45113d4e736c` confirms that the 4,749-byte `requirements.txt` contains Python application source, not a pip requirements list. The parallel Professor stack branch has a conventional pinned dependency list, but that is not part of GitHub `main`.
+
+No attempt was made to overwrite or rename this file: it is GitHub-only in the current tree inventory and its intended reconciliation must be reviewed alongside the Replit files. PR #65's CI was therefore narrowed to install only the pinned test runner and execute the new manifest tests. This does not validate the full application suite on `main`; resolving the dependency-file discrepancy remains part of the controlled source reconciliation.
+
 ## Safe integration sequence
 
 ### 1. Preserve immutable source snapshots
