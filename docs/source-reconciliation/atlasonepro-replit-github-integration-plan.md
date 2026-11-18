@@ -159,8 +159,44 @@ Only after code review and explicit owner approval should the deployment source 
 - The GitHub build-revision endpoint passes exact-head CI; the Replit API gateway is separately verified to expose the route and report the deployed reviewed full Git SHA after deliberate source integration.
 - No deployment, secret, payment, production-data, or worker setting changes occur without explicit approval.
 
-## Current next action
+## Current next action — fresh workspace check (18 November 2026, approximately 05:40 UTC)
 
-A fresh read-only Replit check on 18 November 2026 reconfirmed that `/tmp/atlas-head-manifest.csv` exists, is 104,987 bytes, contains 846 rows, and has SHA-256 `11c749dd4798bd285d1e83e8909e4e6be7e4441dd088347cf0e73452889fd09b`. The Replit Agent reports that its GitHub API integration is authorized but not attached to this Repl. Therefore it cannot write the CSV to this existing PR branch through an already-attached connection. No integration was attached and no workspace, remote, branch, secret, or deployment was changed. The transfer is blocked on attaching that existing integration or using a separately approved metadata-only export.
+A new read-only inspection of the Replit app `ATLAS` reports:
 
-Persist the verified Replit CSV through a safe transfer, then run the new exact-path comparator against the 22-entry GitHub main manifest and retain the full 846-row result. The filtered exact comparison already establishes five shared names (all content-different), 17 GitHub-only paths and 841 Replit-only paths; review all 86 exclusions before proposing an integration layout. PR #64 already contains the single GitHub build-revision endpoint and passed exact-head CI; it remains draft-only. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
+- Workspace branch: `main`
+- Current workspace HEAD: `c6bf5686e5ae7f0e66ce113caa506676b46b1382`
+- Tracked worktree: clean
+- Committed Git tree metadata: 853 tracked blobs, 0 tracked symlinks, 9,194,406 total tracked bytes
+- The previous `/tmp/atlas-head-manifest.csv` is absent at this HEAD. Its historical 846-row count, 760 hashes, 86 exclusions, byte count and CSV digest are not current evidence and must not be reused.
+- No fresh full manifest was generated. Hashed/excluded counts, unreadable-object count and a current full-manifest digest therefore remain unknown.
+- The Replit Agent reports no active task in the current task state; previous queued tasks may still be pending.
+
+### Targeted exact-path comparison (not a full manifest)
+
+GitHub `main` remains identical to the manifest source commit `32471ea720edb5f10ca51aafaf9d45113d4e736c`; its 22-entry manifest SHA-256 remains `c40e687f0d044dac998cb4a92440b983b003635b5c6cd4724c0113b503017dd2`.
+
+A read-only exact-string membership and hash comparison of those 22 GitHub paths against the current Replit committed tree found:
+
+- 5 exact shared paths, all 5 content-different
+- 0 identical paths
+- 0 mode-only differences
+- 0 excluded/uncomparable entries among the 5 shared paths
+- 17 GitHub paths absent from Replit
+- 848 Replit-only paths (853 total tracked paths minus 5 shared paths)
+
+The five shared paths are `.env.example`, `README.md`, `atlas_media/__init__.py`, `atlas_media/generate.py`, and `atlas_media/video.py`. The initializer spelling was independently checked using the Git tree's exact UTF-8 path bytes: `atlas_media/__init__.py` is present (149 bytes; SHA-256 `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509`), while `atlas_media/init.py` is absent. `atlas_engine/__init__.py` is absent. Do not trust Markdown-rendered path strings when double underscores may be hidden; compare exact Git path bytes.
+
+This targeted check does not replace the complete 853-row Replit manifest, does not establish the current exclusion count, and does not satisfy the full comparison acceptance criterion.
+
+### Deployment evidence boundary
+
+The Replit deployment lifecycle currently reports `success` at `https://wwe.atlasonepro.com`. This confirms only the lifecycle status. It does not identify the deployed commit SHA or prove GitHub/Replit source parity. A current route-level health/build-info check and deployed revision identity were not established in this inspection.
+
+### Export limitation and next step
+
+The Replit Agent reports that it cannot return a downloadable manifest attachment through the read-only query channel without creating a workspace-relative file. No such file was created, and no project source file, Git ref, remote, setting, secret or deployment was changed.
+
+The next reconciliation prerequisite is a complete metadata-only CSV for this exact Replit HEAD, using the PR #65 comparator schema:
+`path,mode,bytes,sha256,status,exclusion_reason`.
+
+Sensitive paths must be classified before reading any blob content; excluded content must never be read or hashed; symlinks must not be followed; path strings must remain exact. The CSV must be transferred through an approved export path or supplied as an attachment, then validated and compared against the 22-entry GitHub manifest. Until that full manifest and collision review exist, do not copy or overwrite source files, add remotes, rewrite history, merge migration work, or publish either source tree.
