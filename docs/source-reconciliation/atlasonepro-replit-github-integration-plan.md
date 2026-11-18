@@ -1,6 +1,6 @@
 # AtlasOnePro source reconciliation and safe import plan
 
-**Status:** partial read-only inventory verified; complete manifests and source-tree migration outstanding  
+**Status:** manifest generator and regression tests prepared on draft PR #65; Replit manifest and source-tree migration outstanding  
 **Date:** 18 November 2026  
 **Authoritative engineering repository:** `quickchefbooking-ship-it/Project-atlas-`  
 **Existing runtime/preview:** Replit app `ATLAS`
@@ -59,7 +59,7 @@ Representative GitHub-only areas include `app.py`, `atlas_engine/**`, `atlas_med
 - API artifact: mounted at `/api` and the OAuth connector path; production build uses `scripts/build-api-production.sh`; the Node gateway starts Uvicorn for `app.main:app`.
 - The API gateway and Python API are distinct from the GitHub repository's top-level `app.py` application.
 
-A read-only request to the published `GET /api/build-info` returned JSON 404. The root `/build-info` is served by the web application and returns the HTML app shell. A subsequent read-only check of both GitHub `main` and `atlas/professor-conversation-repair-v1` found no `/build-info` route in either `app.py`; the earlier statement that such a route had been added to GitHub was incorrect and is withdrawn. Neither source currently provides the build identity needed to prove the deployed Replit revision.
+A read-only request to the published Replit `GET /api/build-info` returned JSON 404. The root `/build-info` is served by the web application and returns the HTML app shell. GitHub `main` and the Professor conversation base branch still do not contain the route. However, active draft PR #64 now adds a public `GET /build-info` route to the GitHub FastAPI app, validates a full `ATLAS_BUILD_REVISION`, and returns only the revision or an explicit unknown state. Its exact-head Actions run #2155 passed on `7aa6e9bf3421840874fe38f80ee7693fd362b72f` (1,174 tests, one non-blocking warning). The endpoint is still draft-only, unmerged and undeployed; it does not add the route to the separate Replit API. A duplicate implementation was briefly prepared in PR #67, but its exact-head run failed because the new public route was not added to the security test allowlist. PR #67 has been closed as duplicate, leaving PR #64 as the single active build-provenance implementation.
 
 No automatic `ATLAS_BUILD_REVISION` stamping was found in the Replit artifact build configuration. Availability of Git metadata during the published build remains unverified. The deployment was active at the time of inspection, but its exact source revision was not identifiable.
 
@@ -88,7 +88,7 @@ Consequently:
 
 ### 1. Preserve immutable source snapshots
 
-Before any migration, export or otherwise obtain read-only snapshots of both source trees. Generate sorted path manifests and per-file SHA-256 digests. Record file modes, symlinks, file sizes, and generated/build-artifact status. Keep the original Replit workspace and GitHub history untouched.
+Before any migration, export or otherwise obtain read-only snapshots of both source trees. The draft PR #65 now includes `tools/source_manifest.py`, a standard-library-only manifest generator that reads the committed Git HEAD tree (not mutable working files), records sorted paths, Git modes, object IDs, byte sizes and SHA-256 hashes, and reports branch, HEAD, tracked-worktree cleanliness and untracked-file count. It hashes symlink targets without following them and records Git LFS pointer blobs without fetching payloads. Obvious secret-bearing, generated and runtime-data paths are listed with an exclusion reason and are never read or hashed. Five regression tests cover determinism, executable modes, symlinks, exclusions/non-disclosure, dirty worktrees and LFS pointers. The script can be run in either checkout once made available there; it has not yet been run against the Replit workspace. Keep both original source trees and Git histories untouched.
 
 Do not include live secrets, credentials, private environment values, deployment tokens, or production data in the repository snapshot. Record only the names of required configuration variables, never their values.
 
@@ -140,9 +140,9 @@ Only after code review and explicit owner approval should the deployment source 
 - All Replit-only runtime functionality is preserved.
 - The proposed monorepo layout builds from a clean GitHub checkout.
 - Automated tests pass on the exact proposed PR head.
-- A build-revision endpoint is implemented and verified through the API artifact's real route, reporting the reviewed full Git SHA.
+- The GitHub build-revision endpoint passes exact-head CI; the Replit API gateway is separately verified to expose the route and report the deployed reviewed full Git SHA after deliberate source integration.
 - No deployment, secret, payment, production-data, or worker setting changes occur without explicit approval.
 
 ## Current next action
 
-Obtain the complete path-and-digest manifests and validate the corrected path inventory. Separately, implement and test a non-secret build-revision endpoint in the authoritative GitHub API, then prove the Replit gateway exposes it only after the two source trees are deliberately integrated. Until manifests and the clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
+Run the new manifest generator against the authoritative GitHub checkout and obtain an equivalent complete manifest from the Replit workspace. Compare the two manifests mechanically, then review every path collision and exclusion before proposing an integration layout. PR #64 already contains the GitHub build-revision endpoint; it must remain a draft until its worker and source-reconciliation gates are reviewed. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
