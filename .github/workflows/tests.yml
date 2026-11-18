@@ -8,7 +8,9 @@ on:
       - "onepro-**"
     paths:
       - "tools/source_manifest.py"
+      - "tools/compare_source_manifests.py"
       - "tests/test_source_manifest.py"
+      - "tests/test_compare_source_manifests.py"
       - ".github/workflows/tests.yml"
       - "docs/source-reconciliation/**"
   pull_request:
@@ -41,4 +43,4 @@ jobs:
       - name: Generate authoritative GitHub main manifest
         run: python tools/source_manifest.py --repo-root github-main
       - name: Run source manifest regression tests
-        run: python -m pytest -q tests/test_source_manifest.py
+        run: python -m pytest -q tests/test_source_manifest.py tests/test_compare_source_manifests.py
