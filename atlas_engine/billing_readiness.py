@@ -47,7 +47,8 @@ def evaluate_live_billing_readiness(
             isinstance(item, Mapping)
             and item.get("passed") is True
             and isinstance(item.get("reference"), str)
-            and 0 < len(item["reference"].strip()) <= MAX_EVIDENCE_REFERENCE_CHARS
+            and len(item["reference"]) <= MAX_EVIDENCE_REFERENCE_CHARS
+            and bool(item["reference"].strip())
         )
         results.append({
             "gate": gate,
