@@ -6,6 +6,7 @@ contains no provider clients, clock access, network calls, persistence or orders
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from .market_data import (
     Instrument,
@@ -73,10 +74,10 @@ def build_synthetic_market_snapshot() -> tuple[WatchlistItem, ...]:
             start_at = _BASE_START + timedelta(hours=index)
             end_at = start_at + timedelta(hours=1)
             open_value = prices[index - 1] if index else close_value
-            open_number = float(open_value)
-            close_number = float(close_value)
-            high_value = str(max(open_number, close_number) * 1.01)
-            low_value = str(min(open_number, close_number) * 0.99)
+            open_number = Decimal(open_value)
+            close_number = Decimal(close_value)
+            high_value = str(max(open_number, close_number) * Decimal("1.01"))
+            low_value = str(min(open_number, close_number) * Decimal("0.99"))
             provenance = MarketDataProvenance(
                 source_id=_SOURCE_ID,
                 source_name=_SOURCE_NAME,
