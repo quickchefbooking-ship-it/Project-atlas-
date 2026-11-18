@@ -1,6 +1,6 @@
 # AtlasOnePro source reconciliation and safe import plan
 
-**Status:** manifest generator and regression tests prepared on draft PR #65; Replit manifest and source-tree migration outstanding  
+**Status:** manifest generator, exact-path comparator and regression tests prepared on draft PR #65; full Replit CSV persistence and source-tree migration outstanding  
 **Date:** 18 November 2026  
 **Authoritative engineering repository:** `quickchefbooking-ship-it/Project-atlas-`  
 **Existing runtime/preview:** Replit app `ATLAS`
@@ -90,7 +90,7 @@ Consequently:
 
 The five focused tests for `tools/source_manifest.py` passed locally in an isolated Git fixture and then passed on GitHub Actions run #2174 at commit `ddd0662b6cd29d80b9ce4a609fc24c96762c510b` (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
 
-GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. The latest pre-comparator PR #65 source-manifest workflow completed successfully. This update adds tools/compare_source_manifests.py, which compares the Replit CSV schema with the GitHub JSON manifest using exact path-string equality, verifies manifest integrity inputs, separates content differences from mode-only differences, and marks excluded entries uncomparable. Five new regression tests cover the literal double-underscore initializer path, content collisions, mode-only changes, excluded entries, duplicate paths, dirty snapshots, and CSV digest validation. Exact-head GitHub Actions run #44218715641 at commit a17fdbc28f5483fc3004adc3e95efb7c1bbbf663 passed. The workflow generated the authoritative GitHub main manifest and completed both source-manifest regression test modules successfully.
+GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. PR #65 adds tools/compare_source_manifests.py, which compares the Replit CSV schema with the GitHub JSON manifest using exact path-string equality, verifies manifest integrity inputs, separates content differences from mode-only differences, and marks excluded entries uncomparable. Five new regression tests cover the literal double-underscore initializer path, content collisions, mode-only changes, excluded entries, duplicate paths, dirty snapshots, and CSV digest validation. Exact-head GitHub Actions run #44218984180 at commit 3378eed85d05a451d9c0de1b0522e8b1b2aae5a3 passed; the workflow generated the authoritative GitHub main manifest and completed both source-manifest regression test modules successfully.
 
 ### Baseline dependency-file finding
 
