@@ -39,6 +39,28 @@ def test_response_contract_rejects_unexpected_fields():
         MarketWatchlistResponse.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    ("target", "status"),
+    [
+        ("item", "live"),
+        ("item", "delayed"),
+        ("item", "indicative"),
+        ("chart_point", "live"),
+        ("chart_point", "delayed"),
+        ("chart_point", "indicative"),
+    ],
+)
+def test_synthetic_response_contract_rejects_non_synthetic_provenance(target, status):
+    payload = _payload()
+    if target == "item":
+        payload["items"][0]["data_status"] = status
+    else:
+        payload["items"][0]["chart_points"][0]["data_status"] = status
+
+    with pytest.raises(ValidationError):
+        MarketWatchlistResponse.model_validate(payload)
+
+
 def test_openapi_uses_the_versioned_response_model():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
