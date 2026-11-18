@@ -129,3 +129,32 @@ The five exact shared path names remain the same and each current Replit hash di
 | `atlas_media/video.py` | 13,875 | `f51d87bd15f8125dc8a411a38b4024a0c82fcb9ccb4c41a07f212afdfc60db25` | 424 | `ec14130b8fba56001cf9a0c082b0676364c81635057fb1f7f7a3110900787fa4` |
 
 From the limited exact-path comparison, 848 Replit paths are Replit-only and 17 GitHub paths are GitHub-only; the five shared paths are content collisions. The complete 853-row manifest, including all exclusions, is still required to reproduce the comparison and review every path. No source transfer or workspace modification was performed.
+
+
+## Fresh exact-path comparison — 18 November 2026, 09:50 UTC
+
+The current Replit workspace was rechecked read-only at the same HEAD `c6bf5686e5ae7f0e66ce113caa506676b46b1382`; the tracked worktree remains clean.
+
+- Tracked entries: 853
+- Hashed entries: 852
+- Excluded entries: 1 (path and content not disclosed or read)
+- Unreadable entries: 0
+- Symlinks: 0
+
+An in-memory exact-path comparison was run against the complete supplied GitHub main snapshot at `32471ea720edb5f10ca51aafaf9d45113d4e736c` (22 hashed paths):
+
+| Result | Count |
+|---|---:|
+| Shared exact paths | 5 |
+| Identical content | 0 |
+| Content-different | 5 |
+| Mode-only differences | 0 |
+| Uncomparable | 0 |
+| Replit-only | 848 |
+| GitHub-only | 17 |
+
+The excluded path does not intersect the GitHub path set. No source contents were read or transferred.
+
+The five collisions remain `.env.example`, `README.md`, `atlas_media/__init__.py`, `atlas_media/generate.py`, and `atlas_media/video.py`. A Replit Agent text response rendered the initializer path without its literal double underscores; an exact-string recheck returned JSON-escaped `atlas_media/\u005f\u005finit\u005f\u005f.py` and UTF-8 hex `61746c61735f6d656469612f5f5f696e69745f5f2e7079`, confirming the literal path is `atlas_media/__init__.py`. Its Replit metadata remains 149 bytes, mode `100644`, SHA-256 `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509`; GitHub main is 256 bytes, mode `100644`, SHA-256 `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b`.
+
+This is a full exact-path comparison against the 22-entry GitHub snapshot performed in memory; the full Replit manifest itself has not been transferred or persisted. No source integration or workspace modification occurred.
