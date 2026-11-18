@@ -90,7 +90,7 @@ Consequently:
 
 The five focused tests for `tools/source_manifest.py` passed locally in an isolated Git fixture and then passed on GitHub Actions run #2174 at commit `ddd0662b6cd29d80b9ce4a609fc24c96762c510b` (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
 
-GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. The latest PR #65 head `267e190f5d4f20881f760c48a0ce849facff8b61` passed exact-head Actions run #2194 (5 manifest regression tests passed); the authoritative GitHub `main` manifest generation step also completed successfully.
+GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. The latest PR #65 head `510a533edd2fbf810412e543f5b3804d6c02f0ad` passed exact-head Actions run #2196 (5 manifest regression tests passed); the authoritative GitHub `main` manifest generation step also completed successfully.
 
 ### Baseline dependency-file finding
 
