@@ -70,6 +70,20 @@ def test_billing_preflight_rejects_raw_oversized_reference_even_when_trimmed_val
     assert report["live_charging_enabled"] is False
 
 
+def test_billing_preflight_accepts_reference_at_exact_character_limit():
+    evidence = complete_evidence()
+    evidence["provider_selected"] = {
+        "passed": True,
+        "reference": "x" * MAX_EVIDENCE_REFERENCE_CHARS,
+    }
+
+    report = evaluate_live_billing_readiness(evidence)
+
+    assert report["overall_status"] == "ready_for_human_release_review"
+    assert "provider_selected" not in report["blocked_gates"]
+    assert report["live_charging_enabled"] is False
+
+
 def test_billing_preflight_report_never_echoes_secret_or_evidence_values():
     secret = "sk_live_DO_NOT_DISCLOSE_123"
     evidence = complete_evidence()
