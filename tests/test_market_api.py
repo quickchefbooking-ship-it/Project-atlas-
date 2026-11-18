@@ -65,4 +65,6 @@ def test_watchlist_route_does_not_expose_other_paths_or_methods():
     client = _client()
 
     assert client.post("/market/watchlist").status_code == 405
-    assert client.get("/market/watchlist/").status_code in {404, 307, 308}
+    trailing_slash_response = client.get("/market/watchlist/")
+    assert trailing_slash_response.status_code == 200
+    assert trailing_slash_response.json() == client.get("/market/watchlist").json()
