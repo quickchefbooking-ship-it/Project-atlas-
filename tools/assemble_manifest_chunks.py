@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 CSV_COLUMNS = ["path", "mode", "bytes", "sha256", "status", "exclusion_reason"]
-CHUNK_RE = re.compile(r"chunk-(\d{3,})\.csv$")
+CHUNK_RE = re.compile(r"chunk-(\\d{3,})\\.csv$")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 GIT_MODES = {"100644", "100755", "120000"}
 
@@ -27,6 +27,12 @@ def _validate_row(row: dict[str, Any], source: str) -> dict[str, str]:
     path = row.get("path")
     if not isinstance(path, str) or not path:
         raise ValueError(f"{source} has an empty or invalid path.")
+    # Preserve the exact path string; reject only paths that cannot safely
+    # represent a repository-relative Git tree entry.
+    if "\\x00" in path or path.startswith("/") or any(
+        part in {"", ".", ".."} for part in path.split("/")
+    ):
+        raise ValueError(f"{source} has a path that is not repository-relative.")
     mode = row.get("mode")
     if mode not in GIT_MODES:
         raise ValueError(f"{source} has an unsupported Git mode.")
@@ -60,8 +66,8 @@ def assemble_chunks(
         raise ValueError("Expected row count and chunk limit must be positive.")
     if expected_sha256 is not None and SHA256_RE.fullmatch(expected_sha256) is None:
         raise ValueError("Expected CSV digest is invalid.")
-    if not chunks_dir.is_dir():
-        raise ValueError("Chunk directory does not exist.")
+    if chunks_dir.is_symlink() or not chunks_dir.is_dir():
+        raise ValueError("Chunk directory must be a real directory.")
 
     files = sorted(chunks_dir.iterdir(), key=lambda item: item.name)
     if not files:
@@ -69,8 +75,8 @@ def assemble_chunks(
 
     numbered: list[tuple[int, Path]] = []
     for path in files:
-        if not path.is_file():
-            raise ValueError("Chunk directory may contain only chunk CSV files.")
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Chunk directory may contain only regular chunk CSV files.")
         match = CHUNK_RE.fullmatch(path.name)
         if match is None:
             raise ValueError("Chunk filename must be chunk-NNN.csv.")
@@ -108,7 +114,7 @@ def assemble_chunks(
         raise ValueError("Assembled row count does not match the expected count.")
 
     stream = io.StringIO(newline="")
-    writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS, lineterminator="\n")
+    writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS, lineterminator="\\n")
     writer.writeheader()
     writer.writerows(rows)
     rendered = stream.getvalue().encode("utf-8")
