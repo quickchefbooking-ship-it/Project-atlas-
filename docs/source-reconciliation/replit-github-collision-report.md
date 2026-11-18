@@ -101,3 +101,31 @@ Only paths were inspected for these generated/runtime locations; file contents w
 ## Conclusion
 
 The two trees are not safe drop-in replacements for one another. Reconciliation must be based on complete manifests and deliberate module mapping, not filename equality or modification time. All five same-name/different-content paths require explicit adaptation decisions. No copy, overwrite, remote change, build, test, or deployment was performed during the original inventory.
+
+
+## Fresh workspace checkpoint — 18 November 2026, 06:39 UTC
+
+This section supersedes the older Replit snapshot counts above for the fresh workspace HEAD. The older complete CSV was not present, and the new complete CSV remains in memory only.
+
+- Replit branch: `main`
+- Replit HEAD: `c6bf5686e5ae7f0e66ce113caa506676b46b1382`
+- Tracked worktree: clean
+- Tracked paths: 853
+- Hashed paths: 852
+- Excluded before reading or hashing: 1 sensitive credential configuration path (its content was not read or hashed)
+- Unreadable objects: 0
+- Symlinks: 0
+- Total tracked bytes: 9,194,406
+- Metadata CSV: 108,926 bytes; SHA-256 `f0954b6c578290474d6c1ffa0b649425262de7a27754ee2ee0f821f18ee1f2b6`
+
+The five exact shared path names remain the same and each current Replit hash differs from the GitHub main snapshot. The targeted comparison below is against the 22-path GitHub manifest snapshot at `32471ea720edb5f10ca51aafaf9d45113d4e736c`, not a full 853-row reconciliation:
+
+| Exact path | Replit bytes | Replit SHA-256 | GitHub bytes | GitHub SHA-256 |
+|---|---:|---|---:|---|
+| `.env.example` | 3,752 | `3052f7a711d3df5fe99720aa72c63f5b48d1eaf2aa98e321aeedafd3734e1a07` | 2,619 | `7ed1c27a2543098d21b04a4fe75725655bf7417698887a87b223e70a2fc7c94d` |
+| `README.md` | 28,408 | `010af7c916ac41628d34bf04a33daf97675dd1d31b21e352b27a2281b5b0fae1` | 146 | `eb0eb384eaa985e8771a1f2837c67943a6efb937d0bd8cc35c26ddefddedf728` |
+| `atlas_media/__init__.py` | 149 | `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509` | 256 | `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b` |
+| `atlas_media/generate.py` | 1,600 | `6f8cad548bcac2344e957f85cdf72a2ebe011f20f763ba5a3d9d8dd0735a0f66` | 2,300 | `edb7c0ddf97028f898b053c8a5bd2eac907978dda86fb023d3c8959dfc45f46` |
+| `atlas_media/video.py` | 13,875 | `f51d87bd15f8125dc8a411a38b4024a0c82fcb9ccb4c41a07f212afdfc60db25` | 424 | `ec14130b8fba56001cf9a0c082b0676364c81635057fb1f7f7a3110900787fa4` |
+
+From the limited exact-path comparison, 848 Replit paths are Replit-only and 17 GitHub paths are GitHub-only; the five shared paths are content collisions. The complete 853-row manifest, including all exclusions, is still required to reproduce the comparison and review every path. No source transfer or workspace modification was performed.
