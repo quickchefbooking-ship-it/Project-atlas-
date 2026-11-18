@@ -158,3 +158,10 @@ The excluded path does not intersect the GitHub path set. No source contents wer
 The five collisions remain `.env.example`, `README.md`, `atlas_media/__init__.py`, `atlas_media/generate.py`, and `atlas_media/video.py`. A Replit Agent text response rendered the initializer path without its literal double underscores; an exact-string recheck returned JSON-escaped `atlas_media/\u005f\u005finit\u005f\u005f.py` and UTF-8 hex `61746c61735f6d656469612f5f5f696e69745f5f2e7079`, confirming the literal path is `atlas_media/__init__.py`. Its Replit metadata remains 149 bytes, mode `100644`, SHA-256 `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509`; GitHub main is 256 bytes, mode `100644`, SHA-256 `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b`.
 
 This is a full exact-path comparison against the 22-entry GitHub snapshot performed in memory; the full Replit manifest itself has not been transferred or persisted. No source integration or workspace modification occurred.
+
+
+## Public-repository transfer gate
+
+The authoritative GitHub repository is public. The complete sanitized Replit manifest contains path names and hashes for 852 Replit tracked files, including Replit-only/internal project structure. Although it contains no source contents and excludes the sensitive path, committing that full path inventory publicly is a separate disclosure decision.
+
+Therefore the full manifest/chunk transfer is **not committed to this public repository pending owner review of the path-list disclosure**. The in-memory exact comparison against the 22 GitHub main paths is recorded above; no manifest data file was persisted and no Replit workspace file was created. The tested chunk assembler remains available for a later owner-approved transfer destination, which may be private rather than this public repository.
