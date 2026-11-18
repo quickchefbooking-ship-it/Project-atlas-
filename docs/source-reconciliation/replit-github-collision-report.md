@@ -291,3 +291,34 @@ A new metadata-only inspection of the Replit app ATLAS supersedes the earlier c6
 - Previous manifest export: absent from the current Replit Agent workspace session; the fresh manifest was computed in memory only.
 
 The Replit Agent reported no workspace files created or changed. The full hashed-only path inventory remains behind the public-repository path-disclosure gate; no path list or source contents were transferred. The aggregate checkpoint and fingerprint do not establish a complete exact-path comparison against GitHub, a clean-checkout build, or deployed source-revision parity. No remotes, integrations, secrets, deployment settings, or published application were changed.
+
+
+## Fresh API artifact and build-revision verification — 18 November 2026, 22:15 UTC
+
+A read-only Replit Agent inspection traced the published API route to its actual artifact and build configuration. No source, settings, secrets, remotes, deployment configuration, or published content was changed.
+
+### Verified artifact routing
+
+- The web artifact `artifacts/project-atlas` serves the public root application.
+- The API artifact `artifacts/api-server` is mapped under the public `/api` prefix.
+- The API entry point is `artifacts/api-server/src/index.ts`; the production bundle is `artifacts/api-server/dist/index.mjs`.
+- The API gateway starts the managed Python FastAPI process on loopback.
+- `/api/healthz` is registered by the API artifact's health route and returns HTTP 200 JSON.
+- `/api/build-info` returns HTTP 404 JSON.
+- `/build-info` returns the web application's HTML shell; it is not an API revision endpoint.
+
+### Verified revision-injection gap
+
+The inspected API build/runtime configuration includes ordinary service settings, but no build-revision variable, Git SHA injection, or API-side build-info route was found. The published API therefore cannot currently attest a full 40-character source revision through the checked endpoints.
+
+This is distinct from the existing root Python application's `GET /build-info` route in PR #64. That route validates an explicit `ATLAS_BUILD_REVISION` value and returns only a normalized full SHA or an unknown state. PR #64's exact head `7aa6e9bf3421840874fe38f80ee7693fd362b72f` passed run [#44178610630](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44178610630), including the full test step (1,174 passed). It does not add the missing route or SHA injection to the separate Replit API artifact.
+
+### Overlapping build-revision branch coordination
+
+The existing branch `atlas/build-revision-provenance-v1` is already present at commit `7a628b2520fed20fd79aed0a4f3a5efe6936ab09`. It contains a divergent root-app build-info variant and is 130 commits ahead / 3 behind the PR #64 branch. Its recorded run [#44211840778](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44211840778) failed in `tests/test_security.py::test_every_private_api_route_declares_the_api_key_dependency`: `GET /build-info` was not included in the intentionally-public route allowlist. PR #64 already contains the explicit allowlist entry and passed its own exact-head suite. No cherry-pick or new PR was attempted because the branch is substantially divergent and the canonical application-side work is already in PR #64.
+
+### Next safe integration boundary
+
+After the Replit API artifact source is represented in the authoritative GitHub tree through the approved manifest/source-reconciliation process, add the API-side build-info route and inject the exact full SHA at API build time. Test that the route returns the build's exact revision and fails closed when metadata is absent or malformed. Do not infer the deployed SHA from the web shell, health endpoint, branch name, or an operator-supplied stale value.
+
+The current workspace remains at `main` HEAD `68292836afe5a8547b2e201a9e414e838a737e22`, clean, with the previous hashed-only manifest export absent. The full path inventory remains behind the public-repository disclosure gate; no manifest or source contents were transferred.
