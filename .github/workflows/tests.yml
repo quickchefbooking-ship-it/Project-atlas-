@@ -1,4 +1,4 @@
-name: Atlas core tests
+name: Source manifest tests
 
 on:
   push:
@@ -6,13 +6,21 @@ on:
       - main
       - "atlas/**"
       - "onepro-**"
+    paths:
+      - "tools/source_manifest.py"
+      - "tests/test_source_manifest.py"
+      - ".github/workflows/tests.yml"
   pull_request:
+    paths:
+      - "tools/source_manifest.py"
+      - "tests/test_source_manifest.py"
+      - ".github/workflows/tests.yml"
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  source-manifest:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -21,9 +29,7 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Install test runner
+        run: python -m pip install pytest==8.3.2
+      - name: Run source manifest regression tests
+        run: python -m pytest -q tests/test_source_manifest.py
