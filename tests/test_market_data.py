@@ -208,6 +208,12 @@ def test_watchlist_read_model_exposes_synthetic_provenance_and_chart_points():
     assert item.chart_points[-1].close == "110"
     assert item.chart_points[-1].complete is False
     assert item.chart_points[-1].data_status == "synthetic"
+    assert item.chart_points[-1].source_id == "fixture:market-v1"
+    assert item.chart_points[-1].source_version == "1"
+    assert item.chart_points[-1].venue == "XNYS"
+    assert item.chart_points[-1].timezone == "UTC"
+    assert item.chart_points[-1].observed_at.endswith("+00:00")
+    assert item.chart_points[-1].delay_seconds is None
     assert item.last_observed_at.endswith("+00:00")
 
 
