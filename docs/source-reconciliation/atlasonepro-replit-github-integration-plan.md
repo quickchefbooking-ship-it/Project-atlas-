@@ -1,7 +1,7 @@
 # AtlasOnePro source reconciliation and safe import plan
 
-**Status:** verified inventory; implementation and source-tree migration not started  
-**Date:** 17 November 2026  
+**Status:** partial read-only inventory verified; complete manifests and source-tree migration outstanding  
+**Date:** 18 November 2026  
 **Authoritative engineering repository:** `quickchefbooking-ship-it/Project-atlas-`  
 **Existing runtime/preview:** Replit app `ATLAS`
 
@@ -11,7 +11,7 @@ The owner has confirmed that this GitHub repository is the authoritative enginee
 
 This document records a safe path to bring the Replit multi-artifact application under the authoritative GitHub repository while preserving both codebases. It does not authorise a deployment, secret change, payment activation, worker activation, or production data migration.
 
-## Read-only inventory verified on 17 November 2026
+## Read-only inventory verified on 17–18 November 2026
 
 ### GitHub repository
 
@@ -25,7 +25,7 @@ This document records a safe path to bring the Replit multi-artifact application
 - App: `ATLAS`
 - Workspace branch: `main`
 - Workspace HEAD: `1cf8d1151c894bb45c1a32f4829d1945fec26d2b`
-- Working tree: clean at inspection time
+- Working tree: clean at the last read-only inspection
 - Configured remotes: `gitsafe-backup` and `subrepl-shared`
 - No GitHub remote or upstream is configured.
 - Workspace tree: 846 tracked paths.
@@ -33,10 +33,14 @@ This document records a safe path to bring the Replit multi-artifact application
 
 ### Tree comparison
 
-- Five paths have the same names in both trees; all five have materially different contents.
-- 841 paths are Replit-only.
-- 17 paths are GitHub-only.
+- Four paths have the same names in both trees; all four have materially different contents.
+- 842 paths are Replit-only.
+- 18 paths are GitHub-only.
 - The histories have not been reconciled; a shared Git ancestor has not been established.
+
+A previous inventory incorrectly treated `atlas_media/init.py` and `atlas_media/__init__.py` as the same path. They are distinct filenames: Replit tracks `atlas_media/init.py` (149 bytes), while GitHub tracks `atlas_media/__init__.py` (256 bytes). This correction changes the shared-path count from five to four, the Replit-only count from 841 to 842, and the GitHub-only count from 17 to 18. The two files must be preserved independently.
+
+**Manifest limitation:** complete machine-readable per-file path, byte-size, and SHA-256 manifests for both trees have not yet been delivered or attached. The counts and grouped inventory are a corrected summary of the read-only tree inspection, not a substitute for those complete reproducible manifests. This remains an acceptance gate.
 
 Representative Replit-specific areas that must be preserved include:
 
@@ -78,7 +82,7 @@ For every path, classify it as:
 - Generated, ignored, or environment-specific
 - Secret-bearing or otherwise excluded from source control
 
-The five same-name/different-content paths require explicit human review. No automated overwrite or "take newest" rule is acceptable.
+The four same-name/different-content paths require explicit human review. The separate `atlas_media/init.py` and `atlas_media/__init__.py` files must remain distinct. No automated overwrite or "take newest" rule is acceptable.
 
 ### 3. Choose an integration layout
 
@@ -120,4 +124,4 @@ Only after code review and explicit owner approval should the deployment source 
 
 ## Current next action
 
-The next safe engineering action is to obtain the complete path-and-digest manifests and produce the collision report. Until that report exists, do not copy, overwrite, merge, add remotes, or publish either source tree.
+Obtain the complete path-and-digest manifests and validate the corrected path inventory. Until those manifests exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
