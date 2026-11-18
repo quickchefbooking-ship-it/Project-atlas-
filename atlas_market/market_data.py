@@ -56,10 +56,16 @@ def _interval_duration(interval: object) -> timedelta:
     match = _INTERVAL_PATTERN.fullmatch(interval)
     if match is None:
         raise MarketDataValidationError("interval must use a positive m, h or d duration")
-    amount = int(match.group(1))
+    amount_text = match.group(1)
+    if len(amount_text) > 8:
+        raise MarketDataValidationError("interval exceeds the supported duration bound")
+    amount = int(amount_text)
     unit = match.group(2)
     seconds_per_unit = {"m": 60, "h": 3600, "d": 86400}[unit]
-    return timedelta(seconds=amount * seconds_per_unit)
+    total_seconds = amount * seconds_per_unit
+    if total_seconds > 366 * 86400:
+        raise MarketDataValidationError("interval exceeds the supported duration bound")
+    return timedelta(seconds=total_seconds)
 
 
 @dataclass(frozen=True)
@@ -80,7 +86,7 @@ class Instrument:
         object.__setattr__(self, "instrument_id", instrument_id)
         for field_name in ("symbol", "display_name", "venue"):
             object.__setattr__(self, field_name, _required_text(getattr(self, field_name), field_name))
-        if self.asset_class not in ASSET_CLASSES:
+        if not isinstance(self.asset_class, str) or self.asset_class not in ASSET_CLASSES:
             raise MarketDataValidationError("asset_class is not supported")
         currency = _required_text(self.quote_currency, "quote_currency").upper()
         if not _CURRENCY_PATTERN.fullmatch(currency):
@@ -104,7 +110,7 @@ class MarketDataProvenance:
         for field_name in ("source_id", "source_name", "source_version", "venue"):
             object.__setattr__(self, field_name, _required_text(getattr(self, field_name), field_name))
         object.__setattr__(self, "observed_at", _aware_utc(self.observed_at, "observed_at"))
-        if self.data_status not in DATA_STATUSES:
+        if not isinstance(self.data_status, str) or self.data_status not in DATA_STATUSES:
             raise MarketDataValidationError("data_status must be synthetic, delayed, indicative or live")
         if self.delay_seconds is not None:
             if isinstance(self.delay_seconds, bool) or not isinstance(self.delay_seconds, int) or self.delay_seconds < 0:
@@ -216,6 +222,7 @@ def validate_series(bars: Sequence[OHLCVBar]) -> tuple[OHLCVBar, ...]:
             raise MarketDataValidationError("series cannot mix candle intervals")
         if (
             current.provenance.source_id != first.provenance.source_id
+            or current.provenance.source_name != first.provenance.source_name
             or current.provenance.source_version != first.provenance.source_version
             or current.provenance.venue != first.provenance.venue
             or current.provenance.data_status != first.provenance.data_status
@@ -257,6 +264,8 @@ def build_watchlist_read_model(
     result: list[WatchlistItem] = []
     for instrument in instrument_list:
         supplied_bars = bars_by_instrument.get(instrument.instrument_id, ())
+        if not isinstance(supplied_bars, Sequence) or isinstance(supplied_bars, (str, bytes)):
+            raise MarketDataValidationError("each watchlist series must be an ordered candle sequence")
         if not supplied_bars:
             result.append(WatchlistItem(
                 instrument=instrument,
