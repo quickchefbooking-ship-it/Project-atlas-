@@ -1,7 +1,5 @@
 """Isolated, read-only market-data contracts for Atlas Market Intelligence."""
 
-from .synthetic import build_synthetic_market_snapshot
-
 from .market_data import (
     ASSET_CLASSES,
     DATA_STATUSES,
@@ -14,6 +12,8 @@ from .market_data import (
     build_watchlist_read_model,
     validate_series,
 )
+from .serialization import serialize_watchlist_read_model
+from .synthetic import build_synthetic_market_snapshot
 
 __all__ = [
     "ASSET_CLASSES",
@@ -26,5 +26,6 @@ __all__ = [
     "WatchlistItem",
     "build_synthetic_market_snapshot",
     "build_watchlist_read_model",
+    "serialize_watchlist_read_model",
     "validate_series",
 ]
