@@ -43,3 +43,15 @@ def test_mount_helper_rejects_missing_auth_dependency_without_mutating_app():
 
     assert tuple(route.path for route in app.routes) == original_paths
     assert not any(route.path == "/market/watchlist" for route in app.routes)
+
+
+def test_mount_helper_rejects_duplicate_path_without_mutating_app():
+    app = FastAPI()
+    app.add_api_route("/market/watchlist", lambda: {"existing": True}, methods=["GET"])
+    original_paths = tuple(route.path for route in app.routes)
+
+    with pytest.raises(ValueError, match="already registered"):
+        mount_market_watchlist_router(app, authentication_dependency=_auth)
+
+    assert tuple(route.path for route in app.routes) == original_paths
+    assert sum(route.path == "/market/watchlist" for route in app.routes) == 1
