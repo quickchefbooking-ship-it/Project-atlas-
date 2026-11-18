@@ -1,36 +1,44 @@
 # Replit/GitHub path collision and inventory report
 
 **Date:** 18 November 2026  
-**Comparison target:** GitHub `main` at `32471ea720edb5f10ca51aafaf9d45113d4e736c`  
-**Method:** read-only path and content comparison; SHA-256 computed from file contents  
+**Comparison target:** GitHub main at 32471ea720edb5f10ca51aafaf9d45113d4e736c  
+**Replit snapshot:** main at 1cf8d1151c894bb45c1a32f4829d1945fec26d2  
+**Method:** exact path-string comparison and SHA-256 metadata only; source contents were not transferred  
 **No source files, refs, remotes, settings, secrets, or deployments were changed.**
 
-## Four same-name, different-content paths
+## Manifest evidence
 
-The verified path names identify four shared paths with materially different contents. Sizes are bytes.
+The Replit CSV manifest contains 846 rows, is 104,987 bytes, and has SHA-256:
 
-| Path | Replit bytes | Replit SHA-256 | GitHub bytes | GitHub SHA-256 | Why wholesale replacement is unsafe |
+`11c749dd4798bd285d1e83e8909e4e6be7e4441dd088347cf0e73452889fd09b`
+
+It reports 760 hashed entries, 86 excluded entries, zero symlinks, no unreadable objects, and a clean tracked worktree. The file remains at `/tmp/atlas-head-manifest.csv` in the Replit container and has not yet been persisted in GitHub.
+
+A read-only query compared the CSV path column against all 22 exact GitHub main paths using Python string equality. It found five shared names, all five with different content; 17 GitHub paths absent from Replit; and 841 Replit-only paths. The full 846-row CSV still needs a safe transfer so the complete comparison can be committed and reproduced. No path normalization, case-folding, underscore stripping, or basename matching is permitted.
+
+## Five same-name, different-content paths
+
+The five exact shared path names all have materially different content. Sizes are bytes.
+
+| Exact path | Replit bytes | Replit SHA-256 | GitHub bytes | GitHub SHA-256 | Why wholesale replacement is unsafe |
 |---|---:|---|---:|---|---|
 | `.env.example` | 3,752 | `3052f7a711d3df5fe99720aa72c63f5b48d1eaf2aa98e321aeedafd3734e1a07` | 2,619 | `7ed1c27a2543098d21b04a4fe75725655bf7417698887a87b223e70a2fc7c94d` | Replit has an environment setup template; GitHub's file contains project overview text. Replacing Replit's file would lose its setup guidance. |
 | `README.md` | 28,408 | `010af7c916ac41628d34bf04a33daf97675dd1d31b21e352b27a2281b5b0fae1` | 146 | `eb0eb384eaa985e8771a1f2837c67943a6efb937d0bd8cc35c26ddefddedf728` | Replit has platform/project documentation; GitHub's file is a short dependency list. Replacing it would discard Replit documentation. |
+| `atlas_media/__init__.py` | 149 | `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509` | 256 | `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b` | The exact path is shared, but the package initializer contents differ. The earlier inventory incorrectly rendered the Replit name without its double underscores. |
 | `atlas_media/generate.py` | 1,600 | `6f8cad548bcac2344e957f85cdf72a2ebe011f20f763ba5a3d9d8dd0735a0f66` | 2,300 | `edb7c0ddf97028f898b053c8a5bd2eac907978dda86fb023d3c8959dfc45f46` | Replit provides a wrapper around its managed media service; GitHub has a separate generation implementation. Replacing it risks breaking Replit callers and expected behavior. |
 | `atlas_media/video.py` | 13,875 | `f51d87bd15f8125dc8a411a38b4024a0c82fcb9ccb4c41a07f212afdfc60db25` | 424 | `ec14130b8fba56001cf9a0c082b0676364c81635057fb1f7f7a3110900787fa4` | Replit implements bounded local FFmpeg video assembly; GitHub's version is a short gTTS voice-synthesis module. These are different capabilities. |
 
-## Similar-looking but distinct paths
+## Initializer path correction
 
-These are not a same-name collision. The Replit workspace tracks `atlas_media/init.py`; GitHub tracks `atlas_media/__init__.py`. The spelling is different, so neither should be treated as the other's replacement.
+The Replit CSV confirms the exact initializer path `atlas_media/__init__.py` (UTF-8 path length 23 bytes). The exact path `atlas_media/init.py` is absent. The Replit row has 149 bytes and SHA-256 `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509`; the GitHub row at the same exact path has 256 bytes and SHA-256 `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b`.
 
-| Replit-only path | Bytes | SHA-256 | GitHub-only path | Bytes | SHA-256 |
-|---|---:|---|---|---:|---|
-| `atlas_media/init.py` | 149 | `44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509` | `atlas_media/__init__.py` | 256 | `c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b` |
-
-The earlier inventory incorrectly counted these as one shared path. The corrected comparison has four shared names, not five.
+An earlier response stripped the double underscores when rendering the path, which led to the false conclusion that these were distinct filenames. The base64/hex checks against the CSV and exact set-membership checks establish that this is a fifth same-name/different-content collision.
 
 ## Replit-only path inventory
 
-The read-only tree inventory reports 846 tracked Replit paths and 22 tracked GitHub paths. With four shared path names, the corrected counts are 842 Replit-only paths and 18 GitHub-only paths. The prefix classification below is based on path and file-extension rules, not a semantic review of every file.
+The read-only tree inventory reports 846 tracked Replit paths and 22 tracked GitHub paths. With five shared path names, the corrected counts are 841 Replit-only paths and 17 GitHub-only paths. The prefix classification below is based on path and file-extension rules, not a semantic review of every file.
 
-**Manifest limitation:** a complete machine-readable, per-file path/byte-size/SHA-256 manifest for both trees has not yet been delivered or attached to this PR. The counts and grouped inventory below are a corrected summary of the read-only inventory, not a substitute for those complete reproducible manifests. This remains an acceptance gate.
+**Manifest limitation:** the complete machine-readable CSV has not yet been persisted in this PR. The counts and grouped inventory are supported by the verified CSV metadata and exact comparison of all 22 GitHub path names, but the full 841-name Replit-only list and all 86 exclusion records remain to be committed and reviewed.
 
 | Replit-only prefix | Files | Source | Config | Tests | Generated | Docs/other |
 |---|---:|---:|---:|---:|---:|---:|
@@ -47,14 +55,14 @@ The read-only tree inventory reports 846 tracked Replit paths and 22 tracked Git
 | `benchmarks` | 6 | 3 | 2 | 0 | 0 | 1 |
 | `services` | 6 | 3 | 2 | 1 | 0 | 0 |
 | `.github` | 1 | 0 | 1 | 0 | 0 | 0 |
-| `atlas_media` | 2 | 2 | 0 | 0 | 0 | 0 |
-| **Total** | **842** | **463** | **58** | **188** | **0** | **133** |
+| `atlas_media` | 1 | 1 | 0 | 0 | 0 | 0 |
+| **Total** | **841** | **462** | **58** | **188** | **0** | **133** |
 
 The Replit-only set includes the React/Vite web application, Express API gateway, Python backend, Brain/Professor/learning/workspace features, tests, scripts, deployment configuration, and documentation. All these areas must be mapped before any import.
 
 ## GitHub-only paths
 
-The 18 GitHub-only paths are:
+The 17 GitHub-only paths are:
 
 - `app.py`
 - `atlas_engine/__init__.py`
@@ -66,7 +74,6 @@ The 18 GitHub-only paths are:
 - `atlas_engine/safe_testing.py`
 - `atlas_engine/storage.py`
 - `atlas_engine/task_manager.py`
-- `atlas_media/__init__.py`
 - `atlas_media/audio.py`
 - `atlas_media/sources.py`
 - `index.html.`
@@ -77,9 +84,9 @@ The 18 GitHub-only paths are:
 
 ## Generated and secret-like paths
 
-A path-name scan found `.env.example` as the only env/credential-like project path; it is a template. Replit Secrets were not inspected, and no credential values were read or printed. A filename scan is not proof that secrets are absent from the Replit Secrets store.
+The Replit CSV reports 86 excluded entries. The `.npmrc` path was explicitly excluded as sensitive credential configuration without reading or hashing its contents. The other 85 exclusions are generated/runtime/test-evidence artifacts. The `.env.example` file is a template; Replit Secrets were not inspected, and no credential values were read or printed. A filename scan is not proof that secrets are absent from the Replit Secrets store.
 
-No compiled-output, bytecode, or runtime-database paths matched the generated-file rule among the 842 tracked Replit-only paths. Generated/runtime paths outside that tracked set include:
+No compiled-output, bytecode, or runtime-database paths matched the generated-file rule among the 841 tracked Replit-only paths. Generated/runtime paths outside that tracked set include:
 
 - `artifacts/api-server/dist/**`
 - `artifacts/project-atlas/dist/public/**`
@@ -93,4 +100,4 @@ Only paths were inspected for these generated/runtime locations; file contents w
 
 ## Conclusion
 
-The two trees are not safe drop-in replacements for one another. Reconciliation must be based on complete path manifests and deliberate module mapping, not filename equality or modification time. The four same-name/different-content paths require explicit adaptation decisions; the similar-looking media initializer paths are separate files. No copy, overwrite, remote change, build, test, or deployment was performed during this inventory.
+The two trees are not safe drop-in replacements for one another. Reconciliation must be based on complete manifests and deliberate module mapping, not filename equality or modification time. All five same-name/different-content paths require explicit adaptation decisions. No copy, overwrite, remote change, build, test, or deployment was performed during the original inventory.
