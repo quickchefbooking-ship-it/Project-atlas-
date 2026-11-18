@@ -59,9 +59,30 @@ Representative GitHub-only areas include `app.py`, `atlas_engine/**`, `atlas_med
 - API artifact: mounted at `/api` and the OAuth connector path; production build uses `scripts/build-api-production.sh`; the Node gateway starts Uvicorn for `app.main:app`.
 - The API gateway and Python API are distinct from the GitHub repository's top-level `app.py` application.
 
-A read-only request to the published `GET /api/build-info` returned JSON 404. The root `/build-info` is served by the web application and returns the HTML app shell. Therefore, the `/build-info` route added to the GitHub `app.py` does not establish build identity for the deployed Replit API.
+A read-only request to the published `GET /api/build-info` returned JSON 404. The root `/build-info` is served by the web application and returns the HTML app shell. A subsequent read-only check of both GitHub `main` and `atlas/professor-conversation-repair-v1` found no `/build-info` route in either `app.py`; the earlier statement that such a route had been added to GitHub was incorrect and is withdrawn. Neither source currently provides the build identity needed to prove the deployed Replit revision.
 
 No automatic `ATLAS_BUILD_REVISION` stamping was found in the Replit artifact build configuration. Availability of Git metadata during the published build remains unverified. The deployment was active at the time of inspection, but its exact source revision was not identifiable.
+
+
+## Published runtime and Professor readiness audit (18 November 2026)
+
+A second read-only audit checked Replit's Development and Production configuration through a presence-only view. No values were displayed. The following settings were absent in both environments:
+
+- Provider settings: `ATLAS_LLM_PROVIDER`, `ATLAS_LLM_CHAT_COMPLETIONS_URL`, `ATLAS_LLM_MODEL`, `ATLAS_LLM_API_KEY`
+- Tenant and identity settings: `ATLAS_TENANT_DATA_DB_PATH`, `ATLAS_MEMBERSHIP_DB_PATH`, `ATLAS_OIDC_ISSUER`, `ATLAS_OIDC_AUDIENCE`, `ATLAS_OIDC_JWKS_URI`, `ATLAS_OIDC_ALLOWED_ALGORITHMS`, `ATLAS_OIDC_CLIENT_ID`, `ATLAS_OIDC_REDIRECT_URI`
+
+This list describes the GitHub Professor configuration contract, not necessarily every variable used by the distinct Replit runtime. The Replit code's optional OpenAI service adapter uses a different configuration family (`ATLAS_ENABLE_PAID_AI`, `ATLAS_ENABLE_OPENAI`, `OPENAI_API_KEY`, and model configuration); those settings' presence was not inspected and their values were not read.
+
+The published Replit deployment was reported as successful and public. Read-only requests to `/api/healthz` and `/api/health` returned HTTP 200 JSON health responses. This establishes API availability only, not Professor/provider readiness or source revision identity.
+
+The Replit API artifact runs its own Node gateway and Python application (`app.main:app`). It does not expose the authenticated GitHub Professor conversation route `/professor/conversation`. Its current Professor chat submit path returns a local unavailable notice without calling the generic `/api/chat` endpoint, the optional OpenAI adapter, or the Brain. The existing generic chat endpoint is a separate service-key-protected, single-message interface without conversation IDs or persisted multi-turn model history. Its transcript remains in browser component memory.
+
+Consequently:
+- A real provider round-trip is **not verified**.
+- A genuine multi-turn model conversation is **not implemented in the inspected Replit chat path**.
+- A successful health response is not proof that the Professor is usable.
+- The exact deployed source SHA remains unknown because the published API does not expose build metadata.
+- No files, environment settings, secrets, remotes, workflows, or deployments were changed during this audit.
 
 ## Safe integration sequence
 
@@ -119,9 +140,9 @@ Only after code review and explicit owner approval should the deployment source 
 - All Replit-only runtime functionality is preserved.
 - The proposed monorepo layout builds from a clean GitHub checkout.
 - Automated tests pass on the exact proposed PR head.
-- The API build-revision endpoint is verified through the API artifact's real route.
+- A build-revision endpoint is implemented and verified through the API artifact's real route, reporting the reviewed full Git SHA.
 - No deployment, secret, payment, production-data, or worker setting changes occur without explicit approval.
 
 ## Current next action
 
-Obtain the complete path-and-digest manifests and validate the corrected path inventory. Until those manifests exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
+Obtain the complete path-and-digest manifests and validate the corrected path inventory. Separately, implement and test a non-secret build-revision endpoint in the authoritative GitHub API, then prove the Replit gateway exposes it only after the two source trees are deliberately integrated. Until manifests and the clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
