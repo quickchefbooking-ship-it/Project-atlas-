@@ -16,7 +16,9 @@ on:
   pull_request:
     paths:
       - "tools/source_manifest.py"
+      - "tools/compare_source_manifests.py"
       - "tests/test_source_manifest.py"
+      - "tests/test_compare_source_manifests.py"
       - ".github/workflows/tests.yml"
       - "docs/source-reconciliation/**"
 
