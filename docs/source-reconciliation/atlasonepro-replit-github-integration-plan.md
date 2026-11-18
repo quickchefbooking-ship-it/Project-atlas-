@@ -40,7 +40,7 @@ This document records a safe path to bring the Replit multi-artifact application
 
 A previous inventory incorrectly treated `atlas_media/init.py` and `atlas_media/__init__.py` as the same path. They are distinct filenames: Replit tracks `atlas_media/init.py` (149 bytes), while GitHub tracks `atlas_media/__init__.py` (256 bytes). This correction changes the shared-path count from five to four, the Replit-only count from 841 to 842, and the GitHub-only count from 17 to 18. The two files must be preserved independently.
 
-**Manifest limitation:** complete machine-readable per-file path, byte-size, and SHA-256 manifests for both trees have not yet been delivered or attached. The counts and grouped inventory are a corrected summary of the read-only tree inspection, not a substitute for those complete reproducible manifests. This remains an acceptance gate.
+**Manifest status:** the complete GitHub `main` manifest is now recorded at `docs/source-reconciliation/github-main-manifest.json`. It was generated from a clean checkout of commit `32471ea720edb5f10ca51aafaf9d45113d4e736c`: 22 tracked entries, 22 content hashes, zero exclusions, no unreadable objects, and overall manifest SHA-256 `c40e687f0d044dac998cb4a92440b983b003635b5c6cd4724c0113b503017dd2`. The Replit-side manifest is still outstanding; the last known workspace HEAD is `1cf8d1151c894bb45c1a32f4829d1945fec26d2b`, but it has not been revalidated or hashed in this run.
 
 Representative Replit-specific areas that must be preserved include:
 
@@ -86,9 +86,9 @@ Consequently:
 
 ## Manifest tooling validation
 
-The five focused tests for `tools/source_manifest.py` passed in an isolated local Git fixture (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
+The five focused tests for `tools/source_manifest.py` passed locally in an isolated Git fixture and then passed on GitHub Actions run #2174 at commit `ddd0662b6cd29d80b9ce4a609fc24c96762c510b` (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
 
-PR #65 also carries the same read-only `.github/workflows/tests.yml` workflow already used by the active worker branch, with actions pinned to full commit SHAs and only `contents: read` permission. No GitHub Actions run has yet been observed for PR #65's latest head after the API-authored commits. The local five-test result is not being represented as exact-head CI.
+GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. A subsequent documentation-only commit records the main-branch dependency-file issue; the exact latest PR head still needs its path-filtered check to complete.
 
 ### Baseline dependency-file finding
 
@@ -157,4 +157,4 @@ Only after code review and explicit owner approval should the deployment source 
 
 ## Current next action
 
-Run the new manifest generator against the authoritative GitHub checkout and obtain an equivalent complete manifest from the Replit workspace. Compare the two manifests mechanically, then review every path collision and exclusion before proposing an integration layout. PR #64 already contains the GitHub build-revision endpoint; it must remain a draft until its worker and source-reconciliation gates are reviewed. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
+Obtain an equivalent complete manifest from the Replit workspace, then compare it mechanically with the committed GitHub `main` manifest and review every path collision and exclusion before proposing an integration layout. PR #64 already contains the GitHub build-revision endpoint; it must remain a draft until its worker and source-reconciliation gates are reviewed. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
