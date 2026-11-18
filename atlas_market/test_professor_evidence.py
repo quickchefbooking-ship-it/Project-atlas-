@@ -59,12 +59,37 @@ def test_guidance_only_uses_owner_validated_market_lessons(monkeypatch,tmp_path)
     assert get_professor_market_guidance("synthetic fixture")==[]
     storage.save_lesson({"id":"reviewed-market-lesson","task_id":"market-evidence-task",
       "lesson_type":"market_verified","summary":"Owner reviewed synthetic validation procedure",
-      "source":"human-review","evidence_json":json.dumps({"domain":"atlas_market_intelligence"}),
+      "source":"human-review","evidence_json":json.dumps({
+          "domain":"atlas_market_intelligence","outcome":"verified"}),
       "validated":True,"created_at":storage.now_isoformat()})
     guidance=get_professor_market_guidance("synthetic fixture")
     assert guidance and guidance[0]["lesson_id"]=="reviewed-market-lesson"
     assert guidance[0]["trust"]=="owner_validated"
     assert guidance[0]["mode"]=="advisory_only" and guidance[0]["executable"] is False
+
+def test_market_guidance_excludes_other_validated_domains(monkeypatch,tmp_path):
+    _isolated_db(monkeypatch,tmp_path)
+    storage.save_lesson({"id":"unrelated-market-lesson","task_id":"market-evidence-task",
+      "lesson_type":"general","summary":"Owner reviewed market process for another department",
+      "source":"human-review","evidence_json":json.dumps({
+          "domain":"sales_operations","outcome":"verified"}),
+      "validated":True,"created_at":storage.now_isoformat()})
+    storage.save_lesson({"id":"malformed-market-lesson","task_id":"market-evidence-task",
+      "lesson_type":"market_verified","summary":"Owner reviewed market validation procedure",
+      "source":"human-review","evidence_json":"not-json",
+      "validated":True,"created_at":storage.now_isoformat()})
+    storage.save_lesson({"id":"wrong-outcome-market-lesson","task_id":"market-evidence-task",
+      "lesson_type":"market_failed","summary":"Owner reviewed market validation procedure",
+      "source":"human-review","evidence_json":json.dumps({
+          "domain":"atlas_market_intelligence","outcome":"verified"}),
+      "validated":True,"created_at":storage.now_isoformat()})
+    storage.save_lesson({"id":"correct-market-lesson","task_id":"market-evidence-task",
+      "lesson_type":"market_verified","summary":"Owner reviewed market validation procedure",
+      "source":"human-review","evidence_json":json.dumps({
+          "domain":"atlas_market_intelligence","outcome":"verified"}),
+      "validated":True,"created_at":storage.now_isoformat()})
+    guidance=get_professor_market_guidance("market validation")
+    assert [item["lesson_id"] for item in guidance]==["correct-market-lesson"]
 
 @pytest.mark.parametrize("outcome",["success","live","execute",""])
 def test_invalid_outcome_rejected(monkeypatch,tmp_path,outcome):
