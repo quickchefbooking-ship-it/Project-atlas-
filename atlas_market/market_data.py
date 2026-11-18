@@ -177,12 +177,18 @@ class OHLCVBar:
 class ChartPoint:
     start_at: str
     end_at: str
+    timezone: str
     open: str
     high: str
     low: str
     close: str
     volume: str
     complete: bool
+    source_id: str
+    source_version: str
+    venue: str
+    observed_at: str
+    delay_seconds: int | None
     data_status: str
 
 
@@ -299,12 +305,18 @@ def build_watchlist_read_model(
             ChartPoint(
                 start_at=bar.start_at.isoformat(),
                 end_at=bar.end_at.isoformat(),
+                timezone=bar.timezone,
                 open=str(bar.open),
                 high=str(bar.high),
                 low=str(bar.low),
                 close=str(bar.close),
                 volume=str(bar.volume),
                 complete=bar.complete,
+                source_id=bar.provenance.source_id,
+                source_version=bar.provenance.source_version,
+                venue=bar.provenance.venue,
+                observed_at=bar.provenance.observed_at.isoformat(),
+                delay_seconds=bar.provenance.delay_seconds,
                 data_status=bar.provenance.data_status,
             )
             for bar in bars
