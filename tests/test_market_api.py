@@ -27,6 +27,7 @@ def test_read_only_watchlist_route_returns_explicit_synthetic_demo():
     response = _client().get("/market/watchlist")
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     payload = response.json()
     assert payload["schema_version"] == 1
     assert payload["mode"] == "read_only"
