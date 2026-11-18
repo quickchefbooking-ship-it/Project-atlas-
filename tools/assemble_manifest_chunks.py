@@ -33,11 +33,11 @@ def _validate_row(row: dict[str, Any], source: str) -> dict[str, str]:
     raw_size = row.get("bytes")
     if not isinstance(raw_size, str) or not raw_size.isdigit():
         raise ValueError(f"{source} has an invalid byte count.")
+    if row.get("status") != "hashed" or row.get("exclusion_reason") != "":
+        raise ValueError(f"{source} is not a sanitized hashed-only row.")
     digest = row.get("sha256")
     if not isinstance(digest, str) or SHA256_RE.fullmatch(digest) is None:
         raise ValueError(f"{source} has an invalid SHA-256 digest.")
-    if row.get("status") != "hashed" or row.get("exclusion_reason") != "":
-        raise ValueError(f"{source} is not a sanitized hashed-only row.")
     return {
         "path": path,
         "mode": mode,
