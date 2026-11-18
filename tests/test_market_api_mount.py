@@ -28,6 +28,7 @@ def test_authenticated_market_router_mount_returns_synthetic_fixture_only():
     response = _client().get("/market/watchlist", headers={"x-api-key": "test-only-key"})
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     payload = response.json()
     assert payload["demo_fixture"] is True
     assert payload["mode"] == "read_only"
