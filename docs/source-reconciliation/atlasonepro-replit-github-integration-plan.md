@@ -53,6 +53,8 @@ Representative Replit-specific areas that must be preserved include:
 
 Representative GitHub-only areas include `app.py`, `atlas_engine/**`, `atlas_media/**`, `requirements.txt`, and the GitHub repository's tests. These must not be treated as replacements for similarly named Replit modules.
 
+**Exact-path comparison warning:** a follow-up automated comparison response incorrectly treated Replit `atlas_media/init.py` as the same path as GitHub `atlas_media/__init__.py`, and also rendered GitHub `atlas_engine/__init__.py` without its literal double underscores. The supplied GitHub manifest confirms the exact GitHub spellings; the Replit inventory records `atlas_media/init.py`. Discard that derived five-shared-path result. The corrected inventory remains four shared names (all different content), 842 Replit-only paths and 18 GitHub-only paths. Do not normalize, strip underscores, case-fold or otherwise rewrite paths during the final diff. Because the full Replit CSV is not yet persisted in GitHub, the exact path-level comparison must be rerun mechanically once it can be transferred.
+
 ## Runtime routing verified from the Replit workspace
 
 - Web artifact: serves `/`; production build uses the `@workspace/project-atlas` package; production serves the built static files.
