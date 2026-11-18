@@ -272,3 +272,22 @@ The latest textual response again mis-rendered the initializer path, so the path
 Path-only architecture boundaries were rechecked: web artifact `artifacts/project-atlas/`; API ingress `artifacts/api-server/`; Python application `app/`; separate Professor gateway package `services/professor-gateway/`; and preview sandbox `artifacts/mockup-sandbox/`. These path-based findings do not establish clean-checkout builds or live deployment parity.
 
 No source transfer, workspace modification, secret read, remote change, merge, or deployment occurred.
+
+
+## Fresh read-only workspace checkpoint — 18 November 2026 (latest automation check)
+
+A new metadata-only inspection of the Replit app ATLAS supersedes the earlier c6bf5686... and 99afd910... workspace snapshots for current inventory status.
+
+- Branch: main
+- HEAD: 68292836afe5a8547b2e201a9e414e838a737e22
+- Tracked worktree: clean
+- Tracked paths: 856
+- Hashed paths: 855
+- Excluded before reading or hashing: 1 sensitive-configuration category (path and contents omitted)
+- Unreadable Git objects: 0
+- Symlinks: 0
+- Total tracked bytes: 9,230,530
+- Fresh hashed-only metadata manifest: 109,273 bytes; SHA-256 6d184df90cd01135d744715c532b7d89ac327f6b37c7e916fcd686703d77ce63
+- Previous manifest export: absent from the current Replit Agent workspace session; the fresh manifest was computed in memory only.
+
+The Replit Agent reported no workspace files created or changed. The full hashed-only path inventory remains behind the public-repository path-disclosure gate; no path list or source contents were transferred. The aggregate checkpoint and fingerprint do not establish a complete exact-path comparison against GitHub, a clean-checkout build, or deployed source-revision parity. No remotes, integrations, secrets, deployment settings, or published application were changed.
