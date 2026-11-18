@@ -200,3 +200,60 @@ The next reconciliation prerequisite is a complete metadata-only CSV for this ex
 `path,mode,bytes,sha256,status,exclusion_reason`.
 
 Sensitive paths must be classified before reading any blob content; excluded content must never be read or hashed; symlinks must not be followed; path strings must remain exact. The CSV must be transferred through an approved export path or supplied as an attachment, then validated and compared against the 22-entry GitHub manifest. Until that full manifest and collision review exist, do not copy or overwrite source files, add remotes, rewrite history, merge migration work, or publish either source tree.
+
+
+## Fresh read-only architecture map — 18 November 2026
+
+**Workspace HEAD:** `c6bf5686e5ae7f0e66ce113caa506676b46b1382` (clean tracked worktree). This map is from a metadata/configuration inspection; no tests, builds, or runtime checks were performed.
+
+### Web artifact
+
+- Artifact configuration: `artifacts/project-atlas/.replit-artifact/artifact.toml`; path-routed at `/`.
+- Development: `pnpm --filter @workspace/project-atlas run dev`.
+- Production build: `pnpm --filter @workspace/project-atlas run build`.
+- Production serve: `pnpm --filter @workspace/project-atlas run serve`.
+- Entry: `artifacts/project-atlas/index.html` → `src/main.tsx` → `src/App.tsx`.
+- Vite output: `artifacts/project-atlas/dist/public`; static server in `server.mjs`.
+- The static web server does not proxy API requests; the frontend client uses same-origin `/api/...` paths.
+
+### API artifact and Python bridge
+
+- Artifact configuration: `artifacts/api-server/.replit-artifact/artifact.toml`; path-routed at `/api` and the declared connector discovery path.
+- Development: `pnpm --filter @workspace/api-server run dev`.
+- Production build: `bash scripts/build-api-production.sh`.
+- Production run: `node --enable-source-maps artifacts/api-server/dist/index.mjs`.
+- Node entry: `artifacts/api-server/src/index.ts`; it verifies the managed Python runtime, starts Uvicorn on loopback, waits for Python health, then exposes the gateway.
+- FastAPI entry: `app/main.py`, composed through `app/transport.py`.
+- The Node gateway is the Replit production process and manages the Python child process; this is not the same as the GitHub root `app.py` application.
+- `scripts/build-api-production.sh`, `pyproject.toml`, and `uv.lock` govern the Python build; the managed runtime contract requires Python 3.12 or newer.
+
+### Shared build configuration
+
+- `package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml`: JavaScript workspace and root scripts.
+- `tsconfig.json` and `tsconfig.base.json`: TypeScript configuration.
+- `pyproject.toml` and `uv.lock`: managed Python dependency contract.
+- `.replit`: deployment/router configuration; environment-section values were not inspected.
+- `Dockerfile`, `compose.yaml`, and `compose.providers.yaml`: container alternatives, separate from the artifact run path.
+- `artifacts/mockup-sandbox/`: component-preview artifact.
+
+### Module families
+
+- `app/`: Python domain/application, transport, identity/workspace security, Brain/learning, market/paper/trading, media and connector modules.
+- `artifacts/project-atlas/`: web UI, static server and frontend tests.
+- `artifacts/api-server/`: Node gateway, Python bridge, fixtures and API tests.
+- `atlas_media/`: media helpers.
+- `lib/`: shared API clients, schemas and database packages.
+- `services/professor-gateway/`: separate package; disabled by default and not declared as a separately routed Replit artifact in the inspected manifests.
+- `scripts/`, `tests/`, and `benchmarks/`: build, verification and test support.
+
+### Clean-checkout validation sequence
+
+1. Confirm both artifact manifests, root workspace files, `app/`, and the API build script are present in the proposed GitHub integration commit.
+2. Install JavaScript dependencies from the root lockfile with frozen resolution; typecheck and build the web artifact, then start its static server.
+3. Build the API artifact using the declared Node, pnpm, uv and managed Python requirements; confirm the bundled Node gateway and managed Python environment.
+4. Start the API production process and verify Node-to-FastAPI health on loopback and public `/api/healthz`.
+5. Verify path routing from a clean checkout: `/` reaches web; `/api/...` and the declared discovery route reach the API; unmatched paths do not fall through to the web shell or unrelated API routes.
+6. Validate packaging context, persistence and database assumptions separately from Docker and Professor gateway packages.
+7. Record build/test results and deployed-revision identity separately; this map does not prove the published Replit deployment serves this HEAD.
+
+This architecture map is a planning artifact only. The full Replit path manifest has not been transferred, source import has not begun, and no workspace or deployment change has occurred.
