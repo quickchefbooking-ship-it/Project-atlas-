@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 CSV_COLUMNS = ["path", "mode", "bytes", "sha256", "status", "exclusion_reason"]
-CHUNK_RE = re.compile(r"chunk-(\\d{3,})\\.csv$")
+CHUNK_RE = re.compile(r"chunk-(\d{3,})\.csv$")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 GIT_MODES = {"100644", "100755", "120000"}
 
@@ -29,7 +29,7 @@ def _validate_row(row: dict[str, Any], source: str) -> dict[str, str]:
         raise ValueError(f"{source} has an empty or invalid path.")
     # Preserve the exact path string; reject only paths that cannot safely
     # represent a repository-relative Git tree entry.
-    if "\\x00" in path or path.startswith("/") or any(
+    if "\x00" in path or path.startswith("/") or any(
         part in {"", ".", ".."} for part in path.split("/")
     ):
         raise ValueError(f"{source} has a path that is not repository-relative.")
@@ -114,7 +114,7 @@ def assemble_chunks(
         raise ValueError("Assembled row count does not match the expected count.")
 
     stream = io.StringIO(newline="")
-    writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS, lineterminator="\\n")
+    writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS, lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
     rendered = stream.getvalue().encode("utf-8")
