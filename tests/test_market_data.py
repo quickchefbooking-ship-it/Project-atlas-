@@ -234,3 +234,37 @@ def test_watchlist_requires_ordered_non_empty_series_when_data_is_supplied():
         validate_series([])
     with pytest.raises(MarketDataValidationError, match="OHLCVBar"):
         validate_series([{"close": "100"}])
+
+
+def test_metadata_rejects_unhashable_asset_class_and_quality_status():
+    with pytest.raises(MarketDataValidationError, match="asset_class"):
+        Instrument(
+            instrument_id="equity:other.xnys",
+            symbol="OTHER",
+            display_name="Other Example",
+            asset_class=[],
+            venue="XNYS",
+            quote_currency="USD",
+        )
+    with pytest.raises(MarketDataValidationError, match="data_status"):
+        MarketDataProvenance(
+            source_id="fixture:bad",
+            source_name="Bad fixture",
+            source_version="1",
+            venue="XNYS",
+            observed_at=START,
+            data_status=[],
+        )
+
+
+def test_interval_is_bounded_before_timedelta_construction():
+    with pytest.raises(MarketDataValidationError, match="duration bound"):
+        candle(interval="999999999d")
+
+
+def test_watchlist_rejects_non_sequence_series_instead_of_silently_treating_it_as_empty():
+    with pytest.raises(MarketDataValidationError, match="ordered candle sequence"):
+        build_watchlist_read_model(
+            [INSTRUMENT],
+            {INSTRUMENT.instrument_id: ""},
+        )
