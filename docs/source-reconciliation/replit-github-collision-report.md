@@ -194,3 +194,58 @@ The complete hashed-only path set was compared in memory against the 22-path Git
 The excluded path does not intersect the GitHub path set. All five collisions remain the same exact paths listed above, and their metadata values match the earlier checkpoint. The initializer was independently confirmed by UTF-8 hex `61746c61735f6d656469612f5f5f696e69745f5f2e7079`, which decodes to `atlas_media/__init__.py`; `atlas_media/init.py` is absent.
 
 The full manifest was not transferred or persisted. This update records only the aggregate comparison and already-reviewed collision metadata. The public-repository disclosure gate remains in place for the full 852-path inventory. No Replit files, Git refs, settings, secrets, or deployment were changed.
+
+
+## Fresh path-only architecture classification — 18 November 2026, 14:08 UTC
+
+The 847 Replit-only hashed paths from the current in-memory comparison were grouped by path prefix and extension only. No file contents were read and no workspace changes were made. The five shared collision paths and the excluded sensitive path were omitted.
+
+### Architecture buckets
+
+| Bucket | Count |
+|---|---:|
+| `artifacts/project-atlas` | 202 |
+| `artifacts/api-server` | 75 |
+| `artifacts/mockup-sandbox` | 72 |
+| `app` | 122 |
+| `lib` | 83 |
+| `tests` | 114 |
+| `docs` | 67 |
+| `.agents` | 35 |
+| `scripts` | 18 |
+| `benchmarks` | 6 |
+| `services` | 6 |
+| `atlas_media` | 1 |
+| Root/other | 46 |
+| **Total** | **847** |
+
+### File-type buckets
+
+| Bucket | Count |
+|---|---:|
+| TypeScript | 343 |
+| Python | 250 |
+| Documentation/text | 129 |
+| JavaScript | 55 |
+| JSON | 38 |
+| YAML | 5 |
+| TOML/INI/config | 4 |
+| Shell | 4 |
+| Images/assets | 4 |
+| Stylesheets | 3 |
+| HTML | 2 |
+| Lockfiles | 2 |
+| Extensionless | 2 |
+| Other extensions | 6 |
+| **Total** | **847** |
+
+### Architecture boundaries (path/extension inference only)
+
+- `artifacts/project-atlas` and `artifacts/mockup-sandbox`: appear to be frontend/UI areas.
+- `artifacts/api-server`, `app`, `services`, and `atlas_media`: appear to be backend/service areas.
+- `lib`: shared code.
+- `tests` and `benchmarks`: verification-related.
+- `docs` and `.agents`: documentation and agent-support areas.
+- Deployment and configuration are cross-cutting; path/extension rules alone cannot reliably distinguish generated files from maintained configuration.
+
+These classifications are not a semantic review or build/test verification. They are intended to guide artifact-boundary mapping before any source integration.
