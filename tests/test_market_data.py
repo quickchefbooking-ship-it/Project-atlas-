@@ -281,3 +281,49 @@ def test_watchlist_rejects_non_sequence_series_instead_of_silently_treating_it_a
             [INSTRUMENT],
             {INSTRUMENT.instrument_id: ""},
         )
+
+
+def test_synthetic_market_snapshot_is_deterministic_and_explicitly_labelled():
+    from atlas_market import build_synthetic_market_snapshot
+
+    first = build_synthetic_market_snapshot()
+    second = build_synthetic_market_snapshot()
+
+    assert first == second
+    assert {item.instrument.asset_class for item in first} == {"equity", "fx", "crypto"}
+    assert len(first) == 3
+    for item in first:
+        assert item.availability == "available"
+        assert item.data_status == "synthetic"
+        assert item.source_id == "atlas:synthetic-demo"
+        assert item.source_name == "Atlas synthetic demonstration fixture"
+        assert item.source_version == "1"
+        assert item.instrument.venue == "DEMO"
+        assert len(item.chart_points) == 3
+        assert all(point.data_status == "synthetic" for point in item.chart_points)
+        assert all(point.source_id == "atlas:synthetic-demo" for point in item.chart_points)
+        assert all(point.timezone == "UTC" for point in item.chart_points)
+
+
+def test_synthetic_market_snapshot_uses_fixed_utc_timestamps():
+    from atlas_market import build_synthetic_market_snapshot
+
+    snapshot = build_synthetic_market_snapshot()
+
+    for item in snapshot:
+        assert item.chart_points[0].start_at == "2026-11-17T09:00:00+00:00"
+        assert item.chart_points[-1].end_at == "2026-11-17T12:00:00+00:00"
+        assert item.last_observed_at == "2026-11-17T12:01:00+00:00"
+
+
+def test_synthetic_market_snapshot_cannot_label_demo_data_as_live():
+    from atlas_market import build_synthetic_market_snapshot
+
+    snapshot = build_synthetic_market_snapshot()
+
+    assert all(item.data_status != "live" for item in snapshot)
+    assert all(
+        point.data_status != "live"
+        for item in snapshot
+        for point in item.chart_points
+    )
