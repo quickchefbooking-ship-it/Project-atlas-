@@ -1,4 +1,5 @@
 from atlas_engine.billing_readiness import (
+    MAX_EVIDENCE_REFERENCE_CHARS,
     REQUIRED_LIVE_READINESS_GATES,
     evaluate_live_billing_readiness,
 )
@@ -53,6 +54,20 @@ def test_billing_preflight_rejects_truthy_non_boolean_and_oversized_evidence():
     report = evaluate_live_billing_readiness(evidence)
     assert "provider_selected" in report["blocked_gates"]
     assert "dedicated_atlas_account_verified" in report["blocked_gates"]
+
+
+def test_billing_preflight_rejects_raw_oversized_reference_even_when_trimmed_value_is_short():
+    evidence = complete_evidence()
+    evidence["provider_selected"] = {
+        "passed": True,
+        "reference": (" " * (MAX_EVIDENCE_REFERENCE_CHARS + 1)) + "x",
+    }
+
+    report = evaluate_live_billing_readiness(evidence)
+
+    assert report["overall_status"] == "blocked"
+    assert "provider_selected" in report["blocked_gates"]
+    assert report["live_charging_enabled"] is False
 
 
 def test_billing_preflight_report_never_echoes_secret_or_evidence_values():
