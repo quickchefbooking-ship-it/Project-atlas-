@@ -249,3 +249,26 @@ The 847 Replit-only hashed paths from the current in-memory comparison were grou
 - Deployment and configuration are cross-cutting; path/extension rules alone cannot reliably distinguish generated files from maintained configuration.
 
 These classifications are not a semantic review or build/test verification. They are intended to guide artifact-boundary mapping before any source integration.
+
+
+## Fresh read-only verification — 18 November 2026, 15:43 UTC
+
+The Replit Agent rechecked the workspace metadata-only at the previously confirmed HEAD. This is a new read-only check; no file was created, changed, transferred, or persisted in Replit.
+
+- Branch: `main`
+- HEAD: `c6bf5686e5ae7f0e66ce113caa506676b46b1382`
+- Tracked paths: 853
+- Hashed entries: 852
+- Excluded before reading or hashing: 1 sensitive configuration/credential category (path and content not disclosed)
+- Unreadable: 0
+- Symlinks: 0
+- Total tracked bytes: 9,194,406
+- Hashed-only CSV: 108,864 bytes; SHA-256 `af0f47b4a4c21dea697368d1e9e44937d50d94a8b68b073e36a35719262274e`
+
+The targeted exact-path comparison against the 22-entry GitHub `main` snapshot remains five shared names, all five content-different, 847 Replit-only hashed paths, and 17 GitHub-only paths. This is not a complete manifest transfer; the full path inventory remains behind the public disclosure gate.
+
+The latest textual response again mis-rendered the initializer path, so the path was checked by exact membership and UTF-8 hex. The hashed Replit path is `atlas_media/__init__.py` (hex `61746c61735f6d656469612f5f5f696e69745f5f2e7079`); `atlas_media/init.py` is absent. This confirms the same fifth collision already documented above, without reading either file's content.
+
+Path-only architecture boundaries were rechecked: web artifact `artifacts/project-atlas/`; API ingress `artifacts/api-server/`; Python application `app/`; separate Professor gateway package `services/professor-gateway/`; and preview sandbox `artifacts/mockup-sandbox/`. These path-based findings do not establish clean-checkout builds or live deployment parity.
+
+No source transfer, workspace modification, secret read, remote change, merge, or deployment occurred.
