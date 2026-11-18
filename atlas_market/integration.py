@@ -19,11 +19,23 @@ def mount_market_watchlist_router(
 ) -> FastAPI:
     """Mount the synthetic market router behind an explicit auth dependency.
 
-    The dependency is mandatory to avoid accidental unauthenticated mounting
-    through the production helper. Return the app to support composition tests.
+    Reject path collisions before mutating the application so a repeated or
+    conflicting composition cannot silently register duplicate market routes.
     """
     if not callable(authentication_dependency):
         raise TypeError("A callable authentication dependency is required.")
+
+    incoming_paths = {
+        route.path for route in router.routes if getattr(route, "path", None) is not None
+    }
+    existing_paths = {
+        route.path for route in app.routes if getattr(route, "path", None) is not None
+    }
+    conflicts = sorted(incoming_paths & existing_paths)
+    if conflicts:
+        raise ValueError(
+            "Market watchlist route path already registered: " + ", ".join(conflicts)
+        )
 
     app.include_router(
         router,
