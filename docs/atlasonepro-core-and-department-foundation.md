@@ -153,7 +153,37 @@ Exit gate: an evidence-backed system map, with no production writes.
 
 Exit gate: a testable module can be registered, authorised, called and disabled without exposing another tenant's data.
 
-### Phase 2 — Finance and Hospitality foundations
+### Phase 2 — First customer-demonstrable AI employee: Sales and Customer Operations
+
+Use Hubflow as a market benchmark for packaging concrete business outcomes, not as a template to copy. Hubflow publicly markets managed AI workflows for lead handling, customer support, voice, document processing and finance operations. Treat competitor claims as positioning until independently evidenced; do not assume its public demo is a live production system.
+
+Build one reusable AtlasOnePro AI employee before expanding every department. Initial product promise: an organisation can receive an enquiry, understand it, respond from approved company knowledge, qualify the prospect, prepare a booking or next step, update an authorised CRM, and hand uncertain or consequential cases to a human.
+
+Delivery slices:
+1. **Employee definition and workspace UX:** configurable name, purpose, department, instructions, approved knowledge sources, operating hours, escalation contacts, allowed tools and measurable success criteria. Show its status, activity, pending approvals and failures.
+2. **Knowledge and evidence:** upload/import approved company FAQs, policies and service information; extract and index content with source references, versioning, freshness and access controls. Answers must distinguish sourced facts from uncertainty and escalate when evidence is missing or conflicting.
+3. **Enquiry intake:** accept a testable web form/API event first. Add email and messaging channels only after provider contracts, consent, identity and tenant boundaries are verified. Deduplicate events and retain correlation IDs.
+4. **Qualification and response:** classify intent, capture only necessary fields, ask bounded follow-up questions, draft a response and apply approved templates/policies. Start in simulation/draft mode; no unapproved outbound messages.
+5. **CRM and booking preparation:** define provider-neutral contact, lead, activity and appointment contracts. Begin with mocked/synthetic data and read-only CRM access. Allow draft booking proposals; no live booking or CRM writes until separately scoped and approved.
+6. **Human handoff:** route low-confidence, sensitive, complaint, refund, legal, safeguarding or policy-exception cases to a named human queue. Preserve the transcript, evidence, reason and recommended next action without granting the AI extra authority.
+7. **Workflow observability:** show every trigger, decision, tool call, approval, retry, failure and final outcome. Add idempotency, bounded retries, timeouts, rate limits, cancellation and a per-employee disable switch.
+8. **Voice and additional channels:** only after the text workflow passes acceptance, assess inbound voice, transcripts, consent notices, retention, human transfer and provider costs. Do not make voice a launch dependency.
+
+Required acceptance tests:
+- Cross-tenant enquiry, knowledge and CRM access is denied.
+- Every tool call is authorised at execution time against an exact capability scope.
+- Retrieved documents and external messages are treated as untrusted data, not instructions.
+- No outbound communication or external write occurs without the configured permission and, where required, explicit human approval.
+- Duplicate events do not create duplicate leads, messages or bookings.
+- Missing, stale or conflicting knowledge causes a safe clarification or human handoff.
+- Provider timeout, outage, malformed response and cancellation are visible and recoverable.
+- The employee can be disabled without affecting Professor or unrelated departments.
+- A synthetic end-to-end demonstration records source, actor, tenant, request ID, decisions, approvals and outcome.
+- Mobile Safari usability, keyboard accessibility and clear failure states are tested.
+
+Exit gate: one repeatable synthetic end-to-end demonstration and an operator dashboard, with no production writes, live customer messaging, payment activation or unapproved provider connection.
+
+### Phase 3 — Finance and Hospitality foundations
 Finance:
 1. Approve the initial chart-of-accounts model and record types.
 2. Implement organisation-owned income/expense and invoice/bill records with immutable audit history.
@@ -168,13 +198,13 @@ Hospitality:
 
 Exit gate: finance records reconcile in tests; Hospitality can fail independently; no live Quick Chef data or payments are changed.
 
-### Phase 3 — HR and Legal foundations
+### Phase 4 — HR and Legal foundations
 Build restricted records, role matrices, retention rules, approval steps and audit trails. Keep payroll execution and legal filing/signature actions out of scope until separately approved.
 
-### Phase 4 — Velvet foundations
+### Phase 5 — Velvet foundations
 Complete the 18+ safety, age-assurance, consent, moderation, privacy and separate commercial architecture before any public-facing launch or sensitive data collection.
 
-### Phase 5 — Integration and commercial readiness
+### Phase 6 — Integration and commercial readiness
 Add additional arms one at a time, complete security/privacy review, operational support, backup/restore, accessibility, load and mobile testing, then conduct a controlled pilot. Commercial launch is a separate human approval gate.
 
 ## 7. Acceptance criteria for the foundation
