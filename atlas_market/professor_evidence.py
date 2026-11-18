@@ -8,6 +8,12 @@ from atlas_engine.learning_memory import LearningMemory
 from .market_data import WatchlistItem
 
 MAX_EVIDENCE_BYTES = 12 * 1024
+MARKET_LESSON_TYPES = {
+    "market_verified",
+    "market_failed",
+    "market_partial",
+    "market_uncertain",
+}
 
 class ProfessorEvidenceError(ValueError):
     """Unsafe or invalid Professor evidence."""
@@ -79,11 +85,35 @@ def record_watchlist_evidence(*, task_id: str, items: Sequence[WatchlistItem],
                   "claim_scope":"deterministic fixture projection only; not real market observations"})
 
 def get_professor_market_guidance(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Use only pre-existing owner-validated lessons for advisory output."""
+    """Return only owner-validated lessons explicitly belonging to Market Intelligence."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
+        raise ValueError("Market guidance limit must be between 1 and 50.")
+    if not isinstance(query, str) or not query.strip():
+        return []
+
+    # Search a broad candidate set first, then enforce the market-domain boundary.
+    # LearningMemory already returns only owner-validated lessons.
     lessons = LearningMemory.get_relevant_lessons(
-        f"atlas market intelligence {query}", limit=limit)
-    return [{
-        "lesson_id":item.get("id"),"summary":item.get("summary"),
-        "source":item.get("source"),"created_at":item.get("created_at"),
-        "evidence_json":item.get("evidence_json"),"trust":"owner_validated",
-        "mode":"advisory_only","executable":False} for item in lessons]
+        f"atlas market intelligence {query}", limit=50)
+    guidance: list[dict[str, Any]] = []
+    for item in lessons:
+        if item.get("lesson_type") not in MARKET_LESSON_TYPES:
+            continue
+        try:
+            evidence = json.loads(item.get("evidence_json") or "")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(evidence, dict):
+            continue
+        if evidence.get("domain") != "atlas_market_intelligence":
+            continue
+        if evidence.get("outcome") != item["lesson_type"].removeprefix("market_"):
+            continue
+        guidance.append({
+            "lesson_id":item.get("id"),"summary":item.get("summary"),
+            "source":item.get("source"),"created_at":item.get("created_at"),
+            "evidence_json":item.get("evidence_json"),"trust":"owner_validated",
+            "mode":"advisory_only","executable":False})
+        if len(guidance) >= limit:
+            break
+    return guidance
