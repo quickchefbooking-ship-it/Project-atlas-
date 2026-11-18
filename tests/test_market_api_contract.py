@@ -78,7 +78,7 @@ def test_synthetic_response_contract_rejects_non_synthetic_provenance(target, st
 
 def test_response_contract_accepts_a_consistent_unavailable_item():
     payload = _payload()
-    item = _make_unavailable(payload["items"][0])
+    _make_unavailable(payload["items"][0])
 
     validated = MarketWatchlistResponse.model_validate(payload)
 
@@ -104,13 +104,22 @@ def test_response_contract_accepts_a_consistent_unavailable_item():
             },
         ),
         ("latest_close", "101.00"),
-        ("chart_points", [{"data_status": "synthetic"}]),
     ],
 )
 def test_unavailable_item_rejects_status_provenance_and_price_data(field, value):
     payload = _payload()
     item = _make_unavailable(payload["items"][0])
     item[field] = value
+
+    with pytest.raises(ValidationError):
+        MarketWatchlistResponse.model_validate(payload)
+
+
+def test_unavailable_item_rejects_chart_points():
+    payload = _payload()
+    chart_points = payload["items"][0]["chart_points"]
+    item = _make_unavailable(payload["items"][0])
+    item["chart_points"] = chart_points
 
     with pytest.raises(ValidationError):
         MarketWatchlistResponse.model_validate(payload)
