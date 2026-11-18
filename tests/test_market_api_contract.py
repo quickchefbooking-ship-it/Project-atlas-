@@ -14,6 +14,21 @@ def _payload():
     return payload
 
 
+def _make_unavailable(item):
+    item.update(
+        availability="unavailable",
+        data_status="unavailable",
+        provenance=None,
+        interval=None,
+        last_bar_end=None,
+        last_observed_at=None,
+        latest_close=None,
+        change_percent=None,
+        chart_points=[],
+    )
+    return item
+
+
 def test_response_contract_accepts_the_synthetic_watchlist():
     validated = MarketWatchlistResponse.model_validate(_payload())
 
@@ -56,6 +71,62 @@ def test_synthetic_response_contract_rejects_non_synthetic_provenance(target, st
         payload["items"][0]["data_status"] = status
     else:
         payload["items"][0]["chart_points"][0]["data_status"] = status
+
+    with pytest.raises(ValidationError):
+        MarketWatchlistResponse.model_validate(payload)
+
+
+def test_response_contract_accepts_a_consistent_unavailable_item():
+    payload = _payload()
+    item = _make_unavailable(payload["items"][0])
+
+    validated = MarketWatchlistResponse.model_validate(payload)
+
+    assert validated.items[0].availability == "unavailable"
+    assert validated.items[0].data_status == "unavailable"
+    assert validated.items[0].provenance is None
+    assert validated.items[0].latest_close is None
+    assert validated.items[0].chart_points == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("data_status", "synthetic"),
+        (
+            "provenance",
+            {
+                "source_id": "atlas:synthetic-demo",
+                "source_name": "Synthetic fixture",
+                "source_version": "1",
+                "venue": "DEMO",
+                "observed_at": "2026-11-17T12:01:00+00:00",
+            },
+        ),
+        ("latest_close", "101.00"),
+        ("chart_points", [{"data_status": "synthetic"}]),
+    ],
+)
+def test_unavailable_item_rejects_status_provenance_and_price_data(field, value):
+    payload = _payload()
+    item = _make_unavailable(payload["items"][0])
+    item[field] = value
+
+    with pytest.raises(ValidationError):
+        MarketWatchlistResponse.model_validate(payload)
+
+
+def test_available_item_requires_synthetic_provenance_and_chart_data():
+    payload = _payload()
+    payload["items"][0]["provenance"] = None
+
+    with pytest.raises(ValidationError):
+        MarketWatchlistResponse.model_validate(payload)
+
+
+def test_available_item_rejects_unavailable_data_status():
+    payload = _payload()
+    payload["items"][0]["data_status"] = "unavailable"
 
     with pytest.raises(ValidationError):
         MarketWatchlistResponse.model_validate(payload)
