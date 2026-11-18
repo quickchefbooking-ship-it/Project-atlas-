@@ -165,3 +165,32 @@ This is a full exact-path comparison against the 22-entry GitHub snapshot perfor
 The authoritative GitHub repository is public. The complete sanitized Replit manifest contains path names and hashes for 852 Replit tracked files, including Replit-only/internal project structure. Although it contains no source contents and excludes the sensitive path, committing that full path inventory publicly is a separate disclosure decision.
 
 Therefore the full manifest/chunk transfer is **not committed to this public repository pending owner review of the path-list disclosure**. The in-memory exact comparison against the 22 GitHub main paths is recorded above; no manifest data file was persisted and no Replit workspace file was created. The tested chunk assembler remains available for a later owner-approved transfer destination, which may be private rather than this public repository.
+
+
+## Fresh hashed-only comparison checkpoint — 18 November 2026, 14:08 UTC
+
+A fresh read-only Replit inspection and in-memory comparison was completed against the fixed GitHub main manifest at `32471ea720edb5f10ca51aafaf9d45113d4e736c`. The Replit workspace remains clean at `c6bf5686e5ae7f0e66ce113caa506676b46b1382`.
+
+- Tracked paths: 853
+- Hashed paths: 852
+- Excluded before reading or hashing: 1 sensitive configuration/credential category (path and content not disclosed)
+- Unreadable: 0
+- Symlinks: 0
+- Total tracked bytes: 9,194,406
+- Canonical hashed-only manifest: 108,864 bytes; SHA-256 `af0f47b4a4c21dea697368d1e9e44937d50d94a8b68b073e36a35719262274e`
+
+The complete hashed-only path set was compared in memory against the 22-path GitHub snapshot. Results:
+
+| Result | Count |
+|---|---:|
+| Shared exact paths | 5 |
+| Identical content and mode | 0 |
+| Content-different | 5 |
+| Mode-only | 0 |
+| Uncomparable | 0 |
+| Replit-only hashed paths | 847 |
+| GitHub-only paths | 17 |
+
+The excluded path does not intersect the GitHub path set. All five collisions remain the same exact paths listed above, and their metadata values match the earlier checkpoint. The initializer was independently confirmed by UTF-8 hex `61746c61735f6d656469612f5f5f696e69745f5f2e7079`, which decodes to `atlas_media/__init__.py`; `atlas_media/init.py` is absent.
+
+The full manifest was not transferred or persisted. This update records only the aggregate comparison and already-reviewed collision metadata. The public-repository disclosure gate remains in place for the full 852-path inventory. No Replit files, Git refs, settings, secrets, or deployment were changed.
