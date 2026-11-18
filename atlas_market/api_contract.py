@@ -43,13 +43,16 @@ class MarketChartPointContract(_StrictContractModel):
     venue: StrictStr
     observed_at: StrictStr
     delay_seconds: StrictInt | None
-    data_status: Literal["synthetic", "delayed", "indicative", "live"]
+    # This endpoint serves a synthetic fixture only. Other market-quality
+    # states belong to a future separately reviewed provider-backed contract.
+    data_status: Literal["synthetic"]
 
 
 class MarketWatchlistItemContract(_StrictContractModel):
     instrument: MarketInstrumentContract
     availability: Literal["available", "unavailable"]
-    data_status: Literal["synthetic", "delayed", "indicative", "live", "unavailable"]
+    # Do not let the synthetic demo endpoint claim delayed, indicative or live data.
+    data_status: Literal["synthetic", "unavailable"]
     provenance: MarketProvenanceContract | None
     interval: StrictStr | None
     last_bar_end: StrictStr | None
