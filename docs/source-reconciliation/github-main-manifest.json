@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "head_sha": "32471ea720edb5f10ca51aafaf9d45113d4e736c",
+  "branch": "main",
+  "clean_tracked_worktree": true,
+  "untracked_file_count": 0,
+  "tracked_entry_count": 22,
+  "hashed_entry_count": 22,
+  "excluded_entry_count": 0,
+  "complete": true,
+  "errors": [],
+  "entries": [
+    {
+      "path": ".env.example",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "aa5dba32a55f897e6c0e68666c316c4ec3e083ca",
+      "content_kind": "file",
+      "size_bytes": 2619,
+      "sha256": "7ed1c27a2543098d21b04a4fe75725655bf7417698887a87b223e70a2fc7c94d",
+      "excluded_reason": null
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "aa3aae8c20b8e602a0fdcba5aa6a635cd5bca6f7",
+      "content_kind": "file",
+      "size_bytes": 146,
+      "sha256": "eb0eb384eaa985e8771a1f2837c67943a6efb937d0bd8cc35c26ddefddedf728",
+      "excluded_reason": null
+    },
+    {
+      "path": "app.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "693917c46fc3efc4cc9579cd10c62fafad58e7da",
+      "content_kind": "file",
+      "size_bytes": 1106,
+      "sha256": "ff29ca2db24db05e993f60346cb4b06b00e35188107227001c041bca42bb71bf",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/__init__.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "838cc50485e35a941b0e76f343eef2b86cdf13d2",
+      "content_kind": "file",
+      "size_bytes": 378,
+      "sha256": "cfd736e0b9089339a6f154609a846700e42aa4f419790be7d81298fadbaaef4e",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/config.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "bc59c65e1f135d76494ebb4a0ca4eab7e27ab828",
+      "content_kind": "file",
+      "size_bytes": 273,
+      "sha256": "63f8291394313222ee769c3058d59cf96ca37d55a0e70f896e654fe5faf23951",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/evaluator.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "a6dda7d0f6005c8005a1ea6d15696b8fa7e425b0",
+      "content_kind": "file",
+      "size_bytes": 5053,
+      "sha256": "78af353ad7f6851a999e833635986ede9933dcf01d2aea586af16d6e313dc486",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/executor.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "3c69500ed55257b656143edac66c3dfe69de8e1d",
+      "content_kind": "file",
+      "size_bytes": 1093,
+      "sha256": "bcef4d231d3d4b2017926c5df337e55c430b7269259957beaadfb66e81d9a19e",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/improvement.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "21dfb1a78d03b77b3c7c759334a3d949f22e2f16",
+      "content_kind": "file",
+      "size_bytes": 2374,
+      "sha256": "d50cf30cdf559dc521d96c49e05909523c8dece6a7436ad987358b221dfebd6b",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/learning_memory.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "03e50da582e0751b248ed7e414809e496841856c",
+      "content_kind": "file",
+      "size_bytes": 1994,
+      "sha256": "4b55555deca9d77d42d8bfbd04295211639a8136e1f34cad16f003e6fb1ded16",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/safe_testing.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "eb716a1513338d349ffdb814cb4f494bb930acb2",
+      "content_kind": "file",
+      "size_bytes": 1312,
+      "sha256": "1a7ebc0f45ba5b99d55e6ff7cf060c0f812d0a04d0a99532475522f69986a8d3",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/storage.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "89452f90d3ed53d04bef72dbdbd795467f63842b",
+      "content_kind": "file",
+      "size_bytes": 9157,
+      "sha256": "a63877e268d8f682fea020858845eec6b2936b218fa40edf0146f04583f29abf",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_engine/task_manager.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "de0ff7fe98c4954fcf87e7e89e259cfd07b13ce7",
+      "content_kind": "file",
+      "size_bytes": 2591,
+      "sha256": "efd62ae9ed3db1c0a29d3a968dd4ffb584ab0d160daeb37c88b6829bcb844184",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_media/__init__.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "288b8594a2e8fa5dbb6f89afbc9a4163ac597ee2",
+      "content_kind": "file",
+      "size_bytes": 256,
+      "sha256": "c396354426dc2df8b79d5d602a82d5c0f079445fd0e481ad2c6c96a22b48a75b",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_media/audio.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "f87a911b11d9b05d1fc81797d85c1ecf496e8426",
+      "content_kind": "file",
+      "size_bytes": 4151,
+      "sha256": "498ac33f96ac6f628eb8e94f4280f2bc5424e21b25db96f323356ffbe57bffbe",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_media/generate.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "e185a85674f4ff7d8e0f305e6ec1814a34439711",
+      "content_kind": "file",
+      "size_bytes": 2300,
+      "sha256": "edb7c0ddf97028f898b053c8a5bd2eac907978dda86fb023d3c8959dfc45f46",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_media/sources.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "00d6c45c43e1db2ebf0619c6d6a8c587a872bca4",
+      "content_kind": "file",
+      "size_bytes": 149,
+      "sha256": "44ff9c4ae957d67c5c246123fee044e0ca2a4efc2fe2cc9ed68d5f80103b1509",
+      "excluded_reason": null
+    },
+    {
+      "path": "atlas_media/video.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "9c67df16a0e1882c6b5090a349fc4d3956751d87",
+      "content_kind": "file",
+      "size_bytes": 424,
+      "sha256": "ec14130b8fba56001cf9a0c082b0676364c81635057fb1f7f7a3110900787fa4",
+      "excluded_reason": null
+    },
+    {
+      "path": "index.html.",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "32ce3a99a85bbff564ddca30fb3aa18500b6ca4d",
+      "content_kind": "file",
+      "size_bytes": 27,
+      "sha256": "e9a794df94284ae0598a824d74fc9bbccf7b9312d29781a82f10e4dfe97a2d0c",
+      "excluded_reason": null
+    },
+    {
+      "path": "requirements.txt",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "e5c68b6d89cb49d4f5dbe6e722e476ff5a8b7486",
+      "content_kind": "file",
+      "size_bytes": 4749,
+      "sha256": "043d93df963b8746dd2049fd9048cdc436a833de520f1378876544ba3cd51b6a",
+      "excluded_reason": null
+    },
+    {
+      "path": "sample_task.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "0601a524d71005f145119ce4ef4aeb3230e5b3e2",
+      "content_kind": "file",
+      "size_bytes": 5800,
+      "sha256": "fab36d31d98c9f4a72904e585a8bfc223e9f120f1bf4ba23259b3e34b344af0e",
+      "excluded_reason": null
+    },
+    {
+      "path": "tests/test_learning_engine.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "de9945bebe9201f6486235ad46fee5a4faa41ef1",
+      "content_kind": "file",
+      "size_bytes": 98,
+      "sha256": "738251224979d5740dc9a1bff105c9facacaa99d67ee5da513ff445c0864a697",
+      "excluded_reason": null
+    },
+    {
+      "path": "tests/test_media_generation.py",
+      "mode": "100644",
+      "object_type": "blob",
+      "object_sha": "a991c48af449f644a2f1e124a03e35434a105d6c",
+      "content_kind": "file",
+      "size_bytes": 3338,
+      "sha256": "c1a620fad1461402e04f84804481f88689d7d4101b6a1a503eee2e2de32bd902",
+      "excluded_reason": null
+    }
+  ],
+  "manifest_sha256": "c40e687f0d044dac998cb4a92440b983b003635b5c6cd4724c0113b503017dd2"
+}
