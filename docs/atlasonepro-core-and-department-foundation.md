@@ -183,7 +183,24 @@ Required acceptance tests:
 
 Exit gate: one repeatable synthetic end-to-end demonstration and an operator dashboard, with no production writes, live customer messaging, payment activation or unapproved provider connection.
 
-### Phase 3 — Finance and Hospitality foundations
+### Phase 3 — Atlas Market Intelligence & Trading (paper-only)
+
+Build a broker-independent market research and simulated-trading department. Support all major market categories over staged, provider-verified integrations: equities and ETFs, FX, cryptoassets, indices and commodities where lawful market-data access and a suitable instrument/data provider exist. "All markets" is the long-term coverage objective, not a claim that every broker offers every instrument or that every feed is available in every jurisdiction.
+
+1. Establish the department boundary separately from business Finance, Atlas subscription billing and personal financial records.
+2. Build provider-neutral instrument, quote, OHLCV candle, corporate-action, trading-session, currency, spread and market-data provenance contracts.
+3. Implement market-data adapters behind explicit provider configuration and documented data-licensing checks. Assess Trading 212 first for eligible read-only account/portfolio access and its supported demo capabilities; assess other brokers/data vendors independently. Never assume API feature parity.
+4. Build a charting and market-monitoring workspace with configurable watchlists, timeframes, candles, volume, indicators, alerts and clear stale/delayed-data labels.
+5. Build a strategy research lab with versioned strategies, deterministic backtests, realistic fees/spread/slippage assumptions, no look-ahead leakage, train/test separation, walk-forward evaluation and benchmark comparisons.
+6. Build an internal paper-trading engine that simulates orders, fills, positions, cash, fees, P&L and risk. Use real market data only where licensing and provider terms allow; otherwise label fixtures/synthetic feeds clearly.
+7. Add risk controls: per-strategy and portfolio exposure limits, maximum simulated loss/drawdown, concentration limits, order-size caps, market/session checks, duplicate-order protection, cancellation and an emergency stop.
+8. Add Professor explanations with source timestamps, assumptions, uncertainty, strategy version, signal inputs and risk metrics. Signals are hypotheses, not promises or personalised investment advice.
+9. Add an audit and performance dashboard covering signals, rejected trades, simulated orders, fills, open positions, drawdown, fees and strategy versions.
+10. Keep live broker order execution absent or unreachable in this phase. Any future live-trading proposal requires a separate legal/regulatory review, broker-specific design, explicit owner approval and a new security review.
+
+Exit gate: reproducible paper-trading demonstration across representative asset classes, robust backtest and risk tests, clear market-data provenance, and automated proof that no live order can be submitted.
+
+### Phase 4 — Finance and Hospitality foundations
 Finance:
 1. Approve the initial chart-of-accounts model and record types.
 2. Implement organisation-owned income/expense and invoice/bill records with immutable audit history.
@@ -198,13 +215,13 @@ Hospitality:
 
 Exit gate: finance records reconcile in tests; Hospitality can fail independently; no live Quick Chef data or payments are changed.
 
-### Phase 4 — HR and Legal foundations
+### Phase 5 — HR and Legal foundations
 Build restricted records, role matrices, retention rules, approval steps and audit trails. Keep payroll execution and legal filing/signature actions out of scope until separately approved.
 
-### Phase 5 — Velvet foundations
+### Phase 6 — Velvet foundations
 Complete the 18+ safety, age-assurance, consent, moderation, privacy and separate commercial architecture before any public-facing launch or sensitive data collection.
 
-### Phase 6 — Integration and commercial readiness
+### Phase 7 — Integration and commercial readiness
 Add additional arms one at a time, complete security/privacy review, operational support, backup/restore, accessibility, load and mobile testing, then conduct a controlled pilot. Commercial launch is a separate human approval gate.
 
 ## 7. Acceptance criteria for the foundation
