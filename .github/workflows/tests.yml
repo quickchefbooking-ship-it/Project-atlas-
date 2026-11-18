@@ -10,11 +10,13 @@ on:
       - "tools/source_manifest.py"
       - "tests/test_source_manifest.py"
       - ".github/workflows/tests.yml"
+      - "docs/source-reconciliation/**"
   pull_request:
     paths:
       - "tools/source_manifest.py"
       - "tests/test_source_manifest.py"
       - ".github/workflows/tests.yml"
+      - "docs/source-reconciliation/**"
 
 permissions:
   contents: read
