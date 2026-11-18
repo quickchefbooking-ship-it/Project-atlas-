@@ -42,6 +42,6 @@ def test_professor_chat_reports_actual_provider_and_does_not_fake_failed_turns()
     assert send_function.index('request("/professor/conversation"') < send_function.index(
         'bubble("user",value)'
     )
-    assert 'bubble("assistant","I couldn\\'t complete that response:' not in send_function
+    assert "bubble(\"assistant\",\"I couldn't complete that response:" not in send_function
     assert "The server may have completed the turn" in send_function
     assert 'if(input.value.trim()===value)input.value=""' in send_function
