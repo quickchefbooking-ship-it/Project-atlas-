@@ -128,7 +128,14 @@ def test_candle_rejects_naive_timestamps_and_interval_mismatch():
             complete=True, provenance=provenance(),
         )
     with pytest.raises(MarketDataValidationError, match="exactly match interval"):
-        candle(interval="5m")
+        OHLCVBar(
+            instrument_id=INSTRUMENT.instrument_id,
+            interval="5m",
+            start_at=START,
+            end_at=START + timedelta(hours=1),
+            open="100", high="110", low="90", close="105", volume="1",
+            complete=True, provenance=provenance(),
+        )
 
 
 def test_candle_rejects_invalid_completeness_and_provenance_status():
