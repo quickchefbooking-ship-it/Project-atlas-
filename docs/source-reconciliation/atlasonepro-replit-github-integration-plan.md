@@ -33,14 +33,14 @@ This document records a safe path to bring the Replit multi-artifact application
 
 ### Tree comparison
 
-- Four paths have the same names in both trees; all four have materially different contents.
-- 842 paths are Replit-only.
-- 18 paths are GitHub-only.
+- Five exact path names are shared by the two trees; all five have materially different contents.
+- 841 paths are Replit-only.
+- 17 paths are GitHub-only.
 - The histories have not been reconciled; a shared Git ancestor has not been established.
 
-A previous inventory incorrectly treated `atlas_media/init.py` and `atlas_media/__init__.py` as the same path. They are distinct filenames: Replit tracks `atlas_media/init.py` (149 bytes), while GitHub tracks `atlas_media/__init__.py` (256 bytes). This correction changes the shared-path count from five to four, the Replit-only count from 841 to 842, and the GitHub-only count from 17 to 18. The two files must be preserved independently.
+The earlier inventory incorrectly rendered the Replit initializer path without its literal double underscores. Exact membership checks against the Replit CSV confirm that atlas_media/__init__.py is present and atlas_media/init.py is absent. The Replit file is 149 bytes; the GitHub file at the same exact path is 256 bytes. This is a fifth same-name/different-content collision, not two distinct paths.
 
-**Manifest status:** the complete GitHub `main` manifest is now recorded at `docs/source-reconciliation/github-main-manifest.json`. It was generated from a clean checkout of commit `32471ea720edb5f10ca51aafaf9d45113d4e736c`: 22 tracked entries, 22 content hashes, zero exclusions, no unreadable objects, and overall manifest SHA-256 `c40e687f0d044dac998cb4a92440b983b003635b5c6cd4724c0113b503017dd2`. The Replit-side manifest has now been generated and verified from the committed workspace HEAD `1cf8d1151c894bb45c1a32f4829d1945fec26d2b` on branch `main`: tracked worktree clean, 846 tracked entries, 760 hashed, 86 excluded, zero symlinks, no unreadable objects, and CSV SHA-256 `11c749dd4798bd285d1e83e8909e4e6be7e4441dd088347cf0e73452889fd09b`. The export is at `/tmp/atlas-head-manifest.csv` in the Replit container only; it is not yet persisted in GitHub or available as a downloadable attachment. One sensitive path, `.npmrc`, was explicitly reclassified and excluded without reading or hashing its contents. The other 85 exclusions are generated/runtime/test-evidence artifacts. The path-level comparison remains to be completed from the full CSV.
+**Manifest status:** the complete GitHub main manifest is recorded at docs/source-reconciliation/github-main-manifest.json. It was generated from a clean checkout of commit 32471ea720edb5f10ca51aafaf9d45113d4e736c: 22 tracked entries, 22 content hashes, zero exclusions, no unreadable objects, and overall manifest SHA-256 c40e687f0d044dac998cb4a92440b983b003635b5c6cd4724c0113b503017dd2. The Replit-side CSV was verified from workspace HEAD 1cf8d1151c894bb45c1a32f4829d1945fec26d2 on branch main: clean tracked worktree, 846 rows, 760 hashed, 86 excluded, zero symlinks, no unreadable objects, 104,987 bytes, and CSV SHA-256 11c749dd4798bd285d1e83e8909e4e6be7e4441dd088347cf0e73452889fd09b. The file remains at /tmp/atlas-head-manifest.csv in the Replit container and is not yet persisted in GitHub. A read-only exact-string comparison against all 22 GitHub paths found five shared paths (all content-different), 17 GitHub-only paths, and 841 Replit-only paths. The five collisions are listed in the collision report. The sensitive .npmrc path was excluded without reading or hashing its contents; the other 85 exclusions are generated/runtime/test-evidence artifacts.
 
 Representative Replit-specific areas that must be preserved include:
 
@@ -53,7 +53,7 @@ Representative Replit-specific areas that must be preserved include:
 
 Representative GitHub-only areas include `app.py`, `atlas_engine/**`, `atlas_media/**`, `requirements.txt`, and the GitHub repository's tests. These must not be treated as replacements for similarly named Replit modules.
 
-**Exact-path comparison warning:** a follow-up automated comparison response incorrectly treated Replit `atlas_media/init.py` as the same path as GitHub `atlas_media/__init__.py`, and also rendered GitHub `atlas_engine/__init__.py` without its literal double underscores. The supplied GitHub manifest confirms the exact GitHub spellings; the Replit inventory records `atlas_media/init.py`. Discard that derived five-shared-path result. The corrected inventory remains four shared names (all different content), 842 Replit-only paths and 18 GitHub-only paths. Do not normalize, strip underscores, case-fold or otherwise rewrite paths during the final diff. Because the full Replit CSV is not yet persisted in GitHub, the exact path-level comparison must be rerun mechanically once it can be transferred.
+**Exact-path comparison correction:** the Replit CSV was queried using exact Python string equality against all 22 literal GitHub main paths. The CSV's exact initializer path was independently checked using UTF-8 hex: it is atlas_media/__init__.py (23 bytes as a path string), not atlas_media/init.py. The exact comparison found five shared names, all five content-different; 17 GitHub paths are absent from Replit, leaving 841 Replit-only paths. An earlier response rendered double underscores incorrectly and must be disregarded. Never normalize, strip underscores, case-fold, or otherwise rewrite paths. The full CSV remains in the Replit container and is not yet persisted in GitHub, so the complete 846-row comparison still needs to be run from the committed artifact.
 
 ## Runtime routing verified from the Replit workspace
 
@@ -90,7 +90,7 @@ Consequently:
 
 The five focused tests for `tools/source_manifest.py` passed locally in an isolated Git fixture and then passed on GitHub Actions run #2174 at commit `ddd0662b6cd29d80b9ce4a609fc24c96762c510b` (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
 
-GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. The latest PR #65 head `bb3cd102d7c84c166819dbdc1908bd21b91a0a1c` passed exact-head Actions run #2198 (5 manifest regression tests passed); the authoritative GitHub `main` manifest generation step also completed successfully.
+GitHub Actions run #2176 at commit `4bc9e7841c8d346e52368ab837f047c17ef8a34f` also completed successfully. It generated the authoritative GitHub `main` manifest from a clean checkout and ran the same five regression tests (5 passed). The resulting complete manifest is committed at `docs/source-reconciliation/github-main-manifest.json`. The latest pre-comparator PR #65 source-manifest workflow completed successfully. This update adds tools/compare_source_manifests.py, which compares the Replit CSV schema with the GitHub JSON manifest using exact path-string equality, verifies manifest integrity inputs, separates content differences from mode-only differences, and marks excluded entries uncomparable. Five new regression tests cover the literal double-underscore initializer path, content collisions, mode-only changes, excluded entries, duplicate paths, dirty snapshots, and CSV digest validation. Exact-head CI for this addition is pending.
 
 ### Baseline dependency-file finding
 
@@ -117,7 +117,7 @@ For every path, classify it as:
 - Generated, ignored, or environment-specific
 - Secret-bearing or otherwise excluded from source control
 
-The four same-name/different-content paths require explicit human review. The separate `atlas_media/init.py` and `atlas_media/__init__.py` files must remain distinct. No automated overwrite or "take newest" rule is acceptable.
+The five same-name/different-content paths require explicit human review, including `atlas_media/__init__.py`. No automated overwrite or "take newest" rule is acceptable.
 
 ### 3. Choose an integration layout
 
@@ -159,4 +159,4 @@ Only after code review and explicit owner approval should the deployment source 
 
 ## Current next action
 
-Persist the verified Replit CSV manifest into the reconciliation record through a safe transfer, then compare all 846 Replit paths mechanically with the 22-entry GitHub `main` manifest. Confirm the four previously identified same-name/different-content collisions and review all exclusions before proposing an integration layout. PR #64 already contains the GitHub build-revision endpoint; it must remain a draft until its worker and source-reconciliation gates are reviewed. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
+Persist the verified Replit CSV through a safe transfer, then run the new exact-path comparator against the 22-entry GitHub main manifest and retain the full 846-row result. The filtered exact comparison already establishes five shared names (all content-different), 17 GitHub-only paths and 841 Replit-only paths; review all 86 exclusions before proposing an integration layout. PR #64 already contains the single GitHub build-revision endpoint and passed exact-head CI; it remains draft-only. The Replit API still returns 404 for `/api/build-info`, so deployed revision proof remains open. Until both manifests and a clean-checkout integration plan exist, do not copy, overwrite, merge, add remotes, or publish either source tree.
