@@ -22,7 +22,7 @@ def write_chunk(directory, number, rows):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"chunk-{number:03d}.csv"
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, lineterminator="\\n")
+        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     return path
@@ -80,7 +80,15 @@ def test_rejects_unsorted_and_duplicate_paths(tmp_path):
 
 @pytest.mark.parametrize(
     "unsafe_path",
-    ["/absolute.py", "../outside.py", "a/../outside.py", "a//b.py", "./file.py", "a/./b.py", "a/"],
+    [
+        "/absolute.py",
+        "../outside.py",
+        "a/../outside.py",
+        "a//b.py",
+        "./file.py",
+        "a/./b.py",
+        "a/",
+    ],
 )
 def test_rejects_non_repository_relative_paths(tmp_path, unsafe_path):
     chunks = tmp_path / "chunks"
@@ -132,7 +140,7 @@ def test_rejects_row_count_and_digest_mismatch(tmp_path):
 def test_rejects_invalid_header_and_empty_chunk(tmp_path):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
-    (chunks / "chunk-001.csv").write_text("path,mode\\na.py,100644\\n", encoding="utf-8")
+    (chunks / "chunk-001.csv").write_text("path,mode\na.py,100644\n", encoding="utf-8")
     with pytest.raises(ValueError, match="header"):
         assemble_chunks(chunks, expected_row_count=1)
 
