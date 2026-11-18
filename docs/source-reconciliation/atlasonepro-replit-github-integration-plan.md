@@ -84,6 +84,12 @@ Consequently:
 - The exact deployed source SHA remains unknown because the published API does not expose build metadata.
 - No files, environment settings, secrets, remotes, workflows, or deployments were changed during this audit.
 
+## Manifest tooling validation
+
+The five focused tests for `tools/source_manifest.py` passed in an isolated local Git fixture (5 passed). They cover committed-blob hashing and deterministic output, executable modes, symlink-target hashing without following links, sensitive/generated-path exclusion and non-disclosure, dirty-worktree reporting, and Git LFS pointer handling.
+
+PR #65 also carries the same read-only `.github/workflows/tests.yml` workflow already used by the active worker branch, with actions pinned to full commit SHAs and only `contents: read` permission. No GitHub Actions run has yet been observed for PR #65's latest head after the API-authored commits. The local five-test result is not being represented as exact-head CI.
+
 ## Safe integration sequence
 
 ### 1. Preserve immutable source snapshots
