@@ -22,7 +22,7 @@ def write_chunk(directory, number, rows):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"chunk-{number:03d}.csv"
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, lineterminator="\\n")
         writer.writeheader()
         writer.writerows(rows)
     return path
@@ -78,6 +78,37 @@ def test_rejects_unsorted_and_duplicate_paths(tmp_path):
         assemble_chunks(chunks, expected_row_count=2)
 
 
+@pytest.mark.parametrize(
+    "unsafe_path",
+    ["/absolute.py", "../outside.py", "a/../outside.py", "a//b.py", "./file.py", "a/./b.py", "a/"],
+)
+def test_rejects_non_repository_relative_paths(tmp_path, unsafe_path):
+    chunks = tmp_path / "chunks"
+    write_chunk(chunks, 1, [row(unsafe_path)])
+    with pytest.raises(ValueError, match="repository-relative"):
+        assemble_chunks(chunks, expected_row_count=1)
+
+
+def test_rejects_symlinked_chunk_file(tmp_path):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    source = write_chunk(tmp_path / "source", 1, [row("a.py")])
+    (chunks / "chunk-001.csv").symlink_to(source)
+
+    with pytest.raises(ValueError, match="regular chunk CSV"):
+        assemble_chunks(chunks, expected_row_count=1)
+
+
+def test_rejects_symlinked_chunk_directory(tmp_path):
+    source_dir = tmp_path / "source"
+    write_chunk(source_dir, 1, [row("a.py")])
+    chunks = tmp_path / "chunks"
+    chunks.symlink_to(source_dir, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="real directory"):
+        assemble_chunks(chunks, expected_row_count=1)
+
+
 def test_rejects_excluded_rows_in_sanitized_transfer(tmp_path):
     chunks = tmp_path / "chunks"
     excluded = row(".env")
@@ -101,7 +132,7 @@ def test_rejects_row_count_and_digest_mismatch(tmp_path):
 def test_rejects_invalid_header_and_empty_chunk(tmp_path):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
-    (chunks / "chunk-001.csv").write_text("path,mode\na.py,100644\n", encoding="utf-8")
+    (chunks / "chunk-001.csv").write_text("path,mode\\na.py,100644\\n", encoding="utf-8")
     with pytest.raises(ValueError, match="header"):
         assemble_chunks(chunks, expected_row_count=1)
 
