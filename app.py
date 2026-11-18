@@ -333,6 +333,27 @@ def professor_sources_ui():
     return FileResponse(Path(__file__).resolve().parent / "static" / "professor_sources.html", media_type="text/html")
 
 
+def _validated_build_revision():
+    """Return only a full, valid Git SHA from deployment-owned build metadata."""
+    for variable in ("ATLAS_BUILD_REVISION", "GITHUB_SHA"):
+        candidate = os.getenv(variable, "").strip()
+        if len(candidate) == 40 and all(char in "0123456789abcdefABCDEF" for char in candidate):
+            return candidate.lower(), variable
+    return None, None
+
+
+@app.get("/build-info")
+def build_info():
+    """Expose non-secret build provenance; never infer a revision from runtime state."""
+    revision, source = _validated_build_revision()
+    return {
+        "service": "AtlasOnePro",
+        "revision": revision,
+        "revision_available": revision is not None,
+        "revision_source": source,
+    }
+
+
 @app.get("/health")
 def health():
     return api.health()
