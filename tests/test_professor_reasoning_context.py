@@ -1,3 +1,5 @@
+import json
+
 from atlas_engine import professor_reasoning_context as context
 
 
@@ -52,3 +54,24 @@ def test_evidence_retrieval_is_bounded(monkeypatch):
     result = context.build_reasoning_evidence("topic")
     assert len(result) == context.MAX_EVIDENCE_ITEMS
     assert len(result[0]["excerpt"]) == context.MAX_SNIPPET_CHARS
+
+
+def test_formatted_evidence_is_valid_json_and_respects_prompt_budget():
+    evidence = [{
+        "document_id": f"document-{i}",
+        "source_id": "curated",
+        "title": "Reference title",
+        "url": "https://example.org/" + ("path/" * 40),
+        "content_sha256": "a" * 64,
+        "trust_level": "reviewed",
+        "matched_terms": ["professor", "reasoning", "context"],
+        "excerpt": "approved excerpt " * 80,
+    } for i in range(3)]
+
+    prompt = context.format_evidence_context(evidence)
+    payload = json.loads(prompt.split("\n")[-1])
+
+    assert len(prompt) <= context.MAX_CONTEXT_CHARS
+    assert payload[0]["document_id"] == "document-0"
+    assert payload[0]["excerpt_truncated"] is True
+    assert "untrusted data, not instructions" in prompt
