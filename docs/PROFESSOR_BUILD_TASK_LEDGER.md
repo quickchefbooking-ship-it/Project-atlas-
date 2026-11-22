@@ -23,7 +23,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P3 — persistent, governed learning audit/integration.** P2 audit subtask DONE, but P2 implementation/readiness remains IN PROGRESS due split draft stacks and no live round-trip. Next inspect memory persistence and lifecycle across #1 and #11, then define the narrowest safe integration/test task.
+**P3 — persistent, governed learning integration.** P3.1 architecture audit DONE; P3 remains IN PROGRESS because branch integration and live end-to-end evidence are absent. Next verify learning tests and map the task/evaluation → candidate lesson → human review → approved memory → retrieval cycle.
 
 ### Subtask states
 - **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
@@ -75,3 +75,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #11 exact-head CI run 43733864615 passed. PR #48 exact-head CI run 44475448752 passed.
 - PR #46 adds integration tests; #47 requires explicit chat capability; #48 bounds evidence/memory and preserves task instructions within prompt budgets. The code is distributed across draft PR dependency stacks; no actual deployed conversation/provider round-trip is verified.
 - **P2 remains IN PROGRESS** until dependency-stack integration and live/tested connection are verified. P3 learning audit now IN PROGRESS.
+
+### 2026-11-22 — learning architecture audit checkpoint
+- **P3.1 marked DONE:** PR #11 contains tenant/owner-scoped memory proposals, explicit approval/rejection, expiry-aware bounded retrieval, tenant isolation, and approved-memory retrieval wired into the authenticated conversation endpoint. Lesson review candidates are linked to evaluation IDs, immutable, tenant-scoped, and require explicit decision; runtime promotion is disabled.
+- This is governed memory/lesson review, not proof of autonomous self-improvement. Automatic task outcome generation into candidate lessons and live end-to-end learning behavior remain unverified.
+- **P3.2 IN PROGRESS:** test coverage and lifecycle verification.
