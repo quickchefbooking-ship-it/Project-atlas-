@@ -17,6 +17,8 @@
 | #76 response contract | `40c4395` | 44390312814 | success | 289 passed | draft / unmerged |
 | #79 explicit feedback candidate | `afb962c` | 45046430157 | success | 783 passed | draft / unmerged |
 | #80 lesson → pending memory proposal | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged |
+| #81 chat/provider + learning integration | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged; base #48 |
+| #82 worker/OIDC compatibility probe | `7aa6e9b` | 44178610630 | success | 1174 passed | mergeable draft; run verified against PR #64 base, not PR #82 combined base |
 
 ## Confirmed integration coverage
 - #46–#48: session/conversation integration, explicit chat capability, bounded prompt composition.
