@@ -339,3 +339,16 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. Initial static read-back shows helper uses a unique UUID savepoint for nested writes and begins/commits/rolls back only when it owns the transaction. This task adds a stronger failure point and re-verifies the exact source.
 - **Scope/cost:** code/test only on PR #85 child branch; £0. No merge/deploy/production changes, secrets, payments, or provider activation.
 - **Next:** patch the regression, wait for the latest exact-head CI, and update this status with evidence.
+
+### 2026-11-22 — P5.21 and P5.22 DONE: atomicity fix exact-head CI passed
+- PR #85 latest head: `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d`. Exact PR merge-ref run **45054846603** checked out merge commit `1d76605` (PR head f7cc1 merged with base c58f5856); job `test` succeeded. Test log: **1187 passed, 1 warning in 19.91s**.
+- The strengthened failure test now calls the original audit append (inserting the audit record within the outer transaction), then raises an SQLite error; assertions verify **0 conversations, 0 messages, 0 audits**. Thus it exercises rollback after the nested audit savepoint has released, not merely a failure before writing.
+- P5.21 atomic transaction implementation and P5.22 static/rollback audit are **DONE at code + exact PR merge-ref CI level**. PR #85 remains draft/open/unmerged. No live deployment/runtime claim.
+- Evidence: run `https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45054846603`; PR `https://github.com/quickchefbooking-ship-it/Project-atlas-/pull/85`.
+- Cost/scope: GitHub Actions test only; no paid services/credits, provider activation, merge, deployment, production migration, secrets, or external writes.
+
+### 2026-11-22 — P5.23 IN PROGRESS: audit integrated chat/session/learning runtime coverage
+- **Task ID:** P5.23. Intended result: confirm what exact-head CI proves across authenticated browser-session -> tenant conversation -> reasoning/provider fixture -> persistent history/audit/approved memory; identify remaining runtime-only release blockers without activating any provider or hosted service.
+- **Status:** IN PROGRESS. PR #85 exact merge-ref CI passed 1187 tests; inspect the targeted integration/security tests and reconcile against P5 release blocker register.
+- **Cost/scope:** GitHub-only read/audit; £0. No deployment, live credentials, provider calls, production data, merge, or external write.
+- **Next:** finish test/readiness evidence review, update status and next action.
