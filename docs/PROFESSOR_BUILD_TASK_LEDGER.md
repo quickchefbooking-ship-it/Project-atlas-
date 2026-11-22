@@ -144,3 +144,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.1 DONE:** created `docs/PROFESSOR_RELEASE_SMOKE_CHECKLIST.md` covering approvals, configuration/secrets, health/readiness, identity/tenancy, iPhone Safari, local reasoning, learning, worker safety, evidence and rollback.
 - Current readiness code reports hosted login services missing/not implemented and `live_provider_round_trip_verified=false`. The local provider guide confirms self-hosted-first configuration but requires same-host setup and a real conversation test.
 - **P5 remains BLOCKED** until a safe runtime target and deployment/test approval exist; no deployment was performed.
+
+### 2026-11-22 — P5.2 local runtime bring-up prepared
+- **P5.2 DONE (documentation preparation only):** added `docs/PROFESSOR_LOCAL_RUNTIME_BRINGUP.md` with loopback-only setup, provider-off first smoke, health/readiness/UI checks, cleanup, and evidence requirements.
+- **P5 runtime execution BLOCKED:** no local computer/runtime execution is available from the GitHub connector; the user or approved test environment must run the documented smoke test and return exact evidence. No public exposure or deployment.
+- Next: continue safe code/test review while runtime evidence remains pending; identify any further release blockers without altering deployment settings.
