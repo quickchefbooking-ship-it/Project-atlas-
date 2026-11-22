@@ -196,7 +196,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.9 DONE (audit only)** — Compared PR #84 branch to PR #48: diverged, 139 ahead/3 behind, merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1. Four changed-file overlaps: reasoning pipeline, chat HTML, chat UI tests, and pipeline tests. PR #84 branch includes PR #48 prompt-budget/context test changes but has additional hosted-session/auth and history-limit changes. No merge/rebase/bulk transfer attempted; connector cannot expose PR mergeability directly.
 - **P5.10 DONE (read-back audit)** — Read all five files from PR #84 exact branch head d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73; 9/9 assertions passed: shared 22-message constant, API limit, pipeline guard, API and pipeline regressions, and 23-message rejection. No residual API limit=23 found. CI still unverified.
 - **P5.11 DONE (audit)** — PR #84 conversation endpoint checks verified principal plus explicit professor:chat scope before provider work; missing provider fails closed. Tests assert provider failure leaves zero conversation/message rows and >4000-character output leaves zero rows. Provider exception detail is not exposed; API returns a generic 503. append_turn writes the user/assistant pair atomically.
-- **P5.12 IN PROGRESS** — Inspect conversation + reasoning-audit persistence ordering for partial-state risk. Intended result: verify transaction boundaries and identify whether the response's retry warning accurately describes failure cases.
+- **P5.12 DONE (audit)** — Verified separate commits: append_turn commits the user/assistant pair first, then reasoning-audit append starts its own transaction. If the audit write fails, conversation content can remain saved without an audit record and API returns 503. This is a consistency gap; the UI already warns to refresh before retry. No atomic cross-repository transaction is implemented.
+- **P5.13 IN PROGRESS** — Improve 503 wording and add regression test for audit-write failure after successful turn persistence, so users are told to refresh before retrying. Intended result: explicit, accurate error guidance and test evidence.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -221,3 +222,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #84 endpoint read-back: verified identity principal dependency and explicit professor:chat scope check precede provider work; service/config failure returns 503 before conversation creation; memory read requires memory:read; user and assistant turn writes are atomic through append_turn.
 - Regression tests exist for provider failure (0 conversation rows/0 messages), provider output over 4000 chars (0 rows), and missing chat scope (403). Provider exception detail is hidden behind a generic 503. P5.11 DONE (audit evidence only).
 - P5.12 IN PROGRESS: inspect conversation persistence and audit write ordering for potential consistency gap after provider success.
+
+
+### 2026-11-22 — P5.12 persistence audit complete; P5.13 started
+- Confirmed API order: atomic conversation append_turn commits the user/assistant pair, then the separate audit repository appends. A post-turn audit failure can leave a persisted turn without an audit entry. This is not a provider failure; route returns storage 503.
+- Current UI warning already says server may have completed and to refresh before retry. API error wording is less precise. P5.12 DONE (audit only); cross-table atomicity is a remaining consistency gap.
+- **P5.13 IN PROGRESS** — tighten 503 guidance and add a focused regression for post-save audit failure; no external action or deployment.
