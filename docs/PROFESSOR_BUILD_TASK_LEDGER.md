@@ -200,7 +200,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.13 VERIFY** — API storage-error guidance updated and a focused test added on PR #84 branch. Read-back checks pass, but exact-head CI is unavailable through this connector; the test intentionally documents current post-save audit failure state (turn saved, audit absent) and asserts refresh-before-retry guidance.
 - **P5.14 DONE (audit/design)** — Conversation turn and reasoning-audit writes use separate transactions. Smallest safe fix is a shared transaction context supporting nested savepoints, with API outer transaction around append_turn + audit.append. Acceptance: audit failure rolls back both rows; success persists both; chain verification remains valid; standalone repository tests continue passing. No code refactor attempted without CI evidence.
 - **P5.15 DONE (audit)** — Repository is scoped by verified tenant_id + hashed issuer/subject owner_key; read/write/delete scopes are enforced; IDs/content bounds are validated; 200-message cap; recent retrieval ordered correctly; delete cascades content and leaves minimal tombstone; append-only trigger and cross-owner/tenant tests exist. No gap found in reviewed paths.
-- **P5.16 IN PROGRESS** — Audit delete/privacy behavior across conversation messages and reasoning-audit records. Intended result: clarify what is erased vs retained and verify disclosure matches data lifecycle.
+- **P5.16 DONE (audit)** — DELETE removes the conversation row and cascades message content; the deletion log retains only tenant/owner pseudonym/conversation ID. Reasoning-audit records are separate, append-only, and remain after conversation deletion: hashes, provider/model, evidence references, and limited metadata. The UI confirmation does not disclose this retention; transparency gap identified.
+- **P5.17 IN PROGRESS** — Add accurate deletion confirmation disclosure for retained append-only audit data and regression test. Intended result: user sees what is erased and what remains; no retention-policy changes.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -248,3 +249,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — P5.15 repository isolation/retention audit complete; P5.16 deletion audit started
 - Repository inspection confirms all conversation queries include tenant_id and owner_key, owner key is pseudonymous, read/write/delete scopes are checked, message roles/content/IDs are validated, max 200 stored messages, and retrieval returns ordered bounded recent history. Tests cover cross-user/cross-tenant isolation, same-ID owner separation, scopes, deletion cascade, tombstone minimality, append-only, and limits.
 - P5.15 DONE (audit only). **P5.16 IN PROGRESS**: inspect delete route and reasoning-audit retention to ensure privacy behavior is explicit.
+
+
+### 2026-11-22 — P5.16 deletion/privacy audit complete; P5.17 started
+- DELETE route calls conversation repository delete only. FK cascade removes stored messages; deletion tombstone keeps tenant/owner pseudonym/conversation ID, no message text. Separate reasoning-audit table is append-only (no UPDATE/DELETE triggers) and has no conversation FK; audit records persist after conversation deletion, retaining request/response/context hashes, provider/model, evidence references and limited metadata.
+- P5.16 DONE (audit only). Transparency gap: current confirmation says message content is deleted but does not disclose retained audit. **P5.17 IN PROGRESS**: add truthful disclosure and UI regression; do not change audit retention policy.
