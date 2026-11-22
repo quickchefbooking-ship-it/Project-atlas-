@@ -88,4 +88,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 ### 2026-11-22 — learning loop design checkpoint
 - **P3.3 marked DONE:** safe workflow design documented. Candidate creation is deterministic from explicit user feedback, pending only, evidence-linked, bounded, and requires independent approval; no prompt/runtime promotion.
-- **P3.4 IN PROGRESS:** implement this narrow feedback-to-candidate path on an isolated branch, with tests.
+- **P3.4 VERIFY:** implementation on draft PR #79; workflow run 45046319590 has test step completed successfully, final job status still in progress when checked.
+
+### 2026-11-22 — feedback-to-candidate implementation checkpoint
+- Draft PR #79 adds deterministic pending lesson candidate creation from explicit negative/partial feedback, only when `lessons:propose` scope is present. Candidate text is bounded, linked to evaluation ID, pending, requires independent review, and runtime promotion is disabled.
+- Tests added: negative feedback creates a pending candidate linked to the evaluation; positive feedback does not create one.
+- Exact head: `afb962cbe8043cdf90c56417a69fb8195c31065c`. Workflow run 45046319590: dependency installation succeeded and test step completed successfully; overall job finalization was still in progress at checkpoint.
+- **P3.4 VERIFY** until overall CI finishes.
