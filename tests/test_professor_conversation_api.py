@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 
 from fastapi import FastAPI
@@ -441,3 +442,43 @@ def test_conversation_requires_explicit_professor_chat_scope(tmp_path):
     ).fetchone()[0]
     db.close()
     assert count == 0
+
+
+
+def test_delete_retains_minimal_append_only_reasoning_audit_without_raw_content(tmp_path):
+    client, db_path = make_client(tmp_path)
+    request_text = "Private deletion-test prompt"
+    created = client.post("/professor/conversation", json={"message": request_text})
+    assert created.status_code == 200
+    conversation_id = created.json()["conversation_id"]
+    response_text = created.json()["response"]
+
+    deleted = client.delete(f"/professor/conversations/{conversation_id}")
+    assert deleted.status_code == 204
+
+    db = sqlite3.connect(db_path)
+    messages = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_messages"
+    ).fetchone()[0]
+    tombstones = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_deletions "
+        "WHERE conversation_id=?",
+        (conversation_id,),
+    ).fetchone()[0]
+    audit = db.execute(
+        "SELECT request_sha256,response_sha256,context_sha256,provider,model,"
+        "evidence_json,metadata_json,record_hash FROM tenant_professor_reasoning_audit "
+        "WHERE conversation_id=?",
+        (conversation_id,),
+    ).fetchone()
+    db.close()
+
+    assert messages == 0
+    assert tombstones == 1
+    assert audit is not None
+    assert audit[0] == hashlib.sha256(request_text.encode("utf-8")).hexdigest()
+    assert audit[1] == hashlib.sha256(response_text.encode("utf-8")).hexdigest()
+    assert len(audit[2]) == 64
+    assert request_text not in str(tuple(audit))
+    assert response_text not in str(tuple(audit))
+    assert len(audit[7]) == 64
