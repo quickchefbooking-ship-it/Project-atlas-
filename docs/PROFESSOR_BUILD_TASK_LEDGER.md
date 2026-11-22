@@ -491,7 +491,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub-only source/test; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** inspect memory repository/API/retrieval and tests; close only after source evidence or add a narrow regression fix with exact-head CI.
 
-| P5.38 | IN PROGRESS | Verify authenticated conversation API retrieves only approved owner memories and reasoning pipeline bounds/labels memory context, includes references in trace, and excludes it from raw audit storage; started before inspection | Read composition, pipeline, API and integration tests; confirm exact data path and constraints |
+| P5.38 | DONE (audit) | API retrieves only memory:read approved owner memories (limit 5), passes them into the two-pass pipeline; context is bounded and labeled reference-only; trace metadata stores proposal IDs. Integration tests verify approved memory in prompt, refs in audit, hostile memory remains untrusted, current request outranks historical conflict. | No defect found; next add a transport-to-API mock integration test because adapter and API are currently tested separately |
 
 
 ### 2026-11-22 — P5.37 DONE (audit); P5.38 IN PROGRESS: governed-memory retrieval into reasoning
@@ -499,3 +499,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.38 IN PROGRESS:** trace the approved-memory retrieval from API to Professor pipeline, ensure prompt boundary and provenance references are bounded, and confirm no raw memory content is copied into audit storage.
 - **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** inspect API→pipeline composition and prompt/audit regression tests; update ledger with exact evidence.
+
+| P5.39 | IN PROGRESS | Add an offline HTTP-mock end-to-end regression from authenticated conversation API through ConversationService and the real OpenAI-compatible provider adapter into the reasoning pipeline and persistence/audit; task started before code | Verify no external network, both reasoning passes, provider provenance, persisted turn and audit, then exact-head CI |
+
+
+### 2026-11-22 — P5.38 DONE (audit); P5.39 IN PROGRESS: real provider adapter end-to-end test
+- **P5.38 DONE (audit only):** authenticated conversation API retrieves memory only when caller has `memory:read`, at most five approved owner-scoped items; it passes bounded fields to the reasoning pipeline. Pipeline validates shapes, builds a bounded memory section labelled reference data, explicitly treats memory as untrusted reference rather than instructions, prioritizes current request, and returns proposal IDs only for audit metadata. API integration tests prove approved memory appears in both reasoning context and trace IDs; pipeline tests prove hostile memory is not promoted to instructions and conflicting historical memory does not override current request. Source SHAs: conversation API `3302b63384d9e2f345662c49780407f38bad8e90`; pipeline `fbbe41e2a7c86cc3c4d6af9a046713d557169315`; conversation integration tests `5e71f1157a0d3ec28f109a3126dbac919b611746`; pipeline tests `4d?` (fetch exact SHA before commit); exact PR #85 CI 45061989861 passed 1188 tests.
+- **P5.39 IN PROGRESS:** add a mock-HTTP test that exercises the actual OpenAI-compatible provider adapter through the authenticated conversation API and two-pass Professor pipeline; no external network or live provider.
+- **Cost/scope:** GitHub code/test on existing draft branch; £0. No live network, provider activation, merge, deployment, migration, secret, payment or external write.
+- **Next:** inspect existing integration tests for duplicates, then add and verify one bounded regression test.
