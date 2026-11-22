@@ -305,3 +305,14 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. Work started with ledger inspection; PR #84 remains draft/unmerged and its previously reported head is `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`.
 - **Scope/cost:** GitHub-only read/audit and ledger documentation; £0; no deployment, merge, production changes, secrets, payments, or external writes.
 - **Next:** verify branch/head identity, fetch combined status and PR workflow runs, record exact result, then update status DONE only if evidence is complete; otherwise BLOCKED/VERIFY with precise reason.
+
+### 2026-11-22 — P5.19 completed: exact-head integration CI refresh
+- **Status: DONE (evidence lookup only).** Confirmed PR #84's reported head commit exists and is the exact commit `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`; commit message is `test(professor): disclose audit retention on conversation delete`. Commit diff is limited to the new deletion-retention disclosure test in `tests/test_professor_chat_ui.py`.
+- Exact-head combined status lookup returned **0 statuses** and PR-triggered workflow-run lookup returned **0 runs**. This is evidence that the connector currently exposes no CI record for this head, **not** evidence that CI passed. P5.6/P5.8/P5.13/P5.17 remain VERIFY.
+- **Cost/scope:** GitHub read-only, £0. No CI dispatch, merge, deploy, or external write.
+
+### 2026-11-22 — P5.20 IN PROGRESS: conversation/audit persistence atomicity audit
+- **Task ID:** P5.20. Intended result: inspect the exact full-stack integration source and tests for the reported conversation-write/reasoning-audit split; confirm transaction semantics and identify the smallest safe remediation or precise blocker.
+- **Status:** IN PROGRESS. Source inspection begins now.
+- **Cost/scope:** GitHub-only read and documentation; £0; no provider calls, production changes, deployment, merge, or secrets.
+- **Next:** fetch the conversation API and persistence/audit implementations and tests; verify current behavior; update status with evidence and an implementation/test plan if the connector cannot execute tests.
