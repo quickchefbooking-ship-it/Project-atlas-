@@ -316,3 +316,14 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. Source inspection begins now.
 - **Cost/scope:** GitHub-only read and documentation; £0; no provider calls, production changes, deployment, merge, or secrets.
 - **Next:** fetch the conversation API and persistence/audit implementations and tests; verify current behavior; update status with evidence and an implementation/test plan if the connector cannot execute tests.
+
+### 2026-11-22 — P5.20 audit DONE: atomic turn/audit consistency gap confirmed
+- **Evidence:** PR #84 full-stack branch source read-back. `atlas_engine/professor_conversation_api.py` SHA `981c737a17388d6eac3fb2e6b5d502ac759b4dd8` calls `TenantConversationRepository.append_turn()` then `TenantReasoningAuditRepository.append()` sequentially. Both repository methods open/commit their own transaction. `tests/test_professor_conversation_api.py` SHA `6a1bbfb68e203ecde5cda19ee3fef4d7743a205d` deliberately asserts the failure leaves 1 conversation, 2 messages, 0 audit rows. Thus the consistency gap is confirmed, not merely inferred.
+- **Result:** Safe minimal fix is one outer transaction around the turn + audit, with nested repository writes using savepoints rather than committing the outer transaction. On audit failure, roll back the whole turn and return a safe error stating the turn was not saved. Add rollback/commit regression tests and nested-savepoint tests.
+- **Cost/scope:** GitHub-only inspection; £0. No production/database migration, external provider, deployment, merge, or secret use.
+
+### 2026-11-22 — P5.21 IN PROGRESS: atomic conversation turn + reasoning audit
+- **Task ID:** P5.21. Intended result: implement transaction/savepoint support for nested repository writes, wrap conversation turn and append-only audit in one atomic operation, and replace the partial-save test with rollback assertions.
+- **Status:** IN PROGRESS. Existing full-stack PR #84 is the parent integration branch; a separate isolated child branch will be used to avoid altering the dirty integration probe.
+- **Scope/cost:** code + regression tests on a draft branch; £0. No merge, deployment, production migration, provider activation, payments, or external writes.
+- **Next:** create the child branch at the verified PR #84 head, implement, read back exact changes, and seek CI/runtime evidence. If tests cannot be executed or CI cannot be retrieved, leave VERIFY/BLOCKED and do not claim DONE.
