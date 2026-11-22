@@ -53,3 +53,12 @@ def test_professor_chat_reports_provider_and_never_fakes_failed_turns():
     assert "No response received. The server may have completed the turn" in send_function
     assert 'if(input.value.trim()===value)input.value=""' in send_function
     assert 'bubble("assistant","I couldn\'t complete that response:' not in send_function
+
+
+def test_professor_chat_delete_confirmation_discloses_audit_retention():
+    page = Path(__file__).resolve().parents[1] / "static" / "professor_chat.html"
+    html = page.read_text(encoding="utf-8")
+    assert "Delete this conversation and its message content?" in html
+    assert "append-only reasoning audit" in html
+    assert "hashes, provider/model, evidence references, and limited metadata" in html
+    assert "retained for integrity verification" in html
