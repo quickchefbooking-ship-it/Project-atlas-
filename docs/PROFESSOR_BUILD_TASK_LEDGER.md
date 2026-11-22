@@ -454,7 +454,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Next:** inspect branch documentation inventory, verify checklist content if present, and update the ledger with exact file path/evidence and runtime blockers.
 
 | P5.33 | BLOCKED | No approved local runtime target or local checkout/test runner available in this automation; user scope prohibits deployment/merge. Checklist requires explicit environment/source selection. | Unblock: owner/maintainer selects clean approved branch and safe local test environment; then authorized operator runs loopback smoke and captures redacted evidence |
-| P5.34 | IN PROGRESS | Verify current PR #85 integration defaults keep paid AI, provider and capability execution disabled and auth fail-closed; started before inspection | Read exact integration branch config, worker gate, tests and CI evidence; record safe defaults |
+| P5.34 | DONE (audit) | PR #85 branch read-back: `.env.example` has paid AI=false, provider=off, capability execution=false; config auth defaults true; worker gate fields all default false and dispatch requires all three gates plus lifecycle READY. Tests assert disabled worker, missing isolation and kill-switch stop. Exact PR #85 CI 1187 passed. | No activation; next inspect conversation storage/delete connection settings for FK and privacy correctness |
 
 
 ### 2026-11-22 — P5.32 DONE; P5.33 BLOCKED; P5.34 IN PROGRESS
@@ -463,3 +463,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.34 IN PROGRESS:** verify the integration branch defaults and worker/capability gates remain disabled, paid AI/provider remain off, and API auth remains fail-closed.
 - **Cost/scope:** GitHub read/documentation only; £0. No deployment, merge, migration, secret, payment, provider activation or external write.
 - **Next:** inspect exact PR #85 branch defaults and related tests/CI; update status with file and test evidence.
+
+| P5.35 | IN PROGRESS | Audit authenticated conversation API DB connection, FK enforcement, deletion cascade, audit retention and transaction behavior; task started before inspection | Read exact connection/repository/schema/tests; if defect found, create isolated safe fix with regression + exact CI |
+
+
+### 2026-11-22 — P5.34 DONE (audit); P5.35 IN PROGRESS: conversation storage/deletion boundary
+- **P5.34 DONE (audit only):** PR #85 integration branch `.env.example` explicitly keeps `ATLAS_ENABLE_PAID_AI=false`, `ATLAS_LLM_PROVIDER=off`, and `ATLAS_CAPABILITY_EXECUTION_ENABLED=false`; `config.py` defaults API auth to true. Worker gate has `worker_enabled=false`, `global_execution_enabled=false`, `isolation_verified=false`; runner requires all gates and lifecycle accepting work before dispatch. Tests cover disabled default, missing isolation, kill-switch recheck, identity disabled and tenant grant denial. PR #85 exact merge-ref CI 45054846603 passed 1187 tests. Source SHAs: `.env.example` `e3d091c933289159e15ab0d13776dd250d568187`; `config.py` `e24e41677480909cf8db3df20966ed8de6b6db58`; worker runner `02d0ea0cf05677b9b13a2d2b180e3ff91da74f5f`; worker identity `8e4b90c9a2548cf1e2232bd9a686daeef21a2a20`; worker tests `e3aecd686a40a1142d9a175be2ac4d081f724564`; autonomy tests `6e2e2d8e8ff42accaac4cdcb57b44fa14adc73c0`; identity tests `51940298c97611792f739e31eb91b644f38acd72`.
+- **P5.35 IN PROGRESS:** inspect conversation API SQLite connection setup and repository delete semantics to ensure foreign-key cascades/privacy cleanup are enforced on every request connection, not only schema-initialization connections.
+- **Cost/scope:** GitHub read-only initially; if a narrow defect is confirmed, code/test on isolated PR branch only; £0. No merge, deployment, migration, secrets, payments, provider activation, external writes.
+- **Next:** inspect repository/schema/delete tests and test API behavior; verify or patch with exact-head CI.
