@@ -395,7 +395,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5.26 | DONE | PR #85 head f7cc1fa9…; PR workflow run 45054846603 exact head SHA, merge ref 1d766051… on base c58f5856…; job succeeded and logs report 1187 passed, 1 warning. Transaction helper/API/tests read-back confirms rollback after audit insert. | No remaining task for this verification; next identity provenance audit |
 | P5.27 | DONE (audit) | Source read-back: app.py 6fc0c821…; http_identity.py aed76f0a…; tenant_membership.py 4c5ef525…; atlas_session_identity.py 47ef7dec…; session_identity.py 49762f7a…; OIDC verifier a800307c…; hosted login components intentionally remain unset by app startup | Runtime login wiring/config is blocked until trusted deployment-owned provider/account/session/membership config and approved test environment exist; do not enable yet |
 | P5.28 | DONE (audit) | Provider adapter + ConversationService + app lifespan read-back; provider is opt-in, bounded, tool-free, fail-closed; provider/API tests covered by exact PR #85 CI | No provider activation; next inspect runtime readiness/config docs |
-| P5.29 | IN PROGRESS | Readiness checklist, startup/config docs and environment examples audit; task started before inspection | Verify runtime prerequisites and document safe no-deployment unblock path |
+| P5.29 | DONE (audit) | Readiness audit confirms `/launch/readiness` hosted-login check only tests client ID + redirect URI; provider round-trip remains false. Existing PR #63 supplies startup composition/readiness-services fix and PR #83 adds release-readiness tests; avoid duplicate code. | Audit/CI/branch composition of PR #63/#83 vs #84/#85; no code transfer or merge |
 
 **Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
 
@@ -427,3 +427,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.29 IN PROGRESS:** check runtime readiness checklist, app startup/config docs and environment examples for missing or misleading prerequisites; record the exact no-deployment unblock path.
 - **Cost/scope:** GitHub-only read and ledger documentation; £0. No provider activation, live network, deployment, merge, migration, secret, payment or external write.
 - **Next:** inspect readiness code/docs and environment configuration; update ledger with verified gaps and safe next action.
+
+
+### 2026-11-22 — P5.29 DONE (audit); P5.30 IN PROGRESS: identity/provider stack composition
+- **P5.29 DONE (audit only):** `/launch/readiness` hosted-browser-login check is only based on `ATLAS_OIDC_CLIENT_ID` + `ATLAS_OIDC_REDIRECT_URI`, and can show that one check true while `/identity/login-readiness` correctly reports `routes_registered_unconfigured` because services are not injected. Overall launch remains `not_ready` because live-provider round-trip is hardcoded false. Existing PR #63 explicitly fixes startup composition and makes launch readiness depend on matching injected services; PR #83 adds launch-readiness guard tests. No duplicate branch/code created. Evidence: app.py SHA `6fc0c82137db68fb51a9d5701aa99ff9ed1b7baa`; PR #63 head `167f9986124013608544a62cf27bbfc8de991095`, PR #83 head `d101a6303422e2b73028847c5d6bbac97cf95fe3`; both draft/unmerged.
+- **P5.30 IN PROGRESS:** compare the existing OIDC startup composition and readiness test branches against the Professor full-stack/atomicity stack, refresh exact-head CI and ancestry/overlap evidence, and identify a safe sequencing path without merge/rebase/source transfer.
+- **Cost/scope:** GitHub read-only; £0. No code copy, merge, rebase, deployment, provider activation, migration, secret, payment or external write.
+- **Next:** verify PR #63/#83 run-head correspondence, compare ancestry/changed files with PR #84/#85, and record a dependency-safe integration decision.
