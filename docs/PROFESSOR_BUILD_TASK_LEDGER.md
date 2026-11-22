@@ -482,7 +482,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secrets, payment, provider activation, external write.
 - **Next:** inspect audit schema, repository, UI delete confirmation and tests; update state with exact evidence.
 
-| P5.37 | IN PROGRESS | Audit governed memory proposal/approval/retrieval/deletion lifecycle for owner/tenant scoping, approval gates, bounded retrieval and retained metadata; started before inspection | Read repository, API, retrieval and tests; identify a safe defect or close audit with evidence |
+| P5.37 | DONE (audit) | Repository/API read-back confirms pending proposal, owner-scoped approval, approved+unexpired+not-superseded retrieval, bounded lexical ranking, owner deletion and bounded expiry purge remove content/decisions. Existing suite 1188 passed. | Next verify memory retrieval is wired into real reasoning and prompt treats memory as reference, not instruction |
 
 
 ### 2026-11-22 — P5.36 DONE; P5.37 IN PROGRESS: audit retention + governed memory
@@ -490,3 +490,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.37 IN PROGRESS:** audit approved memory lifecycle and retrieval/deletion boundary for tenant/owner isolation, reviewer/proposer separation, approval gate, bounded content, expiry and privacy retention.
 - **Cost/scope:** GitHub-only source/test; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** inspect memory repository/API/retrieval and tests; close only after source evidence or add a narrow regression fix with exact-head CI.
+
+| P5.38 | IN PROGRESS | Verify authenticated conversation API retrieves only approved owner memories and reasoning pipeline bounds/labels memory context, includes references in trace, and excludes it from raw audit storage; started before inspection | Read composition, pipeline, API and integration tests; confirm exact data path and constraints |
+
+
+### 2026-11-22 — P5.37 DONE (audit); P5.38 IN PROGRESS: governed-memory retrieval into reasoning
+- **P5.37 DONE (audit only):** memory repository requires explicit scopes; proposals are pending by default, approval is single-use and append-only, owner/tenant scoped, and expiry bounded to 1–3650 days. Retrieval selects only approved, unexpired, non-superseded memories, ranks bounded lexical matches (API limit 20; reasoning limit 5), and returns matched-term/field provenance. Deletion removes proposal content, decisions and linked supersession metadata; expiry purge is owner-scoped and bounded (max 500) with delete scope. Existing test coverage includes owner/tenant isolation, inactive membership, approval/rejection, expiry, deletion, supersession and retrieval evaluation. Source/test SHAs: repository `9dd4cfd54dfc11d718ecb68bee77d310ef3ea5f9`; API `a05c25e33172cc23c58970e08789a97255352225`; tests `35b85f80962bbb7f33e58eae655b59d91ea28612`, `90b90a1fcb16ef482d055d328028b9718caa153e`, retrieval evaluation `21984bf3edbcc0649f279ff158baa2360e1be9f7`. No defect found in this bounded audit.
+- **P5.38 IN PROGRESS:** trace the approved-memory retrieval from API to Professor pipeline, ensure prompt boundary and provenance references are bounded, and confirm no raw memory content is copied into audit storage.
+- **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
+- **Next:** inspect API→pipeline composition and prompt/audit regression tests; update ledger with exact evidence.
