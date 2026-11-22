@@ -444,7 +444,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read-only; £0. No code copy, merge, rebase, deployment, provider activation, migration, secret, payment or external write.
 - **Next:** confirm workflow run heads/test results and compare PR #83 ancestry/overlap; update task state.
 
-| P5.32 | IN PROGRESS | Reconcile the referenced release-smoke checklist and runtime blocker register against actual files on the ledger/integration branches; started before inspection | Verify file existence and content; correct ledger if prior checkpoint claims a checklist that is not present; list exact blockers/unblock actions |
+| P5.32 | DONE | Release smoke checklist exists on ledger branch; updated checklist + local bring-up guide and read-back verified (blob SHAs 0defb0bb… and b9d9fd31…). Current CI/branch divergence and source selection warning now explicit. | No further doc action; live runtime blocked pending approved source/environment |
 
 
 ### 2026-11-22 — P5.31 DONE (audit); P5.32 IN PROGRESS: release-smoke evidence reconciliation
@@ -452,3 +452,14 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.32 IN PROGRESS:** validate whether the ledger's referenced release-smoke checklist exists on the authoritative ledger branch and/or integration branch, and reconcile any missing artifact claim.
 - **Cost/scope:** GitHub read-only + ledger docs; £0. No merge, deployment, source transfer, provider activation, migration, secret, payment or external write.
 - **Next:** inspect branch documentation inventory, verify checklist content if present, and update the ledger with exact file path/evidence and runtime blockers.
+
+| P5.33 | BLOCKED | No approved local runtime target or local checkout/test runner available in this automation; user scope prohibits deployment/merge. Checklist requires explicit environment/source selection. | Unblock: owner/maintainer selects clean approved branch and safe local test environment; then authorized operator runs loopback smoke and captures redacted evidence |
+| P5.34 | IN PROGRESS | Verify current PR #85 integration defaults keep paid AI, provider and capability execution disabled and auth fail-closed; started before inspection | Read exact integration branch config, worker gate, tests and CI evidence; record safe defaults |
+
+
+### 2026-11-22 — P5.32 DONE; P5.33 BLOCKED; P5.34 IN PROGRESS
+- **P5.32 DONE:** release smoke checklist was found on the ledger branch (not PR #85 integration branch). Updated `docs/PROFESSOR_RELEASE_SMOKE_CHECKLIST.md` and `docs/PROFESSOR_LOCAL_RUNTIME_BRINGUP.md` to refresh exact CI evidence, clarify PR #84/#85 divergence and PR #63/#83 separate branches, and require maintainer source selection before any smoke test. Read-back verified checklist blob `0defb0bbcaae8b4066c4e7bd9aa33f09de7a1ecc` and bring-up guide blob `b9d9fd313b927a2ebd92478655b48572255cc6a3`. Update commits: checklist `b1dee00f70edb51dbe26ae1f526a4206f1d658a3`; guide `dc937bbc8a808099be69fbcb8b8222d1c9d6913f`.
+- **P5.33 BLOCKED:** no authorized local runtime target or local checkout/test runner available to this automation. Production deployment, merge, source transfer and unapproved runtime actions remain prohibited. Unblock requires owner/maintainer selection of a clean approved branch and safe local test environment, followed by authorized operator capture of loopback smoke evidence.
+- **P5.34 IN PROGRESS:** verify the integration branch defaults and worker/capability gates remain disabled, paid AI/provider remain off, and API auth remains fail-closed.
+- **Cost/scope:** GitHub read/documentation only; £0. No deployment, merge, migration, secret, payment, provider activation or external write.
+- **Next:** inspect exact PR #85 branch defaults and related tests/CI; update status with file and test evidence.
