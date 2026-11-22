@@ -567,7 +567,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read-only; £0. No merge, deployment, migration execution, secret, payment, provider activation, external write.
 - **Next:** inspect startup init functions and schema call sites; document exact evidence.
 
-| P5.47 | IN PROGRESS | Update release blocker register and local smoke guide to explicitly disclose startup schema creation/possible audit metadata migration and bundled knowledge import; task started before docs edit | Add R11 + safe disposable DB instructions; read-back verify |
+| P5.47 | DONE | Added R11 startup-mutation blocker and disposable-DB warning to blocker register, bring-up guide and smoke checklist; read-back verified all three. | No further documentation action; runtime remains blocked |
 
 
 ### 2026-11-22 — P5.46 DONE (audit); P5.47 IN PROGRESS: startup mutation/migration safety
@@ -575,3 +575,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.47 IN PROGRESS:** make startup writes/migration explicit in release blocker and local smoke docs; disposable local DB only.
 - **Cost/scope:** GitHub read/docs; £0. No runtime, deployment, production migration, merge, secrets, payment, provider activation or external write.
 - **Next:** update docs and read-back.
+
+| P5.48 | BLOCKED | Local runtime smoke cannot be performed: no authorized local target/checkout; PR #84 is dirty; no deployment or production migration authorized. Startup may create/import/ALTER DB schemas. | Unblock: maintainer selects clean approved branch; owner authorizes loopback host + fresh disposable DB; migration review/backup/rollback gates remain; operator captures health/readiness/UI/provider-off evidence |
+
+
+### 2026-11-22 — P5.47 DONE; P5.48 BLOCKED: startup schema mutation and local runtime
+- **P5.47 DONE:** blocker register R11, local bring-up guide and smoke checklist now explicitly disclose core bundled-knowledge import/source registration, tenant schema creation when configured, and the reasoning-audit `metadata_json` auto-`ALTER TABLE`. Read-back confirmed R11 and warnings in all three docs. Commits: register `035685492c28400297aa032c0eaca27bdc9e40b3`; guide `95931ebe0be75ce6638e102ab295786b7484aeb7`; checklist `97b3f2c3233e71cec68542d9157a11e002911fba`.
+- **P5.48 BLOCKED:** local runtime smoke is not authorized/available. PR #84 dirty, no canonical clean branch; no local checkout/target, and no production migrations/deployment allowed. Unblock requires maintainer source selection/reconciliation, owner authorization for loopback smoke with a fresh disposable DB, and migration/backup review if any existing DB is used (not permitted now).
+- **Cost/scope:** GitHub-only read/documentation; £0. No code deployment, merge, DB migration execution, secret, payment, provider activation or external write.
+- **Next:** continue safe repository audit on a later run; do not initiate runtime until the blockers are explicitly resolved.
