@@ -547,7 +547,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read only; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** verify workflow evidence and close the audit with source/run references.
 
-| P5.44 | IN PROGRESS | Consolidate latest build checkpoint with verified milestones, blockers, exact branch heads/CI, costs and next actions; task started before checkpoint inspection | Inspect existing checkpoint on ledger branch; update/read-back without duplicating task state |
+| P5.44 | DONE | Evidence matrix refreshed; read-back SHA `1e92ae002ce83b9f92fd666535c04e9fd90c8a67`. Latest PR #84 dirty/no run; PR #85 exact head f26cda77… 1189 tests; PR #63/#83/#1 separate drafts; main malformed/no CI. | No further checkpoint action; next audit startup/schema side effects without executing any migration |
 
 
 ### 2026-11-22 — P5.43 DONE (audit); P5.44 IN PROGRESS: checkpoint consolidation
@@ -555,3 +555,14 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.44 IN PROGRESS:** reconcile the checkpoint file with authoritative ledger and latest PRs.
 - **Cost/scope:** GitHub read/docs only; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** locate/update the existing checkpoint and verify read-back.
+
+| P5.45 | BLOCKED | No clean canonical integration branch: PR #84 dirty/diverged; PR #85 tested but draft/stacked; PR #63 OIDC composition separate; PR #1 dependency repair draft; no approved runtime environment. | Unblock: maintainer selects/reconciles clean branch, review/approval for source, and owner authorizes safe local runtime target. No merge/deploy by automation |
+| P5.46 | IN PROGRESS | Static audit app startup and tenant DB/schema initialization for auto-creation or migration side effects, path separation and fail-closed readiness; started before inspection | Read startup and init code only; record exact file evidence and no runtime/DB changes |
+
+
+### 2026-11-22 — P5.44 DONE; P5.45 BLOCKED; P5.46 IN PROGRESS
+- **P5.44 DONE:** updated `docs/PROFESSOR_TEST_EVIDENCE_MATRIX_2026-11-22.md` with current PR #84/#85/#63/#83/#1 exact heads, CI, branch divergence, main dependency defect and runtime gaps. Read-back blob `1e92ae002ce83b9f92fd666535c04e9fd90c8a67`. Update commit `69771b062970b5fad0d0b9b005d2c6861326d8d7`.
+- **P5.45 BLOCKED:** no clean canonical integration branch: #84 dirty/diverged, #85 tested but draft/stacked, #63 OIDC composition separate, #1 baseline repair draft, main malformed/no CI; no approved runtime target. Unblock requires maintainer conflict reconciliation and source selection plus owner-authorized local smoke target. No merge/deploy by automation.
+- **P5.46 IN PROGRESS:** static startup/database initialization audit only; identify any automatic schema creation or migration side effects before local smoke.
+- **Cost/scope:** GitHub read-only; £0. No merge, deployment, migration execution, secret, payment, provider activation, external write.
+- **Next:** inspect startup init functions and schema call sites; document exact evidence.
