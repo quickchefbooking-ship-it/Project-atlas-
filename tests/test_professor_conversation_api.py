@@ -305,8 +305,8 @@ def test_audit_write_failure_warns_turn_may_be_saved_before_retry(tmp_path, monk
     response = client.post("/professor/conversation", json={"message": "Check audit consistency"})
     assert response.status_code == 503
     detail = response.json()["detail"]
-    assert "turn may already be saved" in detail
-    assert "refresh conversation history before retrying" in detail
+    assert "No turn was saved" in detail
+    assert "retry" in detail
     assert "private audit backend detail" not in detail
 
     db = sqlite3.connect(db_path)
@@ -320,10 +320,9 @@ def test_audit_write_failure_warns_turn_may_be_saved_before_retry(tmp_path, monk
         "SELECT COUNT(*) FROM tenant_professor_reasoning_audit"
     ).fetchone()[0]
     db.close()
-    # The known consistency gap is explicit: the successful turn persists even
-    # though the separate audit append failed. The response must guide refresh.
-    assert conversations == 1
-    assert messages == 2
+    # Atomicity: a failed append-only audit must roll back the complete turn.
+    assert conversations == 0
+    assert messages == 0
     assert audits == 0
 
 def test_provider_receives_professor_policy_context_not_just_raw_history(tmp_path):
