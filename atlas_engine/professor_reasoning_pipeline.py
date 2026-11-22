@@ -12,7 +12,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS, MAX_MESSAGE_CHARS, MAX_TURNS)
+from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS, MAX_MESSAGE_CHARS, MAX_HISTORY_MESSAGES)
 from .cognitive_kernel import (
     ActionBoundary,
     CognitivePreparation,
@@ -227,7 +227,6 @@ class ProfessorReasoningPipeline:
         approved_memory: tuple[dict, ...] = (),
         conversation_history: tuple[ConversationMessage, ...] = (),
     ) -> ProfessorReasoningResult:
-        MAX_HISTORY_MESSAGES = MAX_TURNS - 2
         if not isinstance(conversation_history, tuple) or len(conversation_history) > MAX_HISTORY_MESSAGES:
             raise ValueError(
                 f"Conversation history must be a tuple of at most {MAX_HISTORY_MESSAGES} prior messages."

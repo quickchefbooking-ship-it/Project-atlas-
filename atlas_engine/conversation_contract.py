@@ -10,6 +10,8 @@ from typing import Literal, Protocol, Sequence, runtime_checkable
 Role = Literal["system", "user", "assistant"]
 MAX_MESSAGE_CHARS = 4_000
 MAX_TURNS = 24
+# Pipeline messages reserve one system prompt and the latest user turn.
+MAX_HISTORY_MESSAGES = MAX_TURNS - 2
 MAX_CONTEXT_CHARS = 24_000
 
 
