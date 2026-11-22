@@ -473,7 +473,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read-only initially; if a narrow defect is confirmed, code/test on isolated PR branch only; £0. No merge, deployment, migration, secrets, payments, provider activation, external writes.
 - **Next:** inspect repository/schema/delete tests and test API behavior; verify or patch with exact-head CI.
 
-| P5.36 | IN PROGRESS | Audit retained reasoning audit rows after conversation deletion for privacy minimization and confirm UI disclosure matches actual retained fields; task started before inspection | Read audit schema/repository/delete UI/test, identify any raw content or mismatch; verify evidence |
+| P5.36 | DONE | New regression test commit 797482b4…; exact PR #85 head workflow 45061989861 success: 1188 passed, 1 warning. Conversation deletion removes messages, writes tombstone, retains append-only hash-only audit; raw prompt/answer absent; UI retention disclosure covered by test. | No further fix; next audit governed memory lifecycle/retrieval/delete privacy |
 
 
 ### 2026-11-22 — P5.35 DONE (audit); P5.36 IN PROGRESS: retained reasoning-audit privacy
@@ -481,3 +481,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.36 IN PROGRESS:** audit the reasoning-audit rows retained after chat deletion; verify retained fields are hashes/metadata/provenance only, no raw prompt or response, and user-facing delete disclosure is accurate.
 - **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secrets, payment, provider activation, external write.
 - **Next:** inspect audit schema, repository, UI delete confirmation and tests; update state with exact evidence.
+
+| P5.37 | IN PROGRESS | Audit governed memory proposal/approval/retrieval/deletion lifecycle for owner/tenant scoping, approval gates, bounded retrieval and retained metadata; started before inspection | Read repository, API, retrieval and tests; identify a safe defect or close audit with evidence |
+
+
+### 2026-11-22 — P5.36 DONE; P5.37 IN PROGRESS: audit retention + governed memory
+- **P5.36 DONE:** added `test_delete_retains_minimal_append_only_reasoning_audit_without_raw_content` on PR #85. Commit/head `797482b4cd92688a370fe720eb63f724d6e4f08b`; exact PR workflow run `45061989861` completed successfully (pull_request event, exact head), **1188 passed, 1 warning in 23.10s**. Regression verifies message content is deleted, tombstone exists, audit record remains, prompt/answer hashes match, raw prompt/answer are absent, and record hash is bounded. UI test confirms the delete confirmation discloses retained append-only audit. No production data affected.
+- **P5.37 IN PROGRESS:** audit approved memory lifecycle and retrieval/deletion boundary for tenant/owner isolation, reviewer/proposer separation, approval gate, bounded content, expiry and privacy retention.
+- **Cost/scope:** GitHub-only source/test; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
+- **Next:** inspect memory repository/API/retrieval and tests; close only after source evidence or add a narrow regression fix with exact-head CI.
