@@ -17,6 +17,7 @@
 - [ ] Confirm `ATLAS_ENABLE_PAID_AI=false`, `ATLAS_LLM_PROVIDER=off` by default.
 - [ ] Configure verified OIDC identity, tenant membership store and hosted login services only using the approved deployment configuration.
 - [ ] Confirm DB path is persistent and backed up.
+- [ ] Use a fresh disposable local database only: startup imports bundled knowledge and may create tenant schemas or ALTER the reasoning-audit metadata column. Do not point at existing/production DB until a migration/backup/rollback review is approved.
 - [ ] Confirm HTTPS, trusted-proxy configuration, firewall, and client IP handling.
 - [ ] Set build revision to the full verified Git SHA.
 
