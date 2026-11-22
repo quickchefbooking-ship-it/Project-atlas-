@@ -199,7 +199,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.12 DONE (audit)** — Verified separate commits: append_turn commits the user/assistant pair first, then reasoning-audit append starts its own transaction. If the audit write fails, conversation content can remain saved without an audit record and API returns 503. This is a consistency gap; the UI already warns to refresh before retry. No atomic cross-repository transaction is implemented.
 - **P5.13 VERIFY** — API storage-error guidance updated and a focused test added on PR #84 branch. Read-back checks pass, but exact-head CI is unavailable through this connector; the test intentionally documents current post-save audit failure state (turn saved, audit absent) and asserts refresh-before-retry guidance.
 - **P5.14 DONE (audit/design)** — Conversation turn and reasoning-audit writes use separate transactions. Smallest safe fix is a shared transaction context supporting nested savepoints, with API outer transaction around append_turn + audit.append. Acceptance: audit failure rolls back both rows; success persists both; chain verification remains valid; standalone repository tests continue passing. No code refactor attempted without CI evidence.
-- **P5.15 IN PROGRESS** — Audit conversation repository owner/tenant scoping, retrieval bounds, deletion and retention behavior. Intended result: confirm private conversation lifecycle safety and document any gap.
+- **P5.15 DONE (audit)** — Repository is scoped by verified tenant_id + hashed issuer/subject owner_key; read/write/delete scopes are enforced; IDs/content bounds are validated; 200-message cap; recent retrieval ordered correctly; delete cascades content and leaves minimal tombstone; append-only trigger and cross-owner/tenant tests exist. No gap found in reviewed paths.
+- **P5.16 IN PROGRESS** — Audit delete/privacy behavior across conversation messages and reasoning-audit records. Intended result: clarify what is erased vs retained and verify disclosure matches data lifecycle.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -242,3 +243,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Atomicity gap confirmed: append_turn commits its own transaction; reasoning-audit append begins another. Proposed smallest safe correction: shared transaction context that uses SAVEPOINT when already in transaction; wrap both writes in one API-level outer transaction. Tests should assert audit-write failure rolls back conversation+messages, success writes both, and hash-chain verification still passes.
 - No refactor attempted this run because exact-head CI evidence is unavailable through the GitHub connector and there is no local checkout/test runner. P5.14 DONE (audit/design only).
 - **P5.15 IN PROGRESS** — read-only owner/tenant scoping and retention audit of conversation repository.
+
+
+### 2026-11-22 — P5.15 repository isolation/retention audit complete; P5.16 deletion audit started
+- Repository inspection confirms all conversation queries include tenant_id and owner_key, owner key is pseudonymous, read/write/delete scopes are checked, message roles/content/IDs are validated, max 200 stored messages, and retrieval returns ordered bounded recent history. Tests cover cross-user/cross-tenant isolation, same-ID owner separation, scopes, deletion cascade, tombstone minimality, append-only, and limits.
+- P5.15 DONE (audit only). **P5.16 IN PROGRESS**: inspect delete route and reasoning-audit retention to ensure privacy behavior is explicit.
