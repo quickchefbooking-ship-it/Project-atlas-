@@ -19,6 +19,7 @@
 | #80 lesson → pending memory proposal | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged |
 | #81 chat/provider + learning integration | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged; base #48 |
 | #82 worker/OIDC + chat/provider + learning integration | `7aa6e9b` | 45046895853 | success | 1179 passed | PR #82 merge-ref CI; draft/unmerged |
+| #83 release-readiness false-positive guard tests | `d101a63` | 45049237138 | success | 1181 passed | PR #83 merge-ref CI; draft/unmerged; 2 additional readiness tests |
 
 ## Confirmed integration coverage
 - #46–#48: session/conversation integration, explicit chat capability, bounded prompt composition.
@@ -40,3 +41,7 @@
 
 ### Combined integration evidence
 - PR #82 is mergeable/clean and its exact pull-request merge ref was tested in run 45046895853. Checkout log confirms `refs/remotes/pull/82/merge`; 1179 passed, 1 warning in 25.86s. This combines the PR #64 worker/OIDC branch with PR #81 chat/provider/learning base. Still no merge/deployment.
+
+### PR #83 — readiness regression guard
+- Exact head `d101a6303422e2b73028847c5d6bbac97cf95fe3`, run 45049237138 succeeded: **1181 passed, 1 warning in 21.30s**.
+- Adds tests that missing launch configuration reports blockers, and that configured identity/storage/provider still cannot claim readiness without verified live provider round-trip evidence. No runtime code changes.
