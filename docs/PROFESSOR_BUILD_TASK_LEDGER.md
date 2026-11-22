@@ -365,3 +365,15 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. Use exact current branch refs; avoid repeating the earlier overlap reconciliation.
 - **Cost/scope:** GitHub-only read/compare; £0. No merge, deployment, production migration, or external writes.
 - **Next:** verify branch refs and compare metadata/file overlap; if still dirty/unresolvable with available tools, document the precise blocker and move to another safe audit.
+
+### 2026-11-22 — P5.24 DONE: integration ancestry and overlap refreshed
+- Current comparison PR #84 branch `atlas/professor-full-stack-integration-2026-11-22` vs PR #48 base `atlas/professor-prompt-budget`: **diverged, 143 ahead / 3 behind**; merge base `0eaf6d0ea45805645d9430f56376f5f0223302d1`; PR #48 base head `2f0e678a2a403502bce712d34d8e7917a01edf10`.
+- Changed-file overlap is exactly four paths: `atlas_engine/professor_reasoning_pipeline.py`, `static/professor_chat.html`, `tests/test_professor_chat_ui.py`, `tests/test_professor_reasoning_pipeline.py`. Current blob hashes differ on all four between PR #48 base and PR #84 integration branch, so prior overlap reconciliation is not a clean identical-content resolution.
+- PR #85 CI passed on a merge ref of its child branch with PR #84 base, but it does **not** clear PR #84's mergeability/divergence against PR #48.
+- **P5.24 DONE (read-only audit).** Cost £0.
+
+### 2026-11-22 — P5.25 BLOCKED: clean full-stack integration into PR #48 base
+- **Task ID:** P5.25. Intended result: make the full stack cleanly based on current PR #48 prompt-budget head and verify an exact integration merge-ref without merging/deploying.
+- **Status:** BLOCKED by policy/scope: user prohibits merges and external writes; resolving and moving the 143-commit integration stack onto a diverged base would require an explicit branch-integration/merge-resolution action. Available evidence shows 4 overlapping files with differing current content. No attempt to rebase, merge, force-push, or rewrite the existing draft branch.
+- **Unblock action:** maintainer review/approval for a dedicated conflict-resolution branch, or a maintainer manually resolves the four paths and reruns exact-head CI. PR #85 remains a tested draft child of PR #84; it is not a substitute for clean mergeability.
+- **Cost/scope:** no action beyond GitHub read-only compare; £0. No merge/deploy/production migration/secrets/payments/external writes.
