@@ -10,6 +10,7 @@ from atlas_engine.tenant_conversation_repository import (
     TenantConversationRepository, initialize_tenant_conversation_schema,
 )
 from atlas_engine.tenant_evaluation_repository import initialize_tenant_evaluation_schema
+from atlas_engine.tenant_lesson_review import initialize_tenant_lesson_review_schema, TenantLessonReviewRepository
 
 
 def make_client(tmp_path):
@@ -20,8 +21,9 @@ def make_client(tmp_path):
     initialize_tenant_evaluation_schema(db)
     principal = RequestPrincipal(
         "https://issuer.example", "alice", "tenant-a", True,
-        frozenset({"conversations:read", "conversations:write", "evaluations:read", "evaluations:write"}),
+        frozenset({"conversations:read", "conversations:write", "evaluations:read", "evaluations:write", "lessons:propose", "lessons:read"}),
     )
+    initialize_tenant_lesson_review_schema(db)
     TenantConversationRepository(db, principal).create("conv-1")
     db.close()
     app = FastAPI()
@@ -68,3 +70,41 @@ def test_evaluation_summary_returns_only_aggregate_feedback(tmp_path):
     assert payload["outcomes"]["helpful"] == 1
     assert payload["average_rating"] == 4.0
     assert "Do not expose this note" not in response.text
+
+def test_negative_explicit_feedback_creates_pending_review_candidate(tmp_path):
+    client = make_client(tmp_path)
+    created = client.post("/professor/tenant/evaluations", json={
+        "subject_type": "conversation", "subject_id": "conv-1",
+        "outcome": "not_helpful", "rating": 1,
+        "note": "The response missed the requested practical steps.",
+    })
+    assert created.status_code == 201
+    payload = created.json()
+    assert payload["learning_candidate"]["status"] == "pending"
+    assert payload["learning_candidate"]["runtime_promotion"] == "disabled"
+    assert payload["learning_candidate"]["review_required"] == "independent reviewer"
+
+    db = sqlite3.connect(tmp_path / "tenant.sqlite")
+    db.row_factory = sqlite3.Row
+    reader = RequestPrincipal(
+        "https://issuer.example", "alice", "tenant-a", True,
+        frozenset({"lessons:read"}),
+    )
+    candidate = TenantLessonReviewRepository(db, reader).list()[0]
+    assert candidate["status"] == "pending"
+    assert payload["evaluation_id"] in candidate["evaluation_ids"]
+    assert "missed the requested practical steps" in candidate["lesson_text"]
+    db.close()
+
+
+def test_positive_feedback_does_not_auto_create_lesson_candidate(tmp_path):
+    client = make_client(tmp_path)
+    created = client.post("/professor/tenant/evaluations", json={
+        "subject_type": "conversation", "subject_id": "conv-1",
+        "outcome": "helpful", "rating": 5, "note": "Clear and useful.",
+    })
+    assert created.status_code == 201
+    assert created.json()["learning_candidate"] is None
+    db = sqlite3.connect(tmp_path / "tenant.sqlite")
+    assert db.execute("SELECT COUNT(*) FROM tenant_lesson_candidates").fetchone()[0] == 0
+    db.close()
