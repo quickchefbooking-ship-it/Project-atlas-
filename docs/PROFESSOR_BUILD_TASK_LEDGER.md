@@ -26,6 +26,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 **P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, hosted login services remain missing, and deployment remains approval-gated. P5.1 smoke checklist is DONE.
 
 ### Subtask states
+- **P5.7 IN PROGRESS** — Verify PR #77 history boundary fix at exact head and whether it is represented in PR #84 full-stack integration. Intended result: CI evidence, regression coverage inspection, and precise integration next action. Current evidence: PR #77 open/draft; reported head b02a6c18f334037df5d9c587b5c5a3e9d94db33f.
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
 - **P1.2 — focused core/security review: DONE.** Known limitations: shared API-key auth is not verified identity/RBAC/tenant isolation; actor labels are caller supplied; arithmetic-only executor; proposal testing not implemented; SQLite single host.
 - **P1.3 — dependency map: DONE.** Priority chain: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → hosted OIDC #49–#57/#63 → worker safety #58–#64. Source reconciliation #65 separate; market PRs #70–#76 deferred; #66 duplicate/ported.
@@ -181,3 +182,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.6 IN PROGRESS:** reviewed chat UI/API error flow. Found UI permission preflight omitted the API-required `professor:chat` scope; it could mark a user connected then fail only on send. Added explicit scope check on PR #84 integration branch.
 - Reconciled UI to show provider/model/reasoning/execution metadata only after a successful response; user message remains in input on failure, no fake assistant answer is inserted, and status warns the server may have completed the turn before retry.
 - Verified the updated UI/test files fetch back from GitHub. Full CI validation is blocked by PR #84's unresolved dirty merge state; do not mark P5.6 DONE until exact integration CI passes.
+
+
+### 2026-11-22 — P5.7 started: history boundary CI/integration audit
+- Task ID P5.7 IN PROGRESS. Before verification, PR #77 was confirmed open/draft with reported exact head b02a6c18f334037df5d9c587b5c5a3e9d94db33f. Intended result is to verify exact-head workflow/test evidence and determine whether the history boundary fix is included in PR #84's full-stack branch.
+- Safe scope: GitHub-only read/isolated ledger documentation; no paid tools, deployment, merge, or external writes.
