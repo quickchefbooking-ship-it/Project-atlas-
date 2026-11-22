@@ -201,7 +201,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.14 DONE (audit/design)** — Conversation turn and reasoning-audit writes use separate transactions. Smallest safe fix is a shared transaction context supporting nested savepoints, with API outer transaction around append_turn + audit.append. Acceptance: audit failure rolls back both rows; success persists both; chain verification remains valid; standalone repository tests continue passing. No code refactor attempted without CI evidence.
 - **P5.15 DONE (audit)** — Repository is scoped by verified tenant_id + hashed issuer/subject owner_key; read/write/delete scopes are enforced; IDs/content bounds are validated; 200-message cap; recent retrieval ordered correctly; delete cascades content and leaves minimal tombstone; append-only trigger and cross-owner/tenant tests exist. No gap found in reviewed paths.
 - **P5.16 DONE (audit)** — DELETE removes the conversation row and cascades message content; the deletion log retains only tenant/owner pseudonym/conversation ID. Reasoning-audit records are separate, append-only, and remain after conversation deletion: hashes, provider/model, evidence references, and limited metadata. The UI confirmation does not disclose this retention; transparency gap identified.
-- **P5.17 IN PROGRESS** — Add accurate deletion confirmation disclosure for retained append-only audit data and regression test. Intended result: user sees what is erased and what remains; no retention-policy changes.
+- **P5.17 VERIFY** — PR #84 UI confirmation now discloses retained append-only reasoning audit (hashes, provider/model, evidence references, limited metadata); regression test added. Read-back assertions pass, but exact-head CI remains inaccessible (no PR-triggered runs/status checks returned).
+- **P5.18 IN PROGRESS** — Reconcile ledger/checkpoint and exact branch heads after this cycle. Intended result: durable state is accurate, evidence is linked, and no task is mislabeled DONE.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -254,3 +255,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — P5.16 deletion/privacy audit complete; P5.17 started
 - DELETE route calls conversation repository delete only. FK cascade removes stored messages; deletion tombstone keeps tenant/owner pseudonym/conversation ID, no message text. Separate reasoning-audit table is append-only (no UPDATE/DELETE triggers) and has no conversation FK; audit records persist after conversation deletion, retaining request/response/context hashes, provider/model, evidence references and limited metadata.
 - P5.16 DONE (audit only). Transparency gap: current confirmation says message content is deleted but does not disclose retained audit. **P5.17 IN PROGRESS**: add truthful disclosure and UI regression; do not change audit retention policy.
+
+
+### 2026-11-22 — P5.17 UI disclosure checkpoint; P5.18 ledger reconciliation started
+- Delete confirmation now accurately says conversation message content is removed while append-only reasoning audit hashes, provider/model, evidence references, and limited metadata remain for integrity verification. Added UI regression test. Read-back checks passed on exact PR #84 branch head c58f5856ed5a557c4deaa02333f5ec4e89825ecb.
+- No audit retention policy changed. Exact-head CI remains unverified because PR-run lookup and commit statuses return empty; push-run list is not exposed by this connector. P5.17 VERIFY.
+- P5.18 IN PROGRESS: final durable checkpoint reconciliation.
