@@ -22,3 +22,13 @@ PR #82's base was PR #80, not PR #81, so its 1,179-test result was not proof tha
 - Runtime and real provider/login round-trip remain unverified by CI.
 
 **Draft integration probe only.**
+
+
+## Merge-candidate checkpoint (2026-11-22)
+
+- Candidate branch: `atlas/professor-full-stack-merge-candidate-2026-11-22`
+- Merge commit: `54dc795a7f7508a7c48f98748d48351dd0d4bcdf`
+- Two parents: chat/provider base `2f0e678a2a403502bce712d34d8e7917a01edf10` and full-stack integration head `5c2549e185b93448340ca52be0156e77e5ab4a94`.
+- GitHub mergeability: **mergeable**.
+- Exact merge commit status: **no workflow runs / no completed checks observed**.
+- Workflow is configured for push to `atlas/**` and pull_request. Candidate branch name matches push trigger. This documentation-only checkpoint commit is intended to cause a fresh push event and provide CI evidence; no production action.
