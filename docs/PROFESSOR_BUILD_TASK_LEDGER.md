@@ -557,7 +557,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Next:** locate/update the existing checkpoint and verify read-back.
 
 | P5.45 | BLOCKED | No clean canonical integration branch: PR #84 dirty/diverged; PR #85 tested but draft/stacked; PR #63 OIDC composition separate; PR #1 dependency repair draft; no approved runtime environment. | Unblock: maintainer selects/reconciles clean branch, review/approval for source, and owner authorizes safe local runtime target. No merge/deploy by automation |
-| P5.46 | IN PROGRESS | Static audit app startup and tenant DB/schema initialization for auto-creation or migration side effects, path separation and fail-closed readiness; started before inspection | Read startup and init code only; record exact file evidence and no runtime/DB changes |
+| P5.46 | DONE (audit) | Static startup read-back: app lifespan imports curated knowledge/registers sources idempotently; when `ATLAS_TENANT_DATA_DB_PATH` is set it initializes tenant schemas and reasoning audit initializer may `ALTER TABLE` to add `metadata_json`. Tenant path collision guard checks core + membership. No startup/runtime executed. | Local smoke must use disposable DB; never production. Next update blocker/bring-up docs with schema-mutation warning |
 
 
 ### 2026-11-22 — P5.44 DONE; P5.45 BLOCKED; P5.46 IN PROGRESS
@@ -566,3 +566,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.46 IN PROGRESS:** static startup/database initialization audit only; identify any automatic schema creation or migration side effects before local smoke.
 - **Cost/scope:** GitHub read-only; £0. No merge, deployment, migration execution, secret, payment, provider activation, external write.
 - **Next:** inspect startup init functions and schema call sites; document exact evidence.
+
+| P5.47 | IN PROGRESS | Update release blocker register and local smoke guide to explicitly disclose startup schema creation/possible audit metadata migration and bundled knowledge import; task started before docs edit | Add R11 + safe disposable DB instructions; read-back verify |
+
+
+### 2026-11-22 — P5.46 DONE (audit); P5.47 IN PROGRESS: startup mutation/migration safety
+- **P5.46 DONE (audit only):** app lifespan runs `load_bundled_knowledge()` (idempotent imports/registers curated repository content in core storage), and when `ATLAS_TENANT_DATA_DB_PATH` is set, `_initialize_tenant_data_store` creates/initializes tenant plan, step, evidence, approved-source, assessment, conversation, evaluation, reasoning-audit, lesson-review and memory schemas. `initialize_reasoning_audit_schema` automatically adds `metadata_json` via `ALTER TABLE` if absent. Tenant DB path is rejected if it resolves to core storage or membership DB. No startup/runtime or DB was executed. Source SHAs: `app.py` `6fc0c82137db68fb51a9d5701aa99ff9ed1b7baa`; `source_division.py` `978ee3f617c31d29525fd4200174799a6ed98298`; `tenant_reasoning_audit.py` `e4be6340362d2d1b36b8a607fff9695af89f504`.
+- **P5.47 IN PROGRESS:** make startup writes/migration explicit in release blocker and local smoke docs; disposable local DB only.
+- **Cost/scope:** GitHub read/docs; £0. No runtime, deployment, production migration, merge, secrets, payment, provider activation or external write.
+- **Next:** update docs and read-back.
