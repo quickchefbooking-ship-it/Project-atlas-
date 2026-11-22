@@ -50,6 +50,8 @@ This is only acceptable while the server remains on loopback. Do not use these s
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 Do not change the host to `0.0.0.0` for this smoke test.
+**Startup writes/schema safety:** this app startup imports bundled curated knowledge into the core DB and registers source descriptors. If `ATLAS_TENANT_DATA_DB_PATH` is set, it creates/initializes tenant tables; the reasoning-audit schema initializer may add `metadata_json` with an automatic `ALTER TABLE`. Use only a fresh disposable local database for this smoke. Never point it at an existing or production database; the tenant DB path must remain separate from core and membership storage. With tenant DB path unset, private conversation persistence remains unavailable (expected 503/readiness blocker).
+
 
 ## 5. Verify liveness and configuration (new terminal)
 ```bash
