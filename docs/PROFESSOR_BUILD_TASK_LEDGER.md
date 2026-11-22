@@ -396,6 +396,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5.27 | DONE (audit) | Source read-back: app.py 6fc0c821…; http_identity.py aed76f0a…; tenant_membership.py 4c5ef525…; atlas_session_identity.py 47ef7dec…; session_identity.py 49762f7a…; OIDC verifier a800307c…; hosted login components intentionally remain unset by app startup | Runtime login wiring/config is blocked until trusted deployment-owned provider/account/session/membership config and approved test environment exist; do not enable yet |
 | P5.28 | DONE (audit) | Provider adapter + ConversationService + app lifespan read-back; provider is opt-in, bounded, tool-free, fail-closed; provider/API tests covered by exact PR #85 CI | No provider activation; next inspect runtime readiness/config docs |
 | P5.29 | DONE (audit) | Readiness audit confirms `/launch/readiness` hosted-login check only tests client ID + redirect URI; provider round-trip remains false. Existing PR #63 supplies startup composition/readiness-services fix and PR #83 adds release-readiness tests; avoid duplicate code. | Audit/CI/branch composition of PR #63/#83 vs #84/#85; no code transfer or merge |
+| P5.30 | DONE (audit) | PR #63 OIDC startup composition vs PR #84/#85 diverged; shared merge base 2e879fa6…; #63 is 13 commits ahead/72 behind #84 head comparison; overlapping app.py and OIDC integration tests require manual reconciliation | No branch rewrite or source transfer; verify #63/#83 exact-head CI and compare #83 stack before sequencing | 
+| P5.31 | IN PROGRESS | Validate existing PR #63/#83 exact-head CI and compare PR #83 release-readiness stack with PR #84/#85 to avoid duplicate integration work | Inspect exact CI run-head, test files, and compare ancestry/overlap; document safe next step |
 
 **Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
 
@@ -434,3 +436,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.30 IN PROGRESS:** compare the existing OIDC startup composition and readiness test branches against the Professor full-stack/atomicity stack, refresh exact-head CI and ancestry/overlap evidence, and identify a safe sequencing path without merge/rebase/source transfer.
 - **Cost/scope:** GitHub read-only; £0. No code copy, merge, rebase, deployment, provider activation, migration, secret, payment or external write.
 - **Next:** verify PR #63/#83 run-head correspondence, compare ancestry/changed files with PR #84/#85, and record a dependency-safe integration decision.
+
+
+### 2026-11-22 — P5.30 DONE (audit); P5.31 IN PROGRESS: readiness/identity branch composition
+- **P5.30 DONE (audit only):** PR #63 OIDC startup composition head `167f9986124013608544a62cf27bbfc8de991095` is on a branch based at `2e879fa6624c71f60414f6c09e2bf2630ae5aaf4`; PR #84 integration head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb` has the same merge base but diverges (compare reports 13 commits #63 ahead / 72 behind #84). PR #63 changed `app.py` and OIDC readiness/browser-flow tests that overlap the full-stack stack. No merge/rebase/cherry-pick/source transfer was attempted.
+- **P5.31 IN PROGRESS:** exact-head CI and branch composition review of existing PR #63 hosted-login wiring and PR #83 release-readiness tests vs PR #84/#85 atomicity stack.
+- **Cost/scope:** GitHub read-only; £0. No code copy, merge, rebase, deployment, provider activation, migration, secret, payment or external write.
+- **Next:** confirm workflow run heads/test results and compare PR #83 ancestry/overlap; update task state.
