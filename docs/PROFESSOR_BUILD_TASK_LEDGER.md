@@ -16,14 +16,18 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 | ID | Task | Status | Evidence / current state | Next action |
 |---|---|---|---|---|
-| P1 | Reconcile baseline and dependency stack | IN PROGRESS | PR #1 is open/draft, exact head `f8d6eac412d1031430bee6b3740dc67113b854ec`; 50 files, 9,770 additions / 669 deletions; historical exact-head CI passed. PRs #46–#76 remain a large draft stack. | Refresh exact heads/CI, establish smallest safe merge/review order, identify blockers/duplicates. |
+| P1 | Reconcile baseline and dependency stack | IN PROGRESS | Exact-head inventory refreshed 2026-11-22: #1/#46-#49/#57/#62-#65/#75/#76 are open draft PRs; all recorded heads match prior checkpoint; exact-head CI rechecked and success confirmed for #1, #48, #64, #76. | Finish focused security/core review and establish dependency/merge order. |
 | P2 | Connect real Professor reasoning/chat path | NOT STARTED | PR #46–#48 exist; #48 prompt-budget changes; prior evidence says #66 chat delivery delta is already ported into #48. | Inspect composition and runtime path, tests, identify disconnected/missing piece. |
 | P3 | Persistent, governed learning | NOT STARTED | Learning memory/evaluator/proposal code exists in PR #1; validation and integration are not proven end-to-end. | Inspect storage/retrieval and task lifecycle; design and implement evidence-backed learning integration on isolated branch. |
 | P4 | Integration and security verification | NOT STARTED | Historical branch CI is not deployment/runtime proof. | Build test matrix and run exact-head checks for core path, identity, tenancy, storage, cancellation, recovery, learning. |
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P1 — baseline and dependency reconciliation.** Work remains IN PROGRESS until the current PR stack and CI are refreshed and a focused, evidence-based order/blocker list is produced.
+**P1 — baseline and dependency reconciliation.** Exact-head inventory/CI refresh is DONE as subtask P1.1. P1 remains IN PROGRESS pending focused review and dependency order.
+
+### Subtask states
+- **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
+- **P1.2 — Focused security/core review: IN PROGRESS.** Initial inspection confirms auth defaults to required in config, local executor is arithmetic-only, learning lessons cannot self-validate. Continue endpoint/storage review and identify concrete gaps.
 
 ## Working protocol
 1. Select one task; record it as **IN PROGRESS** with task ID and intended result.
@@ -45,5 +49,13 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #1 exact head remains the baseline repair head recorded above; it is open, draft, mergeable, not merged.
 - PR #48 is open/draft and its head is `2f0e678a2a403502bce712d34d8e7917a01edf10`.
 - This ledger is being added on an isolated branch from PR #1's exact head; it does not modify `main`, merge, or deploy.
-- **Next:** refresh the dependency PR heads and CI; review the baseline repair and decide the narrowest next engineering action.
+- **Completed this checkpoint:** PR inventory refresh and exact-head CI verification (P1.1).
+- **Current action:** focused review of baseline auth/storage/executor/learning boundaries (P1.2).
+- **Next:** complete review and dependency order, then proceed to P2 reasoning/chat integration.
 
+
+### 2026-11-22 — checkpoint update
+- Verified exact-head workflow success: PR #1 `f8d6eac...` run 43489002177; PR #48 `2f0e678...` run 44475448752; PR #64 `7aa6e9b...` run 44178610630; PR #76 `40c4395...` run 44390312814.
+- Refreshed metadata for PR #46, #47, #48, #49, #57, #62, #63, #64, #65, #75 and #76; all remain open/draft/unmerged and mergeable at the time checked.
+- Initial source review: auth default is required (`ATLAS_API_REQUIRE_AUTH=true`); executor only permits bounded basic arithmetic; lesson creation enforces unvalidated status.
+- **P1.1 marked DONE**; P1.2 remains IN PROGRESS.
