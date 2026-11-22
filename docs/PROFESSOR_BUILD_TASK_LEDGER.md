@@ -154,3 +154,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.3 DONE:** added `docs/PROFESSOR_RELEASE_BLOCKER_REGISTER_2026-11-22.md` documenting verified blockers R1–R9, evidence required to close each, safe closure order, and prohibited actions.
 - Re-verified code defaults: reasoning provider off; capability execution opt-in; health/readiness diagnostics explicitly do not prove a real provider conversation or login round trip.
 - **P5 remains BLOCKED** pending R1 safe runtime evidence. Continue with code-level tasks that do not require live environment or approval.
+
+### 2026-11-22 — P5.4 readiness false-positive guard tests
+- **P5.4 IN PROGRESS:** added draft PR #83 with tests for `/launch/readiness` missing configuration and the rule that configured identity/storage/provider does not substitute for a live provider round-trip. Tests-only change.
+- PR #83 refreshed to mergeable=true; exact-head workflow run 45049237138 is in progress. Do not mark complete until run conclusion and test evidence are checked.
+- If CI passes, mark P5.4 DONE; P5 live runtime remains BLOCKED.
