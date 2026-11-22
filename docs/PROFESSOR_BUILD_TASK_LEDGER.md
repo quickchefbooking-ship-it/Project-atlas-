@@ -327,3 +327,15 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. Existing full-stack PR #84 is the parent integration branch; a separate isolated child branch will be used to avoid altering the dirty integration probe.
 - **Scope/cost:** code + regression tests on a draft branch; £0. No merge, deployment, production migration, provider activation, payments, or external writes.
 - **Next:** create the child branch at the verified PR #84 head, implement, read back exact changes, and seek CI/runtime evidence. If tests cannot be executed or CI cannot be retrieved, leave VERIFY/BLOCKED and do not claim DONE.
+
+### 2026-11-22 — P5.21 implementation checkpoint: atomic turn/audit branch (VERIFY)
+- Draft PR #85 created, stacked on PR #84's exact integration head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`. Child branch `atlas/professor-atomic-turn-audit-2026-11-22` exact head: `d3ae80055c16b9b442cb2e34ea0d7553dfca9a41`.
+- Source read-back verified: new `atlas_engine/sqlite_transaction.py`; 4 conversation repository write methods use the helper; audit append uses the helper; API outer transaction encloses both `append_turn` and audit append; failure response states no turn saved; regression assertions expect 0 conversations/0 messages/0 audits. Three savepoint tests are present. Compare against parent confirms 6 commits/6 files changed.
+- PR #85 exact-head workflow run **45054741260** is **IN PROGRESS**. Job `test`: checkout/setup/dependency installation succeeded; `Run tests` step is running. Combined status currently empty; no pass/fail conclusion yet.
+- **P5.21 status: VERIFY** until exact-head CI completes and any failures are addressed. Cost £0; branch-only, no merge/deploy/production migration/provider activation.
+
+### 2026-11-22 — P5.22 IN PROGRESS: strengthen rollback test and static transaction audit
+- **Task ID:** P5.22. Intended result: make the audit-failure regression inject failure *after* the audit repository has performed its nested write, so it proves the outer transaction rolls back both the messages and audit row; re-read the transaction helper and repository call sites for safe nesting.
+- **Status:** IN PROGRESS. Initial static read-back shows helper uses a unique UUID savepoint for nested writes and begins/commits/rolls back only when it owns the transaction. This task adds a stronger failure point and re-verifies the exact source.
+- **Scope/cost:** code/test only on PR #85 child branch; £0. No merge/deploy/production changes, secrets, payments, or provider activation.
+- **Next:** patch the regression, wait for the latest exact-head CI, and update this status with evidence.
