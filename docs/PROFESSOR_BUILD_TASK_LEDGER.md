@@ -23,7 +23,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P3 — persistent, governed learning integration.** P3.1 architecture audit DONE; P3 remains IN PROGRESS because branch integration and live end-to-end evidence are absent. Next verify learning tests and map the task/evaluation → candidate lesson → human review → approved memory → retrieval cycle.
+**P3 — persistent, governed learning integration.** P3.1 architecture audit and P3.2 coverage audit DONE. P3 remains IN PROGRESS because branch integration/live behavior and task-outcome feedback are absent. P3.3 is defining the narrow feedback loop without automatic promotion.
 
 ### Subtask states
 - **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
@@ -80,3 +80,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P3.1 marked DONE:** PR #11 contains tenant/owner-scoped memory proposals, explicit approval/rejection, expiry-aware bounded retrieval, tenant isolation, and approved-memory retrieval wired into the authenticated conversation endpoint. Lesson review candidates are linked to evaluation IDs, immutable, tenant-scoped, and require explicit decision; runtime promotion is disabled.
 - This is governed memory/lesson review, not proof of autonomous self-improvement. Automatic task outcome generation into candidate lessons and live end-to-end learning behavior remain unverified.
 - **P3.2 IN PROGRESS:** test coverage and lifecycle verification.
+
+### 2026-11-22 — learning coverage checkpoint
+- **P3.2 marked DONE (audit):** PR #11 exact-head CI succeeded; memory tests explicitly cover approval-before-retrieval, owner/tenant isolation, scope enforcement, decision single-use, rejected-memory exclusion, input/retention bounds, and deletion. Lesson tests cover owned evaluation evidence, independent reviewer, immutable candidates/decisions, and runtime promotion disabled.
+- Gap: lessons can be manually proposed against evaluations, but no verified automatic or deterministic task-outcome-to-candidate pipeline is present. Approved lesson candidates are not promoted into runtime memory; promotion is deliberately disabled. User-approved durable memory proposals are a separate mechanism and do feed approved memories into reasoning.
+- **P3.3 IN PROGRESS:** define the safest controlled feedback loop and evidence required before implementation.
