@@ -500,7 +500,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** inspect API→pipeline composition and prompt/audit regression tests; update ledger with exact evidence.
 
-| P5.39 | IN PROGRESS | Add an offline HTTP-mock end-to-end regression from authenticated conversation API through ConversationService and the real OpenAI-compatible provider adapter into the reasoning pipeline and persistence/audit; task started before code | Verify no external network, both reasoning passes, provider provenance, persisted turn and audit, then exact-head CI |
+| P5.39 | DONE | Added offline HTTP-mock end-to-end test using the real OpenAI-compatible adapter through ConversationService, Professor two-pass pipeline, authenticated conversation API, persistence and audit. PR #85 head f26cda77… exact PR run 45062228181 success: 1189 passed, 1 warning; push run 45062223936 success. | No live provider activation; next audit baseline/dependency integrity on main and active integration branch |
 
 
 ### 2026-11-22 — P5.38 DONE (audit); P5.39 IN PROGRESS: real provider adapter end-to-end test
@@ -510,3 +510,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Next:** inspect existing integration tests for duplicates, then add and verify one bounded regression test.
 
 - Existing browser-session integration test uses `IntegrationProvider`; lifecycle integration uses `FixtureProvider`. Neither exercises `OpenAICompatibleConversationProvider` with `httpx.MockTransport` end-to-end through the API. This confirms the P5.39 test gap is not duplicate work. Existing files read: session integration SHA `acc689c1557e704c4410c91aa610e4c47dcdee01`; lifecycle integration SHA `27a03c1de50fdfa923a45222e60178a5f57e4b35`.
+
+| P5.40 | IN PROGRESS | Audit dependency baseline (`requirements.txt` and startup imports) across main, baseline-repair PR #1 and PR #85; task started before inspection | Verify source contents, dependency pinning and exact CI install evidence; document integration blocker |
+
+
+### 2026-11-22 — P5.39 DONE; P5.40 IN PROGRESS: provider adapter end-to-end mock test
+- **P5.39 DONE:** added `test_authenticated_api_uses_http_mock_provider_through_reasoning_pipeline` on existing PR #85 branch. It uses `httpx.MockTransport` (no network), the actual OpenAI-compatible adapter, `ConversationService`, two-pass reasoning, authenticated API, persisted user/assistant messages, provider/model provenance, append-only audit and chain verification; execution stays false. Commit/head `f26cda77b83305a516a189d6ff4403e984cc8561`. Exact PR run `45062228181` completed success: **1189 passed, 1 warning in 26.53s**. Matching push run `45062223936` also success on same head. Test file blob `8aa4f311fbd247433becafd0d8cc785d6f45583f`.
+- **P5.40 IN PROGRESS:** inspect dependency baseline files on `main`, baseline-repair PR #1, and PR #85 integration head. CI install passing on #85 is evidence for that branch only; it does not resolve main or clean integration.
+- **Cost/scope:** GitHub-only source/CI read; £0. No live provider, merge, deployment, migration, secret, payment or external write.
+- **Next:** fetch requirements/dependency files and PR #1 exact status/CI; document verified baseline and branch divergence.
