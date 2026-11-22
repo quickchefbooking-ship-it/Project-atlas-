@@ -15,7 +15,7 @@
 | #63 OIDC startup composition | `167f998` | 44167021419 | success | 1101 passed | draft / unmerged |
 | #64 worker host readiness | `7aa6e9b` | 44178610630 | success | 1174 passed | draft / unmerged |
 | #76 response contract | `40c4395` | 44390312814 | success | 289 passed | draft / unmerged |
-| #79 explicit feedback candidate | `afb962c` | 45046430157 | success | count not captured | draft / unmerged |
+| #79 explicit feedback candidate | `afb962c` | 45046430157 | success | 783 passed | draft / unmerged |
 | #80 lesson → pending memory proposal | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged |
 
 ## Confirmed integration coverage
