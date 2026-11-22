@@ -88,10 +88,16 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 ### 2026-11-22 — learning loop design checkpoint
 - **P3.3 marked DONE:** safe workflow design documented. Candidate creation is deterministic from explicit user feedback, pending only, evidence-linked, bounded, and requires independent approval; no prompt/runtime promotion.
-- **P3.4 VERIFY:** implementation on draft PR #79; workflow run 45046319590 has test step completed successfully, final job status still in progress when checked.
+- **P3.4 DONE:** implementation on draft PR #79; exact-head workflow run 45046319590 completed successfully.
 
 ### 2026-11-22 — feedback-to-candidate implementation checkpoint
 - Draft PR #79 adds deterministic pending lesson candidate creation from explicit negative/partial feedback, only when `lessons:propose` scope is present. Candidate text is bounded, linked to evaluation ID, pending, requires independent review, and runtime promotion is disabled.
 - Tests added: negative feedback creates a pending candidate linked to the evaluation; positive feedback does not create one.
 - Exact head: `afb962cbe8043cdf90c56417a69fb8195c31065c`. Workflow run 45046319590: dependency installation succeeded and test step completed successfully; overall job finalization was still in progress at checkpoint.
 - **P3.4 VERIFY** until overall CI finishes.
+
+### 2026-11-22 — P3.4 completion
+- PR #79 exact head verified: `afb962cbe8043cdf90c56417a69fb8195c31065c`; draft, open, mergeable, unmerged.
+- Workflow run 45046319590 completed with **success**. Test step passed; full job completed.
+- **P3.4 marked DONE.** Negative/partial explicit feedback now creates a pending, bounded, evidence-linked lesson candidate only when the principal has `lessons:propose`; positive feedback creates none. No automatic approval or runtime promotion.
+- **Next P3.5:** review/promote approved lesson candidates into approved runtime memory through a distinct explicit action and owner-controlled authorization. Not yet implemented.
