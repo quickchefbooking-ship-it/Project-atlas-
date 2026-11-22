@@ -121,3 +121,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Failure found during this cycle was the route-security allowlist missing the new identity-protected endpoint; corrected and exact-head CI passed.
 - P3.5 marked DONE. Combined branch stack implements explicit negative-feedback candidate capture, independent lesson review, owner-controlled conversion to pending memory, second memory approval before retrieval, idempotency, and owner isolation.
 - **P3 marked DONE at code/test level**; this is not a merge or deployment claim. P4 integration/security verification is now IN PROGRESS.
+
+### 2026-11-22 — P4.1 CI evidence matrix
+- **P4.1 DONE:** added `docs/PROFESSOR_TEST_EVIDENCE_MATRIX_2026-11-22.md` with exact-head results for PRs #1, #11, #46–#49, #62–#64, #76, #79 and #80. All recorded workflows succeeded; the matrix distinguishes CI from integration/runtime proof.
+- Verified test counts from logs: #1 237; #46 925; #47 926; #48 929; #49 929; #11 781; #62 1151; #63 1101; #64 1174; #76 289; #79 783; #80 786. One non-blocking deprecation warning on each run.
+- **P4.2 IN PROGRESS:** cross-stack integration and security dependency review.
