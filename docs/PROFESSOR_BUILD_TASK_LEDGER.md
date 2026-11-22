@@ -529,7 +529,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub-only read and docs; £0. No merge, deployment, source transfer, migration, secret, payment, provider activation or external write.
 - **Next:** update docs and verify exact read-back.
 
-| P5.42 | IN PROGRESS | Verify latest main branch workflow status/run for malformed dependency baseline and record exact install/test evidence; task started before inspection | Fetch main runs, job/log, exact head; update blocker if CI confirms |
+| P5.42 | DONE (audit) | Main branch SHA 32471ea… has zero Actions workflow runs; direct dependency install/test evidence is unavailable. No failure is claimed. PR #1 repair branch exact CI is successful. | Unblock direct main CI by maintainer merging/reconciling baseline or adding workflow; not performed |
 
 
 ### 2026-11-22 — P5.41 DONE; P5.42 IN PROGRESS: dependency blocker documentation
@@ -537,3 +537,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.42 IN PROGRESS:** check whether main's current workflow confirms the broken dependency file directly, rather than inferring install failure from source.
 - **Cost/scope:** GitHub read/docs only; £0. No merge, deployment, migration, source transfer, secret, payment, provider activation or external write.
 - **Next:** inspect main branch Actions run and install step; update task state.
+
+| P5.43 | IN PROGRESS | Audit free CI workflow on PR #85 branch for action pinning, least permissions, Python/dependency install and test steps; task started before inspection | Read workflow and verify exact-head run includes install and full tests |
+
+
+### 2026-11-22 — P5.42 DONE (audit); P5.43 IN PROGRESS: main CI availability
+- **P5.42 DONE (audit only):** main `32471ea720edb5f10ca51aafaf9d45113d4e736c` has zero GitHub Actions workflow runs returned for branch `main`; therefore no direct main install/test failure is claimed. The malformed `requirements.txt` source is directly verified; PR #1 repair exact-head CI is successful.
+- **P5.43 IN PROGRESS:** audit PR #85's free GitHub Actions workflow for least permissions and immutable action pins; verify CI uses Python 3.11, installs the pinned manifest and runs full pytest on the exact head.
+- **Cost/scope:** GitHub read only; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
+- **Next:** verify workflow evidence and close the audit with source/run references.
