@@ -55,6 +55,8 @@ def professor_conversation(
     principal: RequestPrincipal = Depends(require_verified_principal),
 ):
     """Create or continue one private conversation and return one text answer."""
+    if "professor:chat" not in principal.scopes:
+        raise HTTPException(status_code=403, detail="Professor chat access denied.")
     service = getattr(request.app.state, "conversation_service", None)
     if service is None or not service.is_configured:
         raise HTTPException(
@@ -81,19 +83,17 @@ def professor_conversation(
         )
         from .cognitive_kernel import CognitiveRequest
 
-        prior_context = "\\n".join(
-            f"{item.role}: {item.content}" for item in prior_messages
-        )[-8_000:]
         approved_memory = ()
         if "memory:read" in principal.scopes:
             memory_repository = TenantProfessorMemoryRepository(db, principal)
             approved_memory = tuple(
-                {key: item[key] for key in ("proposal_id", "category", "title", "content")}
+                {key: item[key] for key in ("proposal_id", "category", "title", "content", "matched_terms", "matched_fields")}
                 for item in memory_repository.retrieve(payload.message, limit=5)
             )
         reasoning = service.reason(
-            CognitiveRequest(task=payload.message, context=prior_context),
+            CognitiveRequest(task=payload.message),
             approved_memory=approved_memory,
+            conversation_history=tuple(conversation.messages[:-1]),
         )
         response_text = reasoning.answer
         evidence = list(reasoning.preparation.evidence)

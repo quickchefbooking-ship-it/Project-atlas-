@@ -6,7 +6,7 @@ from atlas_engine.identity_policy import RequestPrincipal
 
 TEST_PRINCIPAL = RequestPrincipal(
     "https://issuer.example.test", "voice-test-user", "voice-test-tenant", True,
-    frozenset({"conversations:read", "conversations:write", "conversations:delete"}),
+    frozenset({"conversations:read", "conversations:write", "conversations:delete", "professor:chat"}),
 )
 
 
@@ -26,6 +26,12 @@ def test_professor_voice_page_is_served():
     assert "Talk to Professor" in response.text
     assert "Start listening" in response.text
     assert "Test Professor's voice" in response.text
+    assert "Short-lived OIDC access token" in response.text
+    assert 'Authorization: "Bearer " + token' in response.text
+    assert 'body: JSON.stringify({ message: value' in response.text
+    assert "data.response" in response.text
+    assert "X-API-Key" not in response.text
+    assert "ATLAS_API_KEY" not in response.text
 
 
 def test_conversation_endpoint_fails_closed_until_reasoning_backend_exists():
@@ -52,3 +58,18 @@ def test_conversation_endpoint_rejects_empty_or_oversized_messages():
 
     assert empty.status_code == 422
     assert oversized.status_code == 422
+
+
+
+def test_voice_ui_uses_same_conversation_contract_and_never_fakes_provider_answers():
+    response = TestClient(professor_app.app).get("/professor/voice")
+    assert response.status_code == 200
+    page = response.text
+    assert 'fetch("/professor/conversation"' not in page  # requests use the shared authenticated API helper
+    assert 'api("/professor/conversation"' in page
+    assert 'data.response' in page
+    assert 'conversation_id: conversationId' in page
+    assert 'reasoning_provider_configured !== true' in page
+    assert "scripted fallback" not in page
+    assert "localStorage" not in page
+    assert "sessionStorage" not in page

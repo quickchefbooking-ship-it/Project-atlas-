@@ -27,6 +27,7 @@ from atlas_engine.public_research_adapters import fetch_github_repository, fetch
 import logging
 from atlas_engine.public_web_retrieval import fetch_public_web_page
 from atlas_engine.http_identity import VerifiedIdentityService, require_verified_principal
+from atlas_engine.oidc_browser_routes import router as oidc_browser_router
 from atlas_engine.oidc_contract import OIDCProviderConfig
 from atlas_engine.oidc_jwt_verifier import PyJWTTokenVerifier
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
@@ -55,12 +56,21 @@ from atlas_engine.tenant_lesson_review import initialize_tenant_lesson_review_sc
 from atlas_engine.professor_lesson_review_api import router as professor_lesson_review_router
 from atlas_engine.professor_conversation_api import router as professor_conversation_router
 from atlas_engine.professor_plan_suggestion_api import router as professor_plan_suggestion_router
+from atlas_engine.tenant_approved_sources import initialize_tenant_approved_source_schema
+from atlas_engine.tenant_source_assessments import initialize_tenant_source_assessment_schema
+from atlas_engine.tenant_source_assessments_api import router as tenant_source_assessments_router
+from atlas_engine.tenant_approved_sources_api import router as tenant_approved_sources_router
 from atlas_engine.tenant_evidence_review import (
     router as tenant_evidence_review_router,
     initialize_tenant_evidence_review_schema,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _capability_execution_enabled_from_environment() -> bool:
+    """Execution is opt-in: only an explicit true value opens the global gate."""
+    return os.getenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "").strip().lower() == "true"
 
 
 class StorageBackend:
@@ -82,6 +92,7 @@ api = TaskAPI(manager, LocalTaskExecutor("local"), Evaluator, LearningMemory(), 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Import repository-owned curated references into the persistent local store."""
+    app.state.capability_execution_enabled = _capability_execution_enabled_from_environment()
     imported = load_bundled_knowledge()
     if storage.get_source("manual-paste") is None:
         register_source("manual-paste", "Manual Research Imports", "manual_paste", access_mode="approval_gated")
@@ -129,11 +140,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AtlasOnePro — Professor Core", lifespan=lifespan)
 app.state.identity_service = None
 app.state.tenant_data_path = None
+app.state.capability_execution_enabled = _capability_execution_enabled_from_environment()
 app.state.tenant_capability_runtime = build_default_capability_runtime()
 app.state.tenant_capability_registry = app.state.tenant_capability_runtime.registry
+app.state.oidc_login_initiator = None
+app.state.oidc_browser_login_service = None
+app.state.atlas_session_identity_service = None
+app.state.atlas_trusted_origins = frozenset()
+app.include_router(oidc_browser_router)
 app.include_router(tenant_plan_lifecycle_router)
 app.include_router(tenant_plan_execution_router)
 app.include_router(tenant_evidence_review_router)
+app.include_router(tenant_approved_sources_router)
+app.include_router(tenant_source_assessments_router)
 app.include_router(professor_conversation_router)
 app.include_router(professor_memory_router)
 app.include_router(professor_reasoning_audit_router)
@@ -186,6 +205,8 @@ def _initialize_tenant_data_store() -> Optional[str]:
         initialize_tenant_plan_schema(connection)
         initialize_tenant_step_schema(connection)
         initialize_tenant_evidence_review_schema(connection)
+        initialize_tenant_approved_source_schema(connection)
+        initialize_tenant_source_assessment_schema(connection)
         initialize_tenant_conversation_schema(connection)
         initialize_tenant_evaluation_schema(connection)
         initialize_reasoning_audit_schema(connection)
@@ -323,6 +344,27 @@ def health():
     return api.health()
 
 
+def _build_revision_from_environment() -> Optional[str]:
+    """Return only a full Git SHA supplied by the trusted build environment."""
+    revision = os.getenv("ATLAS_BUILD_REVISION", "").strip()
+    if len(revision) != 40 or any(
+        character not in "0123456789abcdefABCDEF" for character in revision
+    ):
+        return None
+    return revision.lower()
+
+
+@app.get("/build-info")
+def build_info():
+    """Expose only the validated source revision; never echo arbitrary environment data."""
+    revision = _build_revision_from_environment()
+    return {
+        "revision": revision,
+        "status": "known" if revision is not None else "unknown",
+    }
+
+
+
 @app.get("/launch/readiness")
 def launch_readiness():
     """Return a non-secret launch checklist; configuration is not a live health check."""
@@ -389,18 +431,70 @@ def identity_login_readiness():
     )
     missing_verifier = [name for name in verifier_settings if not os.getenv(name)]
     missing_login = [name for name in hosted_login_settings if not os.getenv(name)]
+    required_login_routes = (
+        ("GET", "/identity/login"),
+        ("GET", "/identity/callback"),
+        ("POST", "/identity/logout"),
+    )
+    registered_routes = {
+        (method, getattr(route, "path", None))
+        for route in app.routes
+        for method in (getattr(route, "methods", None) or ())
+    }
+    missing_routes = [
+        f"{method} {path}"
+        for method, path in required_login_routes
+        if (method, path) not in registered_routes
+    ]
+    login_initiator = getattr(app.state, "oidc_login_initiator", None)
+    callback_service = getattr(app.state, "oidc_browser_login_service", None)
+    services_match = (
+        login_initiator is not None
+        and callable(getattr(login_initiator, "begin_login", None))
+        and callback_service is not None
+        and callable(getattr(callback_service, "complete_callback", None))
+        and getattr(callback_service, "transactions", None)
+        is getattr(login_initiator, "transactions", None)
+        and getattr(callback_service, "redirect_uri", None)
+        == getattr(login_initiator, "redirect_uri", None)
+        and getattr(callback_service, "login_sessions", None) is not None
+    )
+    missing_services = (
+        []
+        if services_match
+        else ["authorization_redirect_service", "callback_session_service"]
+    )
+
+    if missing_verifier or missing_login:
+        readiness_status = "not_configured"
+    elif missing_routes:
+        readiness_status = "not_implemented"
+    elif missing_services:
+        readiness_status = "routes_registered_unconfigured"
+    else:
+        # Registration and service injection are not proof of a live provider round trip.
+        readiness_status = "routes_registered_unverified"
+
     return {
-        "status": "ready" if not missing_verifier and not missing_login else "not_configured",
+        "status": readiness_status,
         "api_verifier": {
             "configured": not missing_verifier,
             "missing_settings": missing_verifier,
         },
         "hosted_login": {
             "configured": not missing_login,
+            "implemented": not missing_routes and not missing_services,
+            "routes_registered": not missing_routes,
+            "services_configured": not missing_services,
             "missing_settings": missing_login,
+            "missing_routes": missing_routes,
+            "missing_services": missing_services,
             "flow": "authorization_code_pkce",
         },
-        "note": "This endpoint reports configuration presence only; it does not authenticate users.",
+        "note": (
+            "This endpoint reports configuration, service injection and route "
+            "registration only; it does not prove a successful sign-in or callback round trip."
+        ),
     }
 
 

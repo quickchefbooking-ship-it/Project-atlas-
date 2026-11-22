@@ -31,22 +31,27 @@ def test_every_private_api_route_declares_the_api_key_dependency():
 
     intentionally_public = {
         ("/health", "GET"),
+        ("/build-info", "GET"),
         ("/media/health", "GET"),
         ("/professor/sources", "GET"),
         ("/professor/learning", "GET"),
         ("/professor/voice", "GET"),
         ("/professor/chat", "GET"),
         ("/identity/login-readiness", "GET"),
+        ("/identity/login", "GET"),
+        ("/identity/callback", "GET"),
         ("/launch/readiness", "GET"),
         ("/professor/evidence-review", "GET"),
         ("/professor/report", "GET"),
     }
     verified_identity_routes = {
         ("/identity/me", "GET"),
+        ("/identity/logout", "POST"),
         ("/professor/tenant/plans/{plan_id}", "GET"),
         ("/professor/tenant/plans", "POST"),
         ("/professor/tenant/plans/{plan_id}/prepare", "POST"),
         ("/professor/tenant/plans/{plan_id}/execute-next", "POST"),
+        ("/professor/tenant/plans/{plan_id}/cancel", "POST"),
         ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "POST"),
         ("/professor/tenant/plans/{plan_id}/evidence/{bundle_step_id}/review", "GET"),
         ("/professor/tenant/plans/{plan_id}/ask", "POST"),
@@ -59,6 +64,10 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/tenant/lessons/{candidate_id}/decision", "POST"),
         ("/professor/tenant/lessons/{candidate_id}/memory-proposal", "POST"),
         ("/professor/tenant/plans/{plan_id}/ask", "POST"),
+        ("/professor/tenant/sources", "POST"),
+        ("/professor/tenant/sources/{document_id}/review", "POST"),
+        ("/professor/tenant/sources/{document_id}/assessments", "POST"),
+        ("/professor/tenant/sources/{document_id}/assessments", "GET"),
         ("/professor/conversation", "POST"),
         ("/professor/tenant/plans/suggest", "POST"),
         ("/professor/conversations", "GET"),
@@ -73,6 +82,8 @@ def test_every_private_api_route_declares_the_api_key_dependency():
         ("/professor/memory/retrieve", "POST"),
         ("/professor/memory/{proposal_id}", "DELETE"),
         ("/professor/memory/cleanup", "POST"),
+        ("/professor/memory/proposals/{prior_proposal_id}/supersession", "POST"),
+        ("/professor/memory/supersessions", "GET"),
     }
     unprotected = []
     for route in app_module.app.routes:
