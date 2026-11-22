@@ -26,7 +26,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 **P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, hosted login services remain missing, and deployment remains approval-gated. P5.1 smoke checklist is DONE.
 
 ### Subtask states
-- **P5.7 IN PROGRESS** — Verify PR #77 history boundary fix at exact head and whether it is represented in PR #84 full-stack integration. Intended result: CI evidence, regression coverage inspection, and precise integration next action. Current evidence: PR #77 open/draft; reported head b02a6c18f334037df5d9c587b5c5a3e9d94db33f.
+- **P5.7 DONE (audit/verification)** — PR #77 exact head b02a6c18f334037df5d9c587b5c5a3e9d94db33f; workflow run 45046088812 succeeded with **931 passed, 1 warning (20.67s)**. The branch is 3 commits ahead of PR #48 prompt-budget head. PR #84 full-stack branch is diverged (134 ahead, 6 behind) and does not contain the fix: its conversation contract lacks MAX_HISTORY_MESSAGES, API lacks the 22-message repository limit, and its API test lacks the long-history regression. Integration still requires port + exact-head CI.
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
 - **P1.2 — focused core/security review: DONE.** Known limitations: shared API-key auth is not verified identity/RBAC/tenant isolation; actor labels are caller supplied; arithmetic-only executor; proposal testing not implemented; SQLite single host.
 - **P1.3 — dependency map: DONE.** Priority chain: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → hosted OIDC #49–#57/#63 → worker safety #58–#64. Source reconciliation #65 separate; market PRs #70–#76 deferred; #66 duplicate/ported.
@@ -187,3 +187,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — P5.7 started: history boundary CI/integration audit
 - Task ID P5.7 IN PROGRESS. Before verification, PR #77 was confirmed open/draft with reported exact head b02a6c18f334037df5d9c587b5c5a3e9d94db33f. Intended result is to verify exact-head workflow/test evidence and determine whether the history boundary fix is included in PR #84's full-stack branch.
 - Safe scope: GitHub-only read/isolated ledger documentation; no paid tools, deployment, merge, or external writes.
+
+
+### 2026-11-22 — P5.7 verified; P5.8 started
+- P5.7 DONE: exact-head run 45046088812 on b02a6c18f334037df5d9c587b5c5a3e9d94db33f completed successfully. Job log confirms 931 passed, 1 deprecation warning, in 20.67s. Commit diff centralizes MAX_HISTORY_MESSAGES = MAX_TURNS - 2, applies the same limit to API repository retrieval, and tests a 12-turn stored conversation yields 22 prior messages + system + latest user = 24 provider messages.
+- Compare: PR #77 is 3 commits ahead of PR #48 head 2f0e678a2a403502bce712d34d8e7917a01edf10. PR #84 branch compare is diverged (134 ahead/6 behind) with merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1; inspected branch files confirm it has not incorporated the API history limit/regression.
+- **P5.8 IN PROGRESS** — Port the verified boundary correction and API regression into the existing PR #84 draft branch; intended result: a new exact branch-head CI run, with no merge/deploy. First inspect the target file context for conflict-safe edits.
