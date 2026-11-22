@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from .conversation_contract import MAX_HISTORY_MESSAGES, ConversationInput, ConversationMessage, build_conversation_input
+from .sqlite_transaction import atomic_transaction
 from .conversation_service import ConversationNotConfigured
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, RequestPrincipal
@@ -110,27 +111,28 @@ def professor_conversation(
             raise ReasoningProviderError(
                 "Professor answer exceeds the conversation persistence limit."
             )
-        repository.append_turn(
-            conversation_id,
-            payload.message,
-            response_text,
-            create_if_missing=is_new_conversation,
-        )
-        audit = TenantReasoningAuditRepository(db, principal).append(
-            conversation_id=conversation_id, request_text=payload.message,
-            response_text=response_text, context_text=system_context,
-            provider=provider_name, model=model_name, evidence=evidence,
-            metadata={
-                "status": reasoning.status,
-                "step_count": len(reasoning.blueprint.steps) if reasoning.blueprint else 0,
-                "critique_accepted": reasoning.critique.accepted_for_delivery if reasoning.critique else False,
-                "goal_coverage": reasoning.critique.goal_coverage if reasoning.critique else 0.0,
-                "action_boundary": reasoning.preparation.frame.action_boundary.value,
-                "execution_enabled": False,
-                "memory_proposal_ids": list(reasoning.memory_proposal_ids),
-            },
-        )
-        return {
+        with atomic_transaction(db):
+            repository.append_turn(
+                conversation_id,
+                payload.message,
+                response_text,
+                create_if_missing=is_new_conversation,
+            )
+            audit = TenantReasoningAuditRepository(db, principal).append(
+                conversation_id=conversation_id, request_text=payload.message,
+                response_text=response_text, context_text=system_context,
+                provider=provider_name, model=model_name, evidence=evidence,
+                metadata={
+                    "status": reasoning.status,
+                    "step_count": len(reasoning.blueprint.steps) if reasoning.blueprint else 0,
+                    "critique_accepted": reasoning.critique.accepted_for_delivery if reasoning.critique else False,
+                    "goal_coverage": reasoning.critique.goal_coverage if reasoning.critique else 0.0,
+                    "action_boundary": reasoning.preparation.frame.action_boundary.value,
+                    "execution_enabled": False,
+                    "memory_proposal_ids": list(reasoning.memory_proposal_ids),
+                },
+            )
+            return {
             "audit_id": audit.audit_id,
             "conversation_id": conversation_id,
             "response": response_text,
@@ -155,7 +157,7 @@ def professor_conversation(
     except sqlite3.Error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Professor storage is temporarily unavailable. Your turn may already be saved; refresh conversation history before retrying.",
+            detail="Professor could not save this turn and its reasoning audit atomically. No turn was saved; please retry.",
         ) from None
     finally:
         db.close()
