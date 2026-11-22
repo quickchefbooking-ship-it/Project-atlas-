@@ -392,5 +392,13 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5.23 | DONE | Integrated session/chat/history/audit/approved-memory coverage audit; 1187 tests pass |
 | P5.24 | DONE | PR #84 diverged 143 ahead/3 behind; 4 overlapping files differ |
 | P5.25 | BLOCKED | Clean integration needs conflict resolution/branch integration beyond prohibited merge scope; approval/manual resolution required |
+| P5.26 | IN PROGRESS | Revalidate PR #85 atomicity evidence and inspect exact source/run details; started before execution | Fetch exact PR head, patch, CI run/job, and source read-back; document any gap |
 
 **Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
+
+
+### 2026-11-22 — P5.26 IN PROGRESS: atomicity evidence/source revalidation
+- **Task ID:** P5.26. Intended result: independently revalidate PR #85 exact head and successful workflow evidence, inspect the transaction/savepoint implementation and API/test diff for correctness, and identify any remaining safe defect.
+- **Status:** IN PROGRESS before execution. Existing ledger shows P5.21/P5.22 DONE based on run 45054846603; PR #85 is draft/open and the branch is stacked on PR #84.
+- **Scope/cost:** GitHub-only source/CI read and ledger documentation; £0. No merge, deployment, production migration, secret, payment, provider activation, or external write.
+- **Next:** inspect PR #85 source diff and workflow job details; verify the CI run commit and head relationship; update task status based on evidence.
