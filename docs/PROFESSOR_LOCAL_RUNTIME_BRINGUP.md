@@ -10,8 +10,15 @@
 - Do not expose this prototype to the internet, LAN, reverse proxy, or public tunnel.
 - Do not commit `.env`, API keys, tokens, database files, or generated outputs.
 
-## 1. Obtain and inspect the approved branch
-Use the approved PR #82 integration branch/merge-ref only after the maintainer chooses the test source. Check the commit SHA before running. Never assume the branch is the production source.
+## 1. Obtain and inspect the test source (currently approval-blocked)
+Do **not** assume PR #82 is the current or approved source. As of 22 November 2026:
+
+- PR #85 atomic conversation/audit draft head `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d` passed merge-ref CI run [45054846603](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45054846603) with 1187 tests, but it is stacked on PR #84 head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`.
+- PR #84 diverges from PR #48 prompt-budget head: 143 commits ahead / 3 behind, with four differing overlapping files. PR #85 is not a clean release source.
+- PR #63 hosted OIDC startup composition head `167f9986124013608544a62cf27bbfc8de991095` passed run [44167021419](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44167021419) (1101 tests) but is a separate diverged draft.
+- PR #83 readiness-test head `d101a6303422e2b73028847c5d6bbac97cf95fe3` passed run [45049237138](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45049237138) (1181 tests) but also differs from PR #85.
+
+A maintainer must select/reconcile a clean branch before this smoke guide is executed. Check out that exact SHA, inspect it, and never assume it is production source. No merge or deployment is authorized by this guide.
 
 ## 2. Install locally (Python 3.11+)
 ```bash
