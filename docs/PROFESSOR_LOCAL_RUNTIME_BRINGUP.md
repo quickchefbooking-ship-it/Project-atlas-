@@ -19,6 +19,8 @@ Do **not** assume PR #82 is the current or approved source. As of 22 November 20
 - PR #83 readiness-test head `d101a6303422e2b73028847c5d6bbac97cf95fe3` passed run [45049237138](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45049237138) (1181 tests) but also differs from PR #85.
 
 A maintainer must select/reconcile a clean branch before this smoke guide is executed. Check out that exact SHA, inspect it, and never assume it is production source. No merge or deployment is authorized by this guide.
+**Dependency baseline blocker:** default `main` currently has `requirements.txt` containing application Python source rather than a pip requirements list. PR #1 repairs/pins the baseline (9 dependencies; exact CI run 43489002177 passed 237 tests) but remains draft/unmerged. PR #85 branch has 12 pinned dependencies and CI 1189 passed, but its stack is diverged from PR #1 (855 ahead/1 behind). Do not run or install from `main` or assume PR #1 is integrated; maintainer must reconcile dependencies and select a clean source SHA.
+
 
 ## 2. Install locally (Python 3.11+)
 ```bash
