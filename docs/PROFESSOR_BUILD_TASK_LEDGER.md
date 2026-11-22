@@ -107,4 +107,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 ### 2026-11-22 — P3.5 implementation checkpoint
 - PR #80 created on isolated branch `atlas/approved-lesson-memory-proposal-v1`, stacked on PR #79. It adds an owner-scoped method/API route, deterministic idempotency key, bounded copy into pending memory, and tests for second approval, repeat requests, pending rejection, and cross-owner denial.
-- Exact head: `21fb41630b21d0d09594da53b9d763414c1bb619`. Workflow run 45046500790 was in progress at checkpoint; **P3.5 VERIFY** until completed.
+- Exact head: `21fb41630b21d0d09594da53b9d763414c1bb619`. Initial CI exposed the new verified-identity route missing from the security-route allowlist (785 passed, 1 failed). The allowlist was corrected in commit `2798b198934cb51fe6a80ededcdf673caad31e02`; new exact-head workflow run 45046596722 is in progress. **P3.5 VERIFY** until completed.
+
+### 2026-11-22 — CI defect and correction
+- PR #80 first full test run failed only because the security audit allowlist did not include the new verified-identity route. Log evidence: 785 passed, 1 failed (`test_every_private_api_route_declares_the_api_key_dependency`).
+- Added the new route to the verified-identity route set in `tests/test_security.py`; latest head is `2798b198934cb51fe6a80ededcdf673caad31e02`. Workflow run 45046596722 is pending.
