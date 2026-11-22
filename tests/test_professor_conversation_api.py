@@ -298,7 +298,13 @@ def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp
 def test_audit_write_failure_warns_turn_may_be_saved_before_retry(tmp_path, monkeypatch):
     client, db_path = make_client(tmp_path)
 
+    original_append = TenantReasoningAuditRepository.append
+
     def fail_audit(self, **kwargs):
+        # Insert the audit row within the outer transaction, then fail after
+        # the nested repository savepoint releases. The route must roll back
+        # both the audit and the conversation turn.
+        original_append(self, **kwargs)
         raise sqlite3.OperationalError("private audit backend detail")
 
     monkeypatch.setattr(TenantReasoningAuditRepository, "append", fail_audit)
