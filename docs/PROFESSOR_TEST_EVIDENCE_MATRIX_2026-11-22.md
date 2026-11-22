@@ -20,6 +20,8 @@
 | #81 chat/provider + learning integration | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged; base #48 |
 | #82 worker/OIDC + learning integration (NOT chat/provider) | `7aa6e9b` | 45046895853 | success | 1179 passed | exact PR #82 merge ref; base #80; draft/unmerged |
 | #83 release-readiness false-positive guard tests | `d101a63` | 45049237138 | success | 1181 passed | PR #83 merge ref (worker + learning base, not chat); draft/unmerged; 2 additional readiness tests |
+| #84 full-stack probe | `c58f585` | — | no run | — | draft; dirty; 143 ahead / 3 behind PR #48; no exact-head CI |
+| #85 atomic conversation/audit + provider mock E2E | `f26cda7` | 45062228181 | success | 1189 passed | exact PR merge-ref on #84 base; draft/unmerged; push run 45062223936 also success |
 
 ## Confirmed integration coverage
 - #46–#48: session/conversation integration, explicit chat capability, bounded prompt composition.
@@ -27,12 +29,13 @@
 - #79–#80: explicit negative feedback → pending candidate → independent review → owner-controlled pending memory proposal → separate memory approval before retrieval.
 
 ## Remaining verification gaps
-1. Draft stacks are not merged; some are based on different parent branches. CI results are not proof that all branches compose together.
-2. No live reasoning-provider round trip has been verified; provider configuration remains opt-in.
+1. Draft stacks are not merged; some are based on different parent branches. PR #84 is currently dirty and diverged from PR #48 (143 ahead / 3 behind, 62 changed files); PR #85 CI tests on the #84 base but does not resolve #84 mergeability.
+2. No live reasoning-provider round trip has been verified; provider configuration remains opt-in. PR #85's new provider integration test uses a local HTTP mock, not a live service.
 3. No verified deployment/startup parity or iPhone/browser end-to-end test against a running deployed instance.
 4. Identity/RBAC/tenant boundaries and trusted-proxy/OIDC composition need cross-stack review; shared API-key auth in baseline is not verified identity.
 5. Worker execution remains gated; no free host/isolation proof or unattended worker runtime.
 6. Learning changes are tested on drafts; not deployed or merged into main.
+7. Main's `requirements.txt` is Python source, not a pip requirements list; PR #1 baseline repair is open/draft/unmerged. Main has no workflow runs. PR #85 branch has a valid 12-pin dependency list and passing CI, but is not cleanly integrated with PR #1.
 
 ## Next
 - Finish the cross-stack dependency/reconciliation review.
@@ -54,6 +57,10 @@
 - PR #83 base is PR #80; it tests launch-readiness safeguards on worker + learning. It is not full-stack chat integration.
 - PR #84 is the corrected full-stack probe. Its CI must be checked against the exact merge ref before P4 is complete.
 
-### PR #84 full-stack integration probe (pending/blocker)
-- PR #84 combines PR #48 chat/provider base with PR #82 worker/OIDC + learning stack. The first branch showed `mergeable_state=dirty`; overlapping chat UI and test files were manually reconciled on the draft branch, including provider metadata, safe error/retry state, and explicit `professor:chat` scope.
-- Latest exact head `17411030f9486c282cc492e948f01e48eb75d10` still reports `mergeable_state=dirty`; no workflow run exists. **No full-stack combined test result.**
+### Latest integration checkpoint — 2026-11-22
+- **PR #84** head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`, base PR #48 head `2f0e678a2a403502bce712d34d8e7917a01edf10`. GitHub reports `mergeable=false`, `mergeable_state=dirty`; comparison is **143 ahead / 3 behind**, 62 changed files, merge base `0eaf6d0ea45805645d9430f56376f5f0223302d1`. No exact-head workflow run exists. Do not merge or rebase.
+- **PR #85** latest head `f26cda77b83305a516a189d6ff4403e984cc8561`, base #84 head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`. Exact PR merge-ref run [45062228181](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062228181) passed **1189 tests, 1 warning in 26.53s**; matching push run [45062223936](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062223936) succeeded. New coverage includes conversation/audit atomic rollback, delete retention (hash-only audit), and an offline HTTP-mock end-to-end test through the real provider adapter, ConversationService, two-pass pipeline, API, storage and audit. This proves the tested #85 stack on the #84 base, not mergeability of #84 into #48.
+- **PR #63** OIDC startup composition head `167f998`, run 44167021419, 1101 passed; separate draft. It diverges from #84 and overlaps `app.py`, hosted OIDC route docs and integration tests.
+- **PR #83** readiness tests head `d101a63`, run 45049237138, 1181 passed; separate draft, diverged from #85 (20 ahead / 1 behind; overlapping conversation API and tests).
+- **PR #1** baseline repair head `f8d6eac`, run 43489002177, 237 passed; open/draft/unmerged. Main remains at `32471ea` with malformed `requirements.txt` and zero Actions runs. PR #1 vs #85 diverged (855 ahead / 1 behind; merge base `ab081097`).
+- No merges, deployments, provider activation, paid services, credits, secrets, payments, migrations, source transfers or external writes occurred. No canonical clean runtime source has been selected.
