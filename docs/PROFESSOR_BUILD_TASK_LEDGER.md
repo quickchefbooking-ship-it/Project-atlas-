@@ -20,10 +20,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P2 | Connect real Professor reasoning/chat path | DONE (branch integration/tests) | PR #48 contains PR #11 provider foundation in ancestry; combined chat/provider stack exact-head CI passed (929 tests). No live provider round-trip/deployment. | Live runtime verification remains P5. |
 | P3 | Persistent, governed learning | DONE (branch implementation/tests) | PR #79 and #80 add explicit feedback candidate and two-step approval-to-memory proposal workflow. PR #80 exact-head CI: 786 passed. Not merged/deployed. | Integrate stack; live verification under P4/P5. |
 | P4 | Integration and security verification | DONE (branch integration CI) | PR #82's merge ref combines PR #64 worker/OIDC stack with PR #81 chat/provider/learning; CI run 45046895853 passed 1179 tests. Draft/unmerged. | Live runtime and deployment verification remains P5. |
-| P5 | Live end-to-end readiness | NOT STARTED | No live deployment/provider round-trip verified. | Safe runtime test environment; deployment remains approval-gated. |
+| P5 | Live end-to-end readiness | BLOCKED | Release smoke checklist prepared. Current readiness code shows hosted-login services missing and live provider round-trip false. No deployment approval or live environment verified. | Obtain approval for a free safe test environment; then run the checklist. |
 
 ## Active task
-**P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 is a mergeable draft and its merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, and deployment remains approval-gated.
+**P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, hosted login services remain missing, and deployment remains approval-gated. P5.1 smoke checklist is DONE.
 
 ### Subtask states
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
@@ -139,3 +139,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Crucially, found PR #82-specific pull_request run **45046895853**, which checked out `refs/remotes/pull/82/merge` (not PR #64's merge ref). Combined exact merge-ref test suite passed: **1179 passed, 1 warning in 25.86s**.
 - This merge-ref includes worker/OIDC readiness (#64 stack) with PR #81 base (chat/provider + governed learning). PR #82 remains draft/unmerged.
 - **P4 marked DONE at branch integration/test level.** P5 live end-to-end readiness is **BLOCKED** by lack of verified live runtime and deployment approval boundary.
+
+### 2026-11-22 — P5.1 release smoke checklist
+- **P5.1 DONE:** created `docs/PROFESSOR_RELEASE_SMOKE_CHECKLIST.md` covering approvals, configuration/secrets, health/readiness, identity/tenancy, iPhone Safari, local reasoning, learning, worker safety, evidence and rollback.
+- Current readiness code reports hosted login services missing/not implemented and `live_provider_round_trip_verified=false`. The local provider guide confirms self-hosted-first configuration but requires same-host setup and a real conversation test.
+- **P5 remains BLOCKED** until a safe runtime target and deployment/test approval exist; no deployment was performed.
