@@ -23,15 +23,45 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | BLOCKED | Release smoke checklist prepared. Current readiness code shows hosted-login services missing and live provider round-trip false. No deployment approval or live environment verified. | Obtain approval for a free safe test environment; then run the checklist. |
 
 ## Active task
-**P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, hosted login services remain missing, and deployment remains approval-gated. P5.1 smoke checklist is DONE.
+**P5 — live end-to-end readiness remains BLOCKED.** No live provider round-trip, hosted-login service, or approved runtime smoke is verified. Current safe work is branch-level code/test audit; exact-head CI for recent PR #84 push commits cannot be queried through the available GitHub connector. No deployment or production change.
 
 ### Subtask states
-- **P5.7 DONE (audit/verification)** — PR #77 exact head b02a6c18f334037df5d9c587b5c5a3e9d94db33f; workflow run 45046088812 succeeded with **931 passed, 1 warning (20.67s)**. The branch is 3 commits ahead of PR #48 prompt-budget head. PR #84 full-stack branch is diverged (134 ahead, 6 behind) and does not contain the fix: its conversation contract lacks MAX_HISTORY_MESSAGES, API lacks the 22-message repository limit, and its API test lacks the long-history regression. Integration still requires port + exact-head CI.
+- **P5 current subtask state:** consolidated status table below is authoritative; older checkpoint entries are historical snapshots.
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
 - **P1.2 — focused core/security review: DONE.** Known limitations: shared API-key auth is not verified identity/RBAC/tenant isolation; actor labels are caller supplied; arithmetic-only executor; proposal testing not implemented; SQLite single host.
 - **P1.3 — dependency map: DONE.** Priority chain: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → hosted OIDC #49–#57/#63 → worker safety #58–#64. Source reconciliation #65 separate; market PRs #70–#76 deferred; #66 duplicate/ported.
 - **P2: DONE at branch/test level.** Compare confirms PR #11 is an ancestor of PR #48. PR #48 CI #44475448752 passed 929 tests; provider is opt-in. No live provider round-trip verified.
 - **P3.1–P3.5: DONE at code/test level on stacked draft branches.** PR #79 exact-head CI #45046430157 success; PR #80 exact-head CI #45046596722 success (786 passed, 1 warning). Pending lesson and memory approvals are separate; no automatic promotion or self-modification.
+
+### P5 status summary — reconciled 2026-11-22
+
+| ID | Status | Evidence | Next action |
+|---|---|---|---|
+| P5.1 | DONE | Release smoke checklist committed on draft docs branch | Runtime smoke requires approved target |
+| P5.2 | DONE | Local runtime bring-up guide; documentation only | Execute only in approved local environment |
+| P5.3 | DONE | R1–R9 blocker register documented | Close blockers with evidence/approval |
+| P5.4 | DONE | PR #83 exact CI 45049237138: 1181 passed | Runtime readiness still blocked |
+| P5.5 | DONE | Worker execution boundary audit; R6 in-process isolation blocker | Independent host isolation needed |
+| P5.6 | VERIFY | Chat scope preflight/fail-safe UI changed on PR #84; no exact-head CI | Verify on exact CI head |
+| P5.7 | DONE | PR #77 head b02a6c18…; run 45046088812: 931 passed | Port is on PR #84; validate there |
+| P5.8 | VERIFY | History boundary port on PR #84; read-back 9/9; exact-head CI unavailable | Retrieve/run exact-head CI |
+| P5.9 | DONE | Branch overlap audit; no bulk integration | Recheck mergeability when CI access available |
+| P5.10 | DONE | Read-back audit of five history files | None |
+| P5.11 | DONE | Scope, fail-closed provider, and no-partial-turn tests audited | None |
+| P5.12 | DONE (audit) | Separate conversation/audit transactions; consistency gap identified | Atomic transaction fix needs CI |
+| P5.13 | VERIFY | 503 refresh-before-retry wording + audit failure test on PR #84 | Exact-head CI |
+| P5.14 | DONE (design audit) | Shared transaction/savepoint approach and acceptance tests recorded | Implement after reliable CI verification |
+| P5.15 | DONE (audit) | Tenant/owner scoping, caps, deletion and append-only tests reviewed | None |
+| P5.16 | DONE (audit) | Conversation deletion retains append-only audit metadata | Retention policy remains explicit product/security decision |
+| P5.17 | VERIFY | Delete confirmation discloses audit retention; UI regression added; read-back passed | Exact-head CI |
+| P5.18 | DONE | Ledger reconciled to current branch heads and evidence | None |
+
+**Exact branch heads:** PR #77 history fix `b02a6c18f334037df5d9c587b5c5a3e9d94db33f` (verified CI); PR #84 integration branch `c58f5856ed5a557c4deaa02333f5ec4e89825ecb` (read-back verified, CI unavailable); ledger PR #78 branch `83d975eeac5cd9b920a140ee04004d651525a6c2`.
+**PR #84 comparison:** 143 commits ahead / 3 behind PR #48 prompt-budget branch; merge-base `0eaf6d0ea45805645d9430f56376f5f0223302d1`. Mergeability is not directly queryable through this connector; previous checkpoint reported dirty. Draft/unmerged.
+**CI limitation:** PR-triggered workflow lookup and commit combined statuses return empty for recent PR #84 push commits. The connector cannot list push-triggered workflow runs. No local repository checkout/test runner is available in this run; therefore P5.6/P5.8/P5.13/P5.17 remain VERIFY.
+**Checkpoint source:** `docs/PROFESSOR_BUILD_TASK_LEDGER.md` is the durable checkpoint log. `docs/PROFESSOR_BUILD_CHECKPOINT.md` was not found (404); no separate checkpoint file is assumed.
+**Cost/scope:** GitHub-only work; no paid service/credits, Replit, merge, deployment, production migration, secret, payment, or external action.
+
 
 ## Working protocol
 1. Select one task; record it as **IN PROGRESS** with task ID and intended result.
@@ -261,3 +291,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Delete confirmation now accurately says conversation message content is removed while append-only reasoning audit hashes, provider/model, evidence references, and limited metadata remain for integrity verification. Added UI regression test. Read-back checks passed on exact PR #84 branch head c58f5856ed5a557c4deaa02333f5ec4e89825ecb.
 - No audit retention policy changed. Exact-head CI remains unverified because PR-run lookup and commit statuses return empty; push-run list is not exposed by this connector. P5.17 VERIFY.
 - P5.18 IN PROGRESS: final durable checkpoint reconciliation.
+
+
+### 2026-11-22 — P5.18 reconciliation complete
+- Consolidated the current P5.1–P5.18 statuses into a single table so the ledger no longer relies on historical checkpoint fragments for current state. P5.18 DONE.
+- Reconciled branch heads: PR #77 b02a6c18f334037df5d9c587b5c5a3e9d94db33f; PR #84 c58f5856ed5a557c4deaa02333f5ec4e89825ecb; ledger branch 83d975eeac5cd9b920a140ee04004d651525a6c2. PR #84 CI remains VERIFY and runtime remains BLOCKED.
+- The standalone checkpoint path is absent; this ledger is the checkpoint source. No cost or prohibited action.
