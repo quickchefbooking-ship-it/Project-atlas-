@@ -511,7 +511,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 - Existing browser-session integration test uses `IntegrationProvider`; lifecycle integration uses `FixtureProvider`. Neither exercises `OpenAICompatibleConversationProvider` with `httpx.MockTransport` end-to-end through the API. This confirms the P5.39 test gap is not duplicate work. Existing files read: session integration SHA `acc689c1557e704c4410c91aa610e4c47dcdee01`; lifecycle integration SHA `27a03c1de50fdfa923a45222e60178a5f57e4b35`.
 
-| P5.40 | IN PROGRESS | Audit dependency baseline (`requirements.txt` and startup imports) across main, baseline-repair PR #1 and PR #85; task started before inspection | Verify source contents, dependency pinning and exact CI install evidence; document integration blocker |
+| P5.40 | DONE (audit) | Main `requirements.txt` is application Python, not pip requirements; main SHA 32471ea… unchanged. PR #1 repair branch pins 9 deps, exact run 43489002177 passed 237 tests; PR #85 branch pins 12 deps, install + tests passed 1189. PR #1 remains draft/unmerged; PR #1 vs PR #85 diverged 855 ahead/1 behind. | Baseline source remains blocked on clean integration/maintainer decision; next update blocker docs with evidence |
 
 
 ### 2026-11-22 — P5.39 DONE; P5.40 IN PROGRESS: provider adapter end-to-end mock test
@@ -519,3 +519,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.40 IN PROGRESS:** inspect dependency baseline files on `main`, baseline-repair PR #1, and PR #85 integration head. CI install passing on #85 is evidence for that branch only; it does not resolve main or clean integration.
 - **Cost/scope:** GitHub-only source/CI read; £0. No live provider, merge, deployment, migration, secret, payment or external write.
 - **Next:** fetch requirements/dependency files and PR #1 exact status/CI; document verified baseline and branch divergence.
+
+| P5.41 | IN PROGRESS | Update release blocker register/runtime bring-up guide with dependency baseline defect and exact PR #1/#85 CI, without authorizing merge or source transfer | Read-back verify R10 and source selection guidance; record document commits |
+
+
+### 2026-11-22 — P5.40 DONE (audit); P5.41 IN PROGRESS: dependency baseline blocker
+- **P5.40 DONE (audit only):** `main` `requirements.txt` SHA `e5c68b6d89cb49d4f5dbe6e722e476ff5a8b7486` is application Python code (imports, app setup, route declarations), not a pip requirements list; default branch remains `32471ea720edb5f10ca51aafaf9d45113d4e736c`. PR #1 baseline-repair branch requirements SHA `aa3aae8c20b8e602a0fdcba5aa6a635cd5bca6f7` pins 9 packages; exact run `43489002177` on head `f8d6eac412d1031430bee6b3740dc67113b854ec` succeeded, **237 passed, 1 warning**. PR #85 branch requirements SHA `b7b993e2a85a2f01bb358cda8d944b76df95f4d7` pins 12 dependencies, including jsonschema, PyJWT crypto and argon2; exact PR CI `45062228181` on head `f26cda77b83305a516a189d6ff4403e984cc8561` passed **1189 tests** and install. PR #1 remains open/draft/unmerged. PR #1 vs #85 compare diverged **855 ahead / 1 behind**, merge-base `ab0810975313b65a0fcd0ceb1a804c056b6c6141`; no integration performed.
+- **P5.41 IN PROGRESS:** refresh blocker register and bring-up guide with this dependency evidence, emphasizing main remains unrepaired and PR #1/#85 are not cleanly integrated.
+- **Cost/scope:** GitHub-only read and docs; £0. No merge, deployment, source transfer, migration, secret, payment, provider activation or external write.
+- **Next:** update docs and verify exact read-back.
