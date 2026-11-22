@@ -16,18 +16,21 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 | ID | Task | Status | Evidence / current state | Next action |
 |---|---|---|---|---|
-| P1 | Reconcile baseline and dependency stack | IN PROGRESS | Exact-head inventory refreshed 2026-11-22: #1/#46-#49/#57/#62-#65/#75/#76 are open draft PRs; all recorded heads match prior checkpoint; exact-head CI rechecked and success confirmed for #1, #48, #64, #76. | Finish focused security/core review and establish dependency/merge order. |
-| P2 | Connect real Professor reasoning/chat path | NOT STARTED | PR #46–#48 exist; #48 prompt-budget changes; prior evidence says #66 chat delivery delta is already ported into #48. | Inspect composition and runtime path, tests, identify disconnected/missing piece. |
-| P3 | Persistent, governed learning | NOT STARTED | Learning memory/evaluator/proposal code exists in PR #1; validation and integration are not proven end-to-end. | Inspect storage/retrieval and task lifecycle; design and implement evidence-backed learning integration on isolated branch. |
-| P4 | Integration and security verification | NOT STARTED | Historical branch CI is not deployment/runtime proof. | Build test matrix and run exact-head checks for core path, identity, tenancy, storage, cancellation, recovery, learning. |
-| P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
+| P1 | Reconcile baseline and dependency stack | DONE (audit only) | Inventory, security/core review, dependency map documented. PR #1 remains draft/unmerged. | Merge/review decisions are approval-gated. |
+| P2 | Connect real Professor reasoning/chat path | IN PROGRESS | PR #11 provider composition and #46–#48 chat stack audited; CI evidence passes on heads. No live round-trip/deployed path verified; branches are separate drafts. | Reconcile integration branch dependencies and verify end-to-end. |
+| P3 | Persistent, governed learning | DONE (branch implementation/tests) | PR #79 and #80 add explicit feedback candidate and two-step approval-to-memory proposal workflow. PR #80 exact-head CI: 786 passed. Not merged/deployed. | Integrate stack; live verification under P4/P5. |
+| P4 | Integration and security verification | IN PROGRESS | Exact-head CI evidence refreshed; PR #80 combined branch test suite passed. Full stack matrix and runtime security verification remain incomplete. | Build matrix and verify core dependencies, identity, tenancy, storage, recovery, chat, learning. |
+| P5 | Live end-to-end readiness | NOT STARTED | No live deployment/provider round-trip verified. | Safe runtime test environment; deployment remains approval-gated. |
 
 ## Active task
-**P3 — persistent, governed learning integration.** P3.1 architecture audit and P3.2 coverage audit DONE. P3 remains IN PROGRESS because branch integration/live behavior and task-outcome feedback are absent. P3.3 design DONE; P3.4 is implementing a bounded explicit-feedback-to-pending-candidate workflow without automatic promotion.
+**P4 — integration/security verification.** Build a concise test evidence matrix and refresh exact-head checks for the Professor-critical branches. P2 remains IN PROGRESS because the provider/chat work is split across draft stacks and no live conversation round-trip is verified.
 
 ### Subtask states
-- **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
-- **P1.2 — Focused security/core review: IN PROGRESS.** Initial inspection confirms auth defaults to required in config, local executor is arithmetic-only, learning lessons cannot self-validate. Continue endpoint/storage review and identify concrete gaps.
+- **P1.1 — PR inventory and exact-head CI refresh: DONE.**
+- **P1.2 — focused core/security review: DONE.** Known limitations: shared API-key auth is not verified identity/RBAC/tenant isolation; actor labels are caller supplied; arithmetic-only executor; proposal testing not implemented; SQLite single host.
+- **P1.3 — dependency map: DONE.** Priority chain: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → hosted OIDC #49–#57/#63 → worker safety #58–#64. Source reconciliation #65 separate; market PRs #70–#76 deferred; #66 duplicate/ported.
+- **P2 audit: DONE.** PR #11 composes opt-in provider; exact-head CI #43733864615 passed. PR #48 exact-head CI #44475448752 passed. No live provider round-trip verified; integration remains IN PROGRESS.
+- **P3.1–P3.5: DONE at code/test level on stacked draft branches.** PR #79 exact-head CI #45046430157 success; PR #80 exact-head CI #45046596722 success (786 passed, 1 warning). Pending lesson and memory approvals are separate; no automatic promotion or self-modification.
 
 ## Working protocol
 1. Select one task; record it as **IN PROGRESS** with task ID and intended result.
