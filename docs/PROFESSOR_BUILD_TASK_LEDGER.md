@@ -149,3 +149,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.2 DONE (documentation preparation only):** added `docs/PROFESSOR_LOCAL_RUNTIME_BRINGUP.md` with loopback-only setup, provider-off first smoke, health/readiness/UI checks, cleanup, and evidence requirements.
 - **P5 runtime execution BLOCKED:** no local computer/runtime execution is available from the GitHub connector; the user or approved test environment must run the documented smoke test and return exact evidence. No public exposure or deployment.
 - Next: continue safe code/test review while runtime evidence remains pending; identify any further release blockers without altering deployment settings.
+
+### 2026-11-22 — P5.3 release blocker register
+- **P5.3 DONE:** added `docs/PROFESSOR_RELEASE_BLOCKER_REGISTER_2026-11-22.md` documenting verified blockers R1–R9, evidence required to close each, safe closure order, and prohibited actions.
+- Re-verified code defaults: reasoning provider off; capability execution opt-in; health/readiness diagnostics explicitly do not prove a real provider conversation or login round trip.
+- **P5 remains BLOCKED** pending R1 safe runtime evidence. Continue with code-level tasks that do not require live environment or approval.
