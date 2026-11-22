@@ -23,7 +23,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P1 — baseline and dependency reconciliation.** P1.1 exact-head refresh DONE; P1.2 focused security/core review DONE; P1.3 dependency order and blockers IN PROGRESS.
+**P2 — reasoning/chat path audit.** P1 is complete as a reconciliation task, with merge/deployment still approval-gated. Next verify the actual conversation path and reasoning provider connection on exact PR heads, then identify the smallest safe missing integration.
 
 ### Subtask states
 - **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
@@ -64,3 +64,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P1.2 marked DONE:** inspected app routes, auth/config, task intake/manager, local executor, learning memory, proposal review, and recovery storage.
 - Findings confirmed: shared API-key authentication is not verified identity/RBAC/tenant isolation; caller-provided actor labels are audit metadata; arithmetic-only executor; no proposal test runner; learning is review-gated; SQLite is single-host. These are known readiness limits.
 - **P1.3 — dependency order/blocker map: IN PROGRESS.** Next task is to consolidate the dependency graph and prioritize Professor-core PRs over unrelated market-intelligence feature branches.
+
+### 2026-11-22 — dependency map checkpoint
+- **P1.3 marked DONE:** dependency priority map recorded: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → OIDC #49–#57/#63 → worker safety #58–#64; source reconciliation #65 remains separate; market PRs #70–#76 deferred; #66 is duplicate/ported.
+- **P1 completed:** inventory, review, and dependency reconciliation. No merge/deployment permission exercised.
+- **P2 marked IN PROGRESS:** reasoning/chat path audit.
