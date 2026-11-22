@@ -538,7 +538,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read/docs only; £0. No merge, deployment, migration, source transfer, secret, payment, provider activation or external write.
 - **Next:** inspect main branch Actions run and install step; update task state.
 
-| P5.43 | IN PROGRESS | Audit free CI workflow on PR #85 branch for action pinning, least permissions, Python/dependency install and test steps; task started before inspection | Read workflow and verify exact-head run includes install and full tests |
+| P5.43 | DONE (audit) | `.github/workflows/tests.yml` SHA 11b851e… uses SHA-pinned checkout/setup-python, `permissions: contents: read`, Python 3.11, pip install from pinned requirements and full pytest. PR #85 exact run 45062228181 and push 45062223936 succeeded on head f26cda77… (1189 tests). | CI evidence current; next consolidate checkpoint/PR status for the durable ledger |
 
 
 ### 2026-11-22 — P5.42 DONE (audit); P5.43 IN PROGRESS: main CI availability
@@ -546,3 +546,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.43 IN PROGRESS:** audit PR #85's free GitHub Actions workflow for least permissions and immutable action pins; verify CI uses Python 3.11, installs the pinned manifest and runs full pytest on the exact head.
 - **Cost/scope:** GitHub read only; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
 - **Next:** verify workflow evidence and close the audit with source/run references.
+
+| P5.44 | IN PROGRESS | Consolidate latest build checkpoint with verified milestones, blockers, exact branch heads/CI, costs and next actions; task started before checkpoint inspection | Inspect existing checkpoint on ledger branch; update/read-back without duplicating task state |
+
+
+### 2026-11-22 — P5.43 DONE (audit); P5.44 IN PROGRESS: checkpoint consolidation
+- **P5.43 DONE (audit only):** workflow `.github/workflows/tests.yml` SHA `11b851e0a6c1c38847dece285714b9cf6ba5eca0` uses SHA-pinned `actions/checkout` and `actions/setup-python`, `permissions: contents: read`, Python 3.11, `pip install -r requirements.txt`, and `python -m pytest -q`. Exact PR #85 run `45062228181` and push run `45062223936` both succeeded on head `f26cda77b83305a516a189d6ff4403e984cc8561`, **1189 passed, 1 warning**. Free GitHub Actions; no secrets or paid integrations.
+- **P5.44 IN PROGRESS:** reconcile the checkpoint file with authoritative ledger and latest PRs.
+- **Cost/scope:** GitHub read/docs only; £0. No merge, deployment, migration, secret, payment, provider activation or external write.
+- **Next:** locate/update the existing checkpoint and verify read-back.
