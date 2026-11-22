@@ -100,4 +100,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #79 exact head verified: `afb962cbe8043cdf90c56417a69fb8195c31065c`; draft, open, mergeable, unmerged.
 - Workflow run 45046319590 completed with **success**. Test step passed; full job completed.
 - **P3.4 marked DONE.** Negative/partial explicit feedback now creates a pending, bounded, evidence-linked lesson candidate only when the principal has `lessons:propose`; positive feedback creates none. No automatic approval or runtime promotion.
-- **Next P3.5:** review/promote approved lesson candidates into approved runtime memory through a distinct explicit action and owner-controlled authorization. Not yet implemented.
+- **P3.5 IN PROGRESS:** add a separate explicit owner action that converts an independently approved lesson into a pending memory proposal (never directly into approved memory).
+
+### 2026-11-22 — start P3.5
+- Task **IN PROGRESS**: explicit owner-controlled conversion of an independently reviewed approved lesson candidate into a pending memory proposal. This keeps two approval gates: lesson review and memory approval; no direct prompt promotion.
