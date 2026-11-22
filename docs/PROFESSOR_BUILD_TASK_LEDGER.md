@@ -377,3 +377,20 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** BLOCKED by policy/scope: user prohibits merges and external writes; resolving and moving the 143-commit integration stack onto a diverged base would require an explicit branch-integration/merge-resolution action. Available evidence shows 4 overlapping files with differing current content. No attempt to rebase, merge, force-push, or rewrite the existing draft branch.
 - **Unblock action:** maintainer review/approval for a dedicated conflict-resolution branch, or a maintainer manually resolves the four paths and reruns exact-head CI. PR #85 remains a tested draft child of PR #84; it is not a substitute for clean mergeability.
 - **Cost/scope:** no action beyond GitHub read-only compare; £0. No merge/deploy/production migration/secrets/payments/external writes.
+
+### Consolidated current subtask status — 2026-11-22
+| Task | Status | Exact evidence / blocker |
+|---|---|---|
+| P5.6 | VERIFY | Chat UI scope/fail-safe changes on PR #84; no clean PR #84 integration merge-ref CI |
+| P5.8 | VERIFY | History boundary port read-back; PR #84 CI unavailable |
+| P5.13 | VERIFY | Safe retry/error handling change; no PR #84 exact-head CI |
+| P5.17 | VERIFY | Delete/audit retention disclosure; PR #84 exact-head CI unavailable |
+| P5.19 | DONE | Exact-head evidence lookup: PR #84 c58f5856; combined status/workflow runs empty (no CI claim) |
+| P5.20 | DONE | Audit confirms conversation + audit commits are separate; test proved partial persistence |
+| P5.21 | DONE | Atomic transaction implementation; PR #85 exact merge-ref CI 45054846603 passed |
+| P5.22 | DONE | Failure injected after audit append; zero rows asserted; same exact-head CI passed |
+| P5.23 | DONE | Integrated session/chat/history/audit/approved-memory coverage audit; 1187 tests pass |
+| P5.24 | DONE | PR #84 diverged 143 ahead/3 behind; 4 overlapping files differ |
+| P5.25 | BLOCKED | Clean integration needs conflict resolution/branch integration beyond prohibited merge scope; approval/manual resolution required |
+
+**Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
