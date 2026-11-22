@@ -10,6 +10,8 @@ import hashlib
 import sqlite3
 from dataclasses import dataclass
 
+from .sqlite_transaction import atomic_transaction
+
 from .identity_policy import RequestPrincipal, authorize_tenant_resource
 
 MAX_STORED_MESSAGES = 200
@@ -121,7 +123,7 @@ class TenantConversationRepository:
         self._auth("conversations:write")
         conversation_id = self._validate_id(conversation_id)
         try:
-            with self.db:
+            with atomic_transaction(self.db):
                 self.db.execute(
                     """INSERT INTO tenant_professor_conversations
                        (tenant_id,owner_key,conversation_id) VALUES(?,?,?)""",
@@ -192,8 +194,8 @@ class TenantConversationRepository:
             raise ValueError("Only user and assistant messages may be persisted.")
         if not isinstance(content, str) or not content.strip() or len(content) > MAX_MESSAGE_CHARS:
             raise ValueError("Message content must contain 1 to 4000 characters.")
-        with self.db:
-            self.db.execute("BEGIN IMMEDIATE")
+        with atomic_transaction(self.db):
+
             exists = self.db.execute(
                 """SELECT 1 FROM tenant_professor_conversations
                    WHERE tenant_id=? AND owner_key=? AND conversation_id=?""",
@@ -241,8 +243,8 @@ class TenantConversationRepository:
         for content in (user_content, assistant_content):
             if not isinstance(content, str) or not content.strip() or len(content) > MAX_MESSAGE_CHARS:
                 raise ValueError("Message content must contain 1 to 4000 characters.")
-        with self.db:
-            self.db.execute("BEGIN IMMEDIATE")
+        with atomic_transaction(self.db):
+
             if create_if_missing:
                 try:
                     self.db.execute(
@@ -295,8 +297,8 @@ class TenantConversationRepository:
     def delete(self, conversation_id: str) -> None:
         self._auth("conversations:delete")
         conversation_id = self._validate_id(conversation_id)
-        with self.db:
-            self.db.execute("BEGIN IMMEDIATE")
+        with atomic_transaction(self.db):
+
             cursor = self.db.execute(
                 """DELETE FROM tenant_professor_conversations
                    WHERE tenant_id=? AND owner_key=? AND conversation_id=?""",
