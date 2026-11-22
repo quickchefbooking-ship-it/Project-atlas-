@@ -53,3 +53,7 @@
 - PR #82 base is PR #80; head is PR #64. Its 1179-test pass is worker/OIDC + learning, not chat/provider.
 - PR #83 base is PR #80; it tests launch-readiness safeguards on worker + learning. It is not full-stack chat integration.
 - PR #84 is the corrected full-stack probe. Its CI must be checked against the exact merge ref before P4 is complete.
+
+### PR #84 full-stack integration probe (pending/blocker)
+- PR #84 combines PR #48 chat/provider base with PR #82 worker/OIDC + learning stack. The first branch showed `mergeable_state=dirty`; overlapping chat UI and test files were manually reconciled on the draft branch, including provider metadata, safe error/retry state, and explicit `professor:chat` scope.
+- Latest exact head `17411030f9486c282cc492e948f01e48eb75d10` still reports `mergeable_state=dirty`; no workflow run exists. **No full-stack combined test result.**
