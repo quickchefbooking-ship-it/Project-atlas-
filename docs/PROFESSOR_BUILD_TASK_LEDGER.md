@@ -23,7 +23,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P1 — baseline and dependency reconciliation.** Exact-head inventory/CI refresh is DONE as subtask P1.1. P1 remains IN PROGRESS pending focused review and dependency order.
+**P1 — baseline and dependency reconciliation.** P1.1 exact-head refresh DONE; P1.2 focused security/core review DONE; P1.3 dependency order and blockers IN PROGRESS.
 
 ### Subtask states
 - **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
@@ -51,7 +51,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - This ledger is being added on an isolated branch from PR #1's exact head; it does not modify `main`, merge, or deploy.
 - **Completed this checkpoint:** PR inventory refresh and exact-head CI verification (P1.1).
 - **Current action:** focused review of baseline auth/storage/executor/learning boundaries (P1.2).
-- **Next:** complete review and dependency order, then proceed to P2 reasoning/chat integration.
+- **Next:** complete the dependency order/blocker map, then proceed to P2 reasoning/chat integration.
 
 
 ### 2026-11-22 — checkpoint update
@@ -59,3 +59,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Refreshed metadata for PR #46, #47, #48, #49, #57, #62, #63, #64, #65, #75 and #76; all remain open/draft/unmerged and mergeable at the time checked.
 - Initial source review: auth default is required (`ATLAS_API_REQUIRE_AUTH=true`); executor only permits bounded basic arithmetic; lesson creation enforces unvalidated status.
 - **P1.1 marked DONE**; P1.2 remains IN PROGRESS.
+
+### 2026-11-22 — focused review checkpoint
+- **P1.2 marked DONE:** inspected app routes, auth/config, task intake/manager, local executor, learning memory, proposal review, and recovery storage.
+- Findings confirmed: shared API-key authentication is not verified identity/RBAC/tenant isolation; caller-provided actor labels are audit metadata; arithmetic-only executor; no proposal test runner; learning is review-gated; SQLite is single-host. These are known readiness limits.
+- **P1.3 — dependency order/blocker map: IN PROGRESS.** Next task is to consolidate the dependency graph and prioritize Professor-core PRs over unrelated market-intelligence feature branches.
