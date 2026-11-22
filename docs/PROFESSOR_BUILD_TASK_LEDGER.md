@@ -464,7 +464,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub read/documentation only; £0. No deployment, merge, migration, secret, payment, provider activation or external write.
 - **Next:** inspect exact PR #85 branch defaults and related tests/CI; update status with file and test evidence.
 
-| P5.35 | IN PROGRESS | Audit authenticated conversation API DB connection, FK enforcement, deletion cascade, audit retention and transaction behavior; task started before inspection | Read exact connection/repository/schema/tests; if defect found, create isolated safe fix with regression + exact CI |
+| P5.35 | DONE (audit) | Repository constructor explicitly enables `PRAGMA foreign_keys=ON`; conversation schema defines message FK `ON DELETE CASCADE`; API delete calls repository parent delete, tombstone transaction; regression test confirms stored messages zero after delete. No defect found. | Next inspect retained reasoning audit fields/deletion semantics and UI disclosure |
 
 
 ### 2026-11-22 — P5.34 DONE (audit); P5.35 IN PROGRESS: conversation storage/deletion boundary
@@ -472,3 +472,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.35 IN PROGRESS:** inspect conversation API SQLite connection setup and repository delete semantics to ensure foreign-key cascades/privacy cleanup are enforced on every request connection, not only schema-initialization connections.
 - **Cost/scope:** GitHub read-only initially; if a narrow defect is confirmed, code/test on isolated PR branch only; £0. No merge, deployment, migration, secrets, payments, provider activation, external writes.
 - **Next:** inspect repository/schema/delete tests and test API behavior; verify or patch with exact-head CI.
+
+| P5.36 | IN PROGRESS | Audit retained reasoning audit rows after conversation deletion for privacy minimization and confirm UI disclosure matches actual retained fields; task started before inspection | Read audit schema/repository/delete UI/test, identify any raw content or mismatch; verify evidence |
+
+
+### 2026-11-22 — P5.35 DONE (audit); P5.36 IN PROGRESS: retained reasoning-audit privacy
+- **P5.35 DONE (audit only):** `TenantConversationRepository.__init__` explicitly sets `PRAGMA foreign_keys=ON` on each API connection, not just the schema-initialization connection; conversation messages use composite owner/tenant FK with `ON DELETE CASCADE`. Repository deletion is transaction-wrapped and writes a deletion tombstone; API deletion test confirms message table count is zero. Source read-back `tenant_conversation_repository.py` SHA `13598b83b915140b7687c8b160791ccfaef2fa47`; API `professor_conversation_api.py` SHA `3302b63384d9e2f345662c49780407f38bad8e90`; tests `test_professor_conversation_api.py` SHA `f9969f1dd01d6a6f5a83c06ca7b01fdeb0b58b70`. No fix needed.
+- **P5.36 IN PROGRESS:** audit the reasoning-audit rows retained after chat deletion; verify retained fields are hashes/metadata/provenance only, no raw prompt or response, and user-facing delete disclosure is accurate.
+- **Cost/scope:** GitHub-only read; £0. No merge, deployment, migration, secrets, payment, provider activation, external write.
+- **Next:** inspect audit schema, repository, UI delete confirmation and tests; update state with exact evidence.
