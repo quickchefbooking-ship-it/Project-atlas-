@@ -39,12 +39,13 @@ def test_reviewer_annotations_are_explicit_attributed_and_flow_into_report():
         reviewed_at="2026-11-14T12:30:00Z",
     )
     assert original["claims"] == []
-    assert bundle["claims"][0]["annotations"] == [{
-        "source_id": "source-1",
-        "relation": "supports",
-        "reviewer_id": "reviewer-hash-123",
-        "reviewed_at": "2026-11-14T12:30:00Z",
-    }]
+    saved_annotation = bundle["claims"][0]["annotations"][0]
+    assert saved_annotation["annotation_id"].startswith("ann_")
+    assert saved_annotation["status"] == "active"
+    assert saved_annotation["source_id"] == "source-1"
+    assert saved_annotation["relation"] == "supports"
+    assert saved_annotation["reviewer_id"] == "reviewer-hash-123"
+    assert saved_annotation["reviewed_at"] == "2026-11-14T12:30:00Z"
 
     evaluation = evaluate_evidence_bundle(bundle)
     assessed = evaluation["evaluations"][0]
@@ -55,6 +56,7 @@ def test_reviewer_annotations_are_explicit_attributed_and_flow_into_report():
         "reviewer_id": "reviewer-hash-123",
         "reviewed_at": "2026-11-14T12:30:00Z",
     }]
+    assert assessed["superseded_annotation_audit"] == []
 
     report = build_professor_report(bundle, evaluation)
     assert report["findings"][0]["annotation_audit"] == assessed["annotation_audit"]
@@ -111,3 +113,26 @@ def test_reviewer_annotation_requires_bounded_reviewer_attribution():
             empty_bundle(), [annotation()], reviewer_id="",
             reviewed_at="2026-11-14T12:30:00Z",
         )
+
+
+def test_superseded_annotations_remain_auditable_but_do_not_drive_current_classification():
+    bundle = apply_reviewer_annotations(
+        empty_bundle(), [annotation()], reviewer_id="reviewer-a",
+        reviewed_at="2026-11-14T12:30:00Z",
+    )
+    old = bundle["claims"][0]["annotations"][0]
+    old["status"] = "superseded"
+    old["superseded_by"] = "ann_replacement"
+    old["superseded_at"] = "2026-11-14T13:00:00Z"
+    old["superseded_by_reviewer_id"] = "reviewer-b"
+
+    current = apply_reviewer_annotations(
+        bundle, [annotation("challenges")], reviewer_id="reviewer-b",
+        reviewed_at="2026-11-14T13:00:00Z",
+    )
+    evaluation = evaluate_evidence_bundle(current)["evaluations"][0]
+    assert evaluation["status"] == "challenged_by_supplied_annotations"
+    assert evaluation["supporting_source_ids"] == []
+    assert evaluation["challenging_source_ids"] == ["source-1"]
+    assert len(evaluation["superseded_annotation_audit"]) == 1
+    assert evaluation["superseded_annotation_audit"][0]["annotation_id"] == old["annotation_id"]

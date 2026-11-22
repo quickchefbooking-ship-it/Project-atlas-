@@ -11,6 +11,7 @@ from atlas_engine.oidc_contract import OIDCProviderConfig, VerifiedTokenClaims
 from atlas_engine.plan_contract import PlanState, PlanStep, ProfessorPlan, RiskClass
 from atlas_engine.tenant_membership import SQLiteMembershipRegistry
 from atlas_engine.tenant_plan_repository import TenantPlanRepository
+from atlas_engine.tenant_plan_cancellation import TenantPlanCancellationRepository
 from atlas_engine.source_adapters import SourceDocument
 
 ISSUER = "https://identity.execution.test/"
@@ -44,6 +45,7 @@ def setup(monkeypatch, tmp_path):
     for name in ("ATLAS_OIDC_ISSUER", "ATLAS_OIDC_AUDIENCE",
                  "ATLAS_OIDC_JWKS_URI", "ATLAS_OIDC_ALLOWED_ALGORITHMS"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "true")
     memberships = SQLiteMembershipRegistry(membership_path)
     memberships.initialize()
     memberships.create_tenant("tenant-a", "Tenant A")
@@ -97,6 +99,38 @@ def test_execute_next_runs_one_bounded_step_then_completes_plan(monkeypatch, tmp
         assert second.json()["plan_state"] == "succeeded"
     finally:
         client.__exit__(None, None, None)
+
+
+def test_execute_next_global_kill_switch_blocks_before_handler_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        app_module.app.state.capability_execution_enabled = False
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Capability execution is globally disabled."
+        assert calls == []
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_capability_execution_configuration_defaults_off(monkeypatch):
+    monkeypatch.delenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", raising=False)
+    assert app_module._capability_execution_enabled_from_environment() is False
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "yes")
+    assert app_module._capability_execution_enabled_from_environment() is False
+    monkeypatch.setenv("ATLAS_CAPABILITY_EXECUTION_ENABLED", "true")
+    assert app_module._capability_execution_enabled_from_environment() is True
 
 
 def test_execute_next_rejects_missing_execution_scope(monkeypatch, tmp_path):
@@ -363,5 +397,287 @@ def test_professor_executes_full_research_evidence_evaluation_report_chain(monke
         assert any("reviewer" in item.lower() or "annotation" in item.lower()
                    for item in report["limitations"])
         assert calls == [("safe AI orchestration", 3)]
+    finally:
+        client.__exit__(None, None, None)
+
+
+
+def test_execute_next_rechecks_capability_scope_after_membership_change(monkeypatch, tmp_path):
+    from atlas_engine import capability_runtime
+
+    calls = []
+    original_calculate = capability_runtime._calculate
+
+    def tracked_calculate(payload, deadline):
+        calls.append(dict(payload))
+        return original_calculate(payload, deadline)
+
+    monkeypatch.setattr(capability_runtime, "_calculate", tracked_calculate)
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.json()["status"] == "step_succeeded"
+        assert len(calls) == 1
+
+        # Re-provisioning updates the verified membership's scopes. The next
+        # HTTP request resolves the new membership rather than trusting the
+        # permissions that were present when the plan was prepared.
+        memberships = SQLiteMembershipRegistry(str(tmp_path / "members.sqlite"))
+        memberships.provision_membership(
+            ISSUER,
+            "operator",
+            "tenant-a",
+            {
+                "plans:read", "plans:write", "plans:execute",
+                "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+                "research:public",
+            },
+        )
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert second.status_code == 403
+        assert "permissions are no longer available" in second.json()["detail"]
+        assert len(calls) == 1  # the second handler was never invoked
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_execution_audit_reservation_is_committed_before_handler_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        original_execute = runtime.execute
+        observed = []
+
+        def inspect_audit_then_execute(*args, **kwargs):
+            connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+            try:
+                rows = connection.execute(
+                    """SELECT event_type,tenant_id,actor_subject,plan_id,step_id,
+                              capability,capability_version,input_sha256
+                       FROM tenant_professor_execution_audit
+                       ORDER BY event_id"""
+                ).fetchall()
+            finally:
+                connection.close()
+            observed.extend(rows)
+            assert rows == [(
+                "execution_reserved", "tenant-a", "operator", "math-plan",
+                "first", "math.calculate", "1.0.0", rows[0][7],
+            )]
+            assert len(rows[0][7]) == 64
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", inspect_audit_then_execute)
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 200
+        assert observed and observed[0][0] == "execution_reserved"
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            events = connection.execute(
+                """SELECT event_type,reservation_event_id
+                   FROM tenant_professor_execution_audit ORDER BY event_id"""
+            ).fetchall()
+        finally:
+            connection.close()
+        assert events == [("execution_reserved", None), ("handler_succeeded", 1)]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_execution_audit_reservation_failure_blocks_handler_dispatch(monkeypatch, tmp_path):
+    from atlas_engine.tenant_execution_audit_repository import TenantExecutionAuditRepository
+
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        def fail_reservation(self, **kwargs):
+            raise sqlite3.OperationalError("simulated audit storage failure")
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        monkeypatch.setattr(TenantExecutionAuditRepository, "reserve", fail_reservation)
+        response = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == (
+            "Tenant execution storage is temporarily unavailable."
+        )
+        assert calls == []
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_stops_ready_plan_before_any_step_dispatch(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        calls = []
+        original_execute = runtime.execute
+
+        def counted_execute(*args, **kwargs):
+            calls.append(args)
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", counted_execute)
+        requested = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Owner requested a stop"},
+        )
+        assert requested.status_code == 200
+        assert requested.json()["status"] == "cancellation_requested"
+
+        stopped = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert stopped.status_code == 200
+        assert stopped.json()["status"] == "cancelled"
+        assert stopped.json()["plan_state"] == "cancelled"
+        repeated = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert repeated.status_code == 200
+        assert repeated.json()["status"] == "cancelled"
+        assert calls == []
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            state = connection.execute(
+                "SELECT state FROM tenant_professor_plans WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+            run_count = connection.execute(
+                "SELECT COUNT(*) FROM tenant_professor_step_runs WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        assert state == "cancelled"
+        assert run_count == 0
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancellation_during_handler_allows_current_step_to_finish_but_blocks_next(
+    monkeypatch, tmp_path
+):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        runtime = app_module.app.state.tenant_capability_runtime
+        original_execute = runtime.execute
+        calls = []
+
+        def cancel_during_first_step(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+                try:
+                    principal = RequestPrincipal(
+                        ISSUER, "operator", "tenant-a", True,
+                        frozenset({
+                            "plans:read", "plans:write", "plans:execute",
+                            "steps:read", "steps:claim", "steps:heartbeat",
+                            "steps:complete", "compute:local", "research:public",
+                        }),
+                    )
+                    TenantPlanCancellationRepository(
+                        connection, principal
+                    ).request("math-plan", reason="Stop after the active step")
+                finally:
+                    connection.close()
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "execute", cancel_during_first_step)
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.json()["status"] == "cancelled"
+        assert first.json()["plan_state"] == "cancelled"
+        assert first.json()["step_id"] == "first"
+        assert first.json()["step_state"] == "succeeded"
+        assert first.json()["result"] == {"value": 4, "kind": "number"}
+
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert second.status_code == 200
+        assert second.json()["status"] == "cancelled"
+        assert len(calls) == 1
+
+        connection = sqlite3.connect(str(tmp_path / "tenant.sqlite"))
+        try:
+            states = connection.execute(
+                """SELECT step_id,state FROM tenant_professor_step_runs
+                   WHERE tenant_id='tenant-a' AND plan_id='math-plan' ORDER BY step_id"""
+            ).fetchall()
+            plan_state = connection.execute(
+                "SELECT state FROM tenant_professor_plans WHERE tenant_id='tenant-a' AND plan_id='math-plan'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        assert states == [("first", "succeeded"), ("second", "pending")]
+        assert plan_state == "cancelled"
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_requires_plan_write_scope(monkeypatch, tmp_path):
+    client, verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        memberships = SQLiteMembershipRegistry(str(tmp_path / "members.sqlite"))
+        memberships.provision_membership(
+            ISSUER, "read-only",
+            "tenant-a",
+            {
+                "plans:read", "plans:execute",
+                "steps:read", "steps:claim", "steps:heartbeat", "steps:complete",
+                "compute:local", "research:public",
+            },
+        )
+        verifier.subject = "read-only"
+        response = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Not authorised"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Plan cancellation denied."
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_cancel_endpoint_rejects_a_terminal_plan(monkeypatch, tmp_path):
+    client, _verifier, headers = setup(monkeypatch, tmp_path)
+    try:
+        first = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        second = client.post(
+            "/professor/tenant/plans/math-plan/execute-next", headers=headers
+        )
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json()["plan_state"] == "succeeded"
+
+        cancelled = client.post(
+            "/professor/tenant/plans/math-plan/cancel",
+            headers=headers,
+            json={"reason": "Too late"},
+        )
+        assert cancelled.status_code == 409
     finally:
         client.__exit__(None, None, None)

@@ -49,7 +49,7 @@ label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
 <section class="panel">
 <div class="topline"><h2>Conversation</h2><div class="status" id="state"><span class="dot"></span>Not connected</div></div>
 <div id="transcript" aria-live="polite">
-<div class="message professor"><small>PROFESSOR · INTRODUCTION</small>Hello. I'm Professor, the central assistant for AtlasOnePro. The voice interface is being brought online. You can test the microphone and my spoken voice here; my full conversational reasoning service is not connected yet.</div>
+<div class="message professor"><small>PROFESSOR · INTRODUCTION</small>Hello. I'm Professor. Connect with a short-lived verified sign-in token to start a real conversation. I will not simulate answers if the reasoning service is unavailable.</div>
 </div>
 <div class="row">
 <textarea id="message" maxlength="4000" placeholder="Type a message to Professor…" aria-label="Message to Professor"></textarea>
@@ -73,23 +73,32 @@ label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
 </section>
 <section class="panel">
 <h2>Connect to Professor Core</h2>
-<label for="apiKey">Instance API key</label>
-<input id="apiKey" type="password" autocomplete="off" placeholder="Enter ATLAS_API_KEY">
-<button id="connect" type="button" style="width:100%;margin-top:10px">Check connection</button>
-<p class="note">The key stays in this page's memory only. It is not saved in browser storage or the page URL. Use a trusted HTTPS connection.</p>
+<label for="token">Short-lived OIDC access token</label>
+<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste verified sign-in token">
+<div class="controls" style="margin-top:10px">
+<button id="connect" type="button">Verify and connect</button>
+<button id="disconnect" class="secondary" type="button">Disconnect</button>
+</div>
+<p class="note">The token stays in this page's memory only. It is never written to browser storage or the page URL. Use a trusted HTTPS connection.</p>
 <div class="note" id="connection">Not checked.</div>
 </section>
-<div class="warning">Honest capability boundary: speech recognition converts your voice to text and speech synthesis reads replies aloud. The current Professor Core does not yet have a general conversational model connected, so this page will not pretend that a scripted fallback is an intelligent answer. External AI remains disabled until separately configured and approved.</div>
+<div class="warning">Honest capability boundary: speech recognition converts your voice to text and device speech synthesis reads Professor's actual replies aloud. A verified sign-in is required, and the reasoning provider must be configured separately. No scripted answer is presented as intelligence; no external actions are available.</div>
 </main>
 <script>
 (() => {
  const $ = id => document.getElementById(id);
- let apiKey = "";
+ let token = "";
+ let conversationId = null;
  let recognition = null;
  let voices = [];
+ let busy = false;
  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
  function state(label, kind) {
-   $("state").innerHTML = '<span class="dot ' + (kind || "") + '"></span>' + label;
+   $("state").textContent = label;
+   const dot = document.createElement("span");
+   dot.className = "dot " + (kind || "");
+   $("state").prepend(dot);
  }
  function addMessage(who, body, label) {
    const node = document.createElement("div");
@@ -102,14 +111,26 @@ label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
    $("transcript").appendChild(node);
    $("transcript").scrollTop = $("transcript").scrollHeight;
  }
+ function setBusy(value) {
+   busy = value;
+   $("send").disabled = value || !token;
+ }
+ async function api(path, options = {}) {
+   const response = await fetch(path, {
+     ...options,
+     headers: { ...(options.headers || {}), Authorization: "Bearer " + token }
+   });
+   const data = await response.json().catch(() => ({}));
+   if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Request failed (" + response.status + ")");
+   return data;
+ }
  function loadVoices() {
    voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
    const select = $("voice");
    const selected = select.value;
    select.replaceChildren(new Option("System default", ""));
    voices.filter(v => /^en(-|_)/i.test(v.lang)).forEach((voice, i) => {
-     const option = new Option(voice.name + " · " + voice.lang, String(i));
-     select.add(option);
+     select.add(new Option(voice.name + " · " + voice.lang, String(i)));
    });
    if (selected && Number(selected) < voices.length) select.value = selected;
  }
@@ -126,13 +147,13 @@ label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
    utterance.rate = Number($("rate").value);
    utterance.pitch = 1;
    utterance.onstart = () => state("Professor speaking", "busy");
-   utterance.onend = () => state("Ready", "ready");
+   utterance.onend = () => state("Connected", "ready");
    utterance.onerror = () => state("Voice output unavailable", "");
    window.speechSynthesis.speak(utterance);
  }
  function startListening() {
    if (!SpeechRecognition) {
-     $("voiceStatus").textContent = "This browser does not expose speech recognition. Try a supported browser or use the text box.";
+     $("voiceStatus").textContent = "This browser does not expose speech recognition. You can still type.";
      return;
    }
    recognition = new SpeechRecognition();
@@ -151,63 +172,88 @@ label{display:block;color:#b7c7da;font-size:.8rem;margin:12px 0 6px}
      if (finalText) $("message").dataset.voiceFinal = "true";
    };
    recognition.onerror = event => { $("voiceStatus").textContent = "Microphone: " + event.error + ". You can still type."; };
-   recognition.onend = () => { $("listen").disabled = false; $("stop").disabled = true; state("Ready", "ready"); };
+   recognition.onend = () => { $("listen").disabled = false; $("stop").disabled = true; if (token) state("Connected", "ready"); };
    try { recognition.start(); } catch (error) { $("voiceStatus").textContent = error.message; }
  }
  async function sendMessage() {
    const value = $("message").value.trim();
-   if (!value) return;
+   if (!value || !token || busy) return;
    addMessage("you", value);
    $("message").value = "";
    $("message").dataset.voiceFinal = "";
-   if (!apiKey) {
-     const reply = "I've received your message through the interface, but the Professor Core is not connected. Enter the instance API key and check the connection. The conversational reasoning service still needs to be connected before I can answer questions.";
-     addMessage("professor", reply);
-     speak(reply);
-     return;
-   }
+   setBusy(true);
+   state("Professor is thinking", "busy");
    try {
-     const response = await fetch("/professor/conversation", {
+     const data = await api("/professor/conversation", {
        method: "POST",
-       headers: {"Content-Type": "application/json", "X-API-Key": apiKey},
-       body: JSON.stringify({message: value})
+       headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({ message: value, ...(conversationId ? { conversation_id: conversationId } : {}) })
      });
-     const data = await response.json().catch(() => ({}));
-     if (!response.ok) throw new Error(data.detail || ("Request failed (" + response.status + ")"));
-     addMessage("professor", data.reply || "No response was returned.");
-     if (data.reply) speak(data.reply);
+     conversationId = data.conversation_id;
+     if (typeof data.response !== "string" || !data.response.trim()) throw new Error("Professor returned no answer.");
+     addMessage("professor", data.response);
+     state("Connected", "ready");
+     speak(data.response);
    } catch (error) {
-     const reply = error.message;
-     addMessage("professor", reply);
-     speak(reply);
+     addMessage("professor", "I couldn't complete that response: " + error.message);
+     state("Conversation unavailable", "");
+   } finally {
+     setBusy(false);
+     $("message").focus();
    }
  }
  $("listen").addEventListener("click", startListening);
  $("stop").addEventListener("click", () => { if (recognition) recognition.stop(); });
  $("send").addEventListener("click", sendMessage);
- $("message").addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
- $("speak").addEventListener("click", () => speak("Hello. I'm Professor, the central assistant for AtlasOnePro. My voice channel is ready for testing."));
- $("silence").addEventListener("click", () => { if (window.speechSynthesis) window.speechSynthesis.cancel(); state("Ready", "ready"); });
+ $("message").addEventListener("keydown", event => {
+   if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); }
+ });
+ $("speak").addEventListener("click", () => speak("Hello. I'm Professor, the central assistant for AtlasOnePro. Connect to begin our conversation."));
+ $("silence").addEventListener("click", () => { if (window.speechSynthesis) window.speechSynthesis.cancel(); if (token) state("Connected", "ready"); });
  $("connect").addEventListener("click", async () => {
-   apiKey = $("apiKey").value.trim();
-   if (!apiKey) { $("connection").textContent = "Enter the API key first."; return; }
+   const supplied = $("token").value.trim();
+   if (!supplied) { $("connection").textContent = "Paste a short-lived verified sign-in token first."; return; }
+   token = supplied;
+   $("connection").textContent = "Verifying identity and tenant permissions…";
    try {
-     const response = await fetch("/health", {headers: {"X-API-Key": apiKey}});
-     if (!response.ok) throw new Error("Core health check returned " + response.status + ".");
-     const data = await response.json();
-     $("connection").textContent = "Connected to " + (data.service || "Professor Core") + ".";
-     state("Core reachable", "ready");
+     const identity = await api("/identity/me");
+     const scopes = new Set(identity.scopes || []);
+     const missing = ["conversations:read", "conversations:write"].filter(scope => !scopes.has(scope));
+     if (missing.length) throw new Error("Your account is missing required permissions: " + missing.join(", "));
+     const readinessResponse = await fetch("/launch/readiness");
+     const readiness = await readinessResponse.json().catch(() => ({}));
+     if (!readinessResponse.ok) throw new Error("Professor readiness could not be checked.");
+     if (!readiness.checks || readiness.checks.reasoning_provider_configured !== true) {
+       $("connection").textContent = "Identity verified for " + (identity.subject || "your account") + ", but the reasoning provider is not configured. Chat remains disabled.";
+       state("Reasoning offline", "");
+       $("send").disabled = true;
+       return;
+     }
+     $("connection").textContent = "Verified identity and conversation permissions. Reasoning provider is configured.";
+     $("send").disabled = false;
+     state("Connected", "ready");
    } catch (error) {
-     apiKey = "";
+     token = "";
+     $("token").value = "";
+     $("send").disabled = true;
      $("connection").textContent = error.message;
      state("Not connected", "");
    }
+ });
+ $("disconnect").addEventListener("click", () => {
+   token = "";
+   conversationId = null;
+   $("token").value = "";
+   $("send").disabled = true;
+   $("connection").textContent = "Disconnected. The in-memory token and active conversation reference have been cleared.";
+   state("Not connected", "");
  });
  if (window.speechSynthesis) {
    loadVoices();
    window.speechSynthesis.onvoiceschanged = loadVoices;
  } else $("voiceStatus").textContent = "Speech output is not supported in this browser.";
  if (!SpeechRecognition) $("voiceStatus").textContent += " Speech recognition is not exposed here; text input remains available.";
+ $("send").disabled = true;
 })();
 </script>
 </body>

@@ -42,6 +42,7 @@ def build_professor_report(bundle: dict[str, Any], evaluation: dict[str, Any]) -
             "title": source.get("title", ""),
             "uri": source.get("uri", ""),
             "doi": source.get("doi", ""),
+            "identifiers": source.get("identifiers", {}),
             "publisher": source.get("publisher", ""),
             "retrieved_at": source.get("retrieved_at", ""),
         }
@@ -98,8 +99,9 @@ def build_professor_report(bundle: dict[str, Any], evaluation: dict[str, Any]) -
         limitations.append("This report organises supplied annotations and does not independently verify claims.")
 
     duplicate_records = bundle.get("duplicate_records", [])
-    if not isinstance(duplicate_records, list):
-        raise ValueError("Report duplicate records are invalid.")
+    identifier_conflicts = bundle.get("identifier_conflicts", [])
+    if not isinstance(duplicate_records, list) or not isinstance(identifier_conflicts, list):
+        raise ValueError("Report duplicate or identifier conflict records are invalid.")
     return {
         "schema_version": 1,
         "report_type": "professor_evidence_report",
@@ -118,6 +120,7 @@ def build_professor_report(bundle: dict[str, Any], evaluation: dict[str, Any]) -
         **groups,
         "sources": list(source_map.values()),
         "duplicate_records": duplicate_records,
+        "identifier_conflicts": identifier_conflicts,
         "limitations": limitations,
         "review_note": "Source references identify records in the supplied bundle. Review the original sources before relying on any claim.",
     }

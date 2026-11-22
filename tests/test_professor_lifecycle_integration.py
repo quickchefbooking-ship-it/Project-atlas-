@@ -25,6 +25,7 @@ from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schem
 
 ALICE_SCOPES = frozenset({
     "conversations:read", "conversations:write", "conversations:delete",
+    "professor:chat",
     "evaluations:read", "evaluations:write",
     "lessons:propose", "lessons:read",
     "plans:read", "plans:write", "public.research.read",
@@ -119,7 +120,23 @@ def make_lifecycle_client(tmp_path):
     return TestClient(app), database_path, current
 
 
-def test_professor_lifecycle_keeps_preview_feedback_and_lessons_separate(tmp_path):
+def test_professor_lifecycle_keeps_preview_feedback_and_lessons_separate(tmp_path, monkeypatch):
+    from atlas_engine import professor_reasoning_context
+
+    monkeypatch.setattr(
+        professor_reasoning_context,
+        "build_reasoning_evidence",
+        lambda query, limit: [{
+            "document_id": "lifecycle-doc-1",
+            "source_id": "curated",
+            "title": "Approved research",
+            "url": "https://example.org/research",
+            "content_sha256": "a" * 64,
+            "trust_level": "reviewed",
+            "matched_terms": ["research"],
+            "excerpt": "Research safely from approved public evidence.",
+        }],
+    )
     client, database_path, current = make_lifecycle_client(tmp_path)
 
     # A plan can be inspected without changing its DRAFT state or enabling execution.

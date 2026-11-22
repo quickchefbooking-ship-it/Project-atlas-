@@ -1,12 +1,12 @@
 # Professor capability execution boundary — design and acceptance gates
 
-**Status:** design only. This document does not add a handler runner, enable capability execution, grant permissions, connect external services or change production behaviour.
+**Status:** security design plus implementation review. A narrow tenant-scoped handler route already exists for local arithmetic and read-only Crossref/evidence processing. This document records the remaining controls; it does not authorise additional handlers, external writes, deployment or production changes.
 
 ## 1. Purpose
 
 The capability registry now has a draft implementation of strict input/output contract validation. That is necessary but not sufficient to execute a specialist arm safely. Before any handler can run, Professor needs a separately enforced execution boundary that binds a specific caller, tenant, task, attempt, capability version, approved parameters and resource budget into one auditable decision.
 
-The default state remains **execution disabled**. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
+The default state remains **execution disabled**. The application now reads `ATLAS_CAPABILITY_EXECUTION_ENABLED` as a process-wide gate; only the exact value `true` (case-insensitive, whitespace-trimmed) enables the gate. Missing, blank, `yes`, `1` and all other values leave execution disabled. The route checks this gate on every request before tenant storage access, plan inspection, capability lookup or handler dispatch. Missing application state also fails closed. A capability being registered, schema-valid, discoverable or proposed by a plan does not authorise it to run.
 
 ## 2. Non-goals
 
@@ -65,7 +65,7 @@ Any failed check must produce a stable denial code and no handler invocation.
 
 A Python timeout around a thread is not a safe cancellation mechanism: it cannot reliably stop the underlying work or undo a side effect. The first executable implementation, if later approved, should therefore support only pure, bounded local functions in-process, with no network, filesystem writes, credentials or arbitrary code execution.
 
-Any capability that needs network access, filesystem access, a third-party SDK, credentials or an external side effect must run in a separately isolated worker/container with:
+The current built-in Crossref read-only adapter is a limited in-process exception: it uses a bounded HTTP transport and fixed public provider, but its timeout cannot forcibly terminate a stuck process. Do not add another network-capable handler on this basis. Any additional capability that needs network access, filesystem access, a third-party SDK, credentials or an external side effect must run in a separately isolated worker/container with:
 - a deny-by-default network policy and explicit destination allowlist;
 - a dedicated, least-privilege identity or delegated credential scoped to that one capability;
 - read-only filesystem by default and a per-invocation scratch directory where needed;
@@ -120,11 +120,11 @@ Use fake handlers and deterministic test identities only. Tests must assert hand
 
 ## 9. Staged implementation plan
 
-**Stage A — contracts and policy model (design only):** agree the envelope, denial codes, scope semantics, approval binding and audit event schema. No handlers.
+**Stage A — contracts and policy model (partially implemented):** the application has tenant-scoped principals, capability scope checks, a fixed handler catalogue, plan readiness and a one-step execution route. The process-wide global kill switch is implemented and defaults off. A tenant-scoped append-only audit reservation is now committed before `runtime.execute`; a failed reservation prevents dispatch. Handler success/failure is appended as a separate event. The full immutable execution envelope, approval binding and independent review remain outstanding.
 
-**Stage B — pure local pilot:** only after verified identity and tenant isolation exist, implement a disabled-by-default dispatcher for one application-owned, pure local capability. Use fake identity provider fixtures and no external I/O.
+**Stage B — pure local pilot (implemented narrowly):** bounded local arithmetic is executable through the verified tenant route. A separate read-only Crossref adapter and evidence/report chain also exist, but Crossref currently runs in-process and is not an isolated worker. The route records a durable reservation before dispatch and appends a handler outcome; the audit stores principal/tenant/task/capability identifiers and input/output digests rather than raw content.
 
-**Stage C — isolated worker:** prove process/container isolation, quotas, termination, network denial and secret separation before adding any capability that accesses external resources.
+**Stage C — isolated worker (not implemented):** prove process/container isolation, quotas, hard termination, network denial and secret separation before adding further network-capable or credential-bearing handlers.
 
 **Stage D — one read-only specialist adapter:** add one source adapter with explicit delegated read-only scopes, provenance and contract tests. Keep all write actions unavailable.
 
@@ -134,7 +134,7 @@ A stage is not complete because code exists. It requires passing CI on the exact
 
 ## 10. Current gate and status
 
-- PR #8 adds strict capability schema validation but does not invoke handlers.
-- PR #8 CI passed on exact head `92e6d1646844dd22aa5fb577058202a5e395f43f` (GitHub Actions run 43484841655).
-- Verified identity, role/scope enforcement, tenant isolation, action-bound approval and isolated workers are not yet implemented.
-- Therefore capability execution remains disabled. This document is a proposal for review, not an assertion that the controls exist.
+- The capability registry validates schema syntax at registration and payloads at runtime. The tenant execution route is included in the application and has HTTP tests for identity, tenant scopes, bounded arithmetic and the Crossref/evidence/report chain.
+- The route requires verified identity, `plans:execute`, the step's declared capability scopes, a prepared plan and an application-owned handler. The currently registered handlers do not include external writes or privileged operations.
+- The global kill switch and pre-dispatch append-only audit reservation are implemented in draft PRs. A deterministic evidence excerpt traceability primitive now checks exact excerpt presence against a supplied source snapshot and binds a digest; it does not prove claim support, authenticate the reviewer or assess source credibility. The owner-facing emergency-stop/override control is not built; the current switch is configuration-based and does not cancel work already in flight. Isolated worker execution, approved immutable source-snapshot binding, authenticated reviewer workflow, independent source-quality assessment and full action-bound approval for future write handlers remain outstanding.
+- Therefore only the narrow built-in vertical slice is executable. General capability execution and external writes remain unavailable; this is not a production release approval.

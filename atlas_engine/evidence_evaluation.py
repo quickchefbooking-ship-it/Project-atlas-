@@ -54,9 +54,25 @@ def evaluate_evidence_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         relations = set()
         supporting, challenging, mentioning = [], [], []
         annotation_audit = []
+        superseded_annotation_audit = []
         for annotation in claim["annotations"]:
             if not isinstance(annotation, dict):
                 raise ValueError("Claim annotation is invalid.")
+            annotation_status = annotation.get("status", "active")
+            if annotation_status == "superseded":
+                superseded_annotation_audit.append({
+                    "annotation_id": annotation.get("annotation_id"),
+                    "source_id": annotation.get("source_id"),
+                    "relation": annotation.get("relation"),
+                    "reviewer_id": annotation.get("reviewer_id"),
+                    "reviewed_at": annotation.get("reviewed_at"),
+                    "superseded_by": annotation.get("superseded_by"),
+                    "superseded_at": annotation.get("superseded_at"),
+                    "superseded_by_reviewer_id": annotation.get("superseded_by_reviewer_id"),
+                })
+                continue
+            if annotation_status != "active":
+                raise ValueError("Claim annotation status is invalid.")
             source_id, relation = annotation.get("source_id"), annotation.get("relation")
             if source_id not in source_ids or relation not in _RELATIONS:
                 raise ValueError("Claim annotation has an unknown source or relation.")
@@ -94,6 +110,7 @@ def evaluate_evidence_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
             "annotated_source_count": len(set(annotated_ids)),
             "distinct_record_group_count": len(independent_groups),
             "annotation_audit": annotation_audit,
+            "superseded_annotation_audit": superseded_annotation_audit,
             "confidence": "not_scored",
             "interpretation": (
                 "Classification reflects supplied relation labels only; it is not a finding that the claim is true or false."

@@ -5,7 +5,7 @@ AtlasOnePro is the wider platform. The **Professor** is its central reasoning an
 ## Current prototype capabilities
 
 - FastAPI service and public health checks
-- Task creation and local, restricted arithmetic execution
+- Task creation, restricted local arithmetic, and a tenant-scoped bounded Professor capability path for read-only scholarly research and evidence reporting
 - Deterministic success-criteria evaluation
 - SQLite persistence for tasks, evaluations, lessons and proposals
 - Human-reviewed improvement proposals
@@ -52,6 +52,10 @@ The API key is a shared-secret development control, not per-user identity, role-
 
 Media output paths are constrained to ATLAS_MEDIA_OUTPUT_DIR. Path traversal and symlink escapes are rejected by the media generator.
 
+## Professor capability execution
+
+The repository includes a narrow, verified-identity and tenant-scoped `execute-next` route. It can invoke only application-owned registered handlers after plan readiness, capability scope checks and JSON Schema validation. The current built-in vertical slice includes bounded local arithmetic and read-only Crossref scholarly metadata retrieval, followed by evidence bundling, evaluation and report generation. This is not a general plugin runner: external writes, privileged actions, arbitrary code, task-supplied handlers and unattended dispatch remain unavailable. A process-wide execution kill switch is fail-closed by default; set `ATLAS_CAPABILITY_EXECUTION_ENABLED=true` only in a controlled environment after review. Crossref network work currently runs in-process and is not a substitute for an isolated worker. See [the capability execution boundary](docs/professor-capability-execution-boundary.md).
+
 ## Architecture
 
 See [the Professor orchestration blueprint](docs/professor-orchestration.md) for the verified current boundaries, target octopus/capability model, staged delivery plan and release gates. It is design guidance, not a claim that the future orchestration or integrations are already implemented.
@@ -60,7 +64,11 @@ See [the Professor orchestration blueprint](docs/professor-orchestration.md) for
 
 Open `/professor/voice` in the running AtlasOnePro instance for the browser voice interface. It provides typed conversation input, browser speech recognition where supported, device speech synthesis, voice selection and a connection check for Professor Core. Speech recognition and playback run in the browser; microphone access depends on browser support, permission and a secure context.
 
-The interface is a voice-channel prototype, not a connected conversational AI. `POST /professor/conversation` is authenticated and deliberately returns HTTP 503 until a real reasoning backend is selected, configured and tested. The local executor still supports basic arithmetic only. No fake conversational replies are generated, and paid AI remains disabled by default.
+The interface uses the same verified bearer-token identity boundary and conversation contract as Professor chat. Device speech recognition converts speech to text; device speech synthesis reads the Professor's actual response aloud. The conversation endpoint remains fail-closed until a reasoning backend is explicitly configured. For a £0 self-hosted-first setup, see [the local reasoning provider guide](docs/local-reasoning-provider-setup.md). No fake conversational replies are generated, and no paid AI provider is enabled by default.
+
+## Local Professor reasoning provider
+
+The reasoning adapter supports an OpenAI-compatible Chat Completions endpoint, including local Ollama when it runs on the same machine as the Atlas application. Provider configuration is opt-in and disabled by default. Follow [the local reasoning provider setup guide](docs/local-reasoning-provider-setup.md); do not expose an unauthenticated local model server to the public internet.
 
 ## Professor Source Division interface
 
