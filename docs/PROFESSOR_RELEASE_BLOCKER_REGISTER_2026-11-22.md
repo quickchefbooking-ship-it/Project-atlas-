@@ -16,9 +16,11 @@
 | R8 | iPhone Safari end-to-end not verified | Browser UI code exists, but no device/runtime check performed | iPhone Safari screenshot/recorded checks: sign-in, conversation, persistence, error state, accessibility/layout |
 | R9 | Release/rollback operations not exercised | Checklist prepared only; no deployment | Release owner, staging, monitoring, backup, rollback rehearsal and sign-off |
 | R10 | Main dependency baseline is malformed/unrepaired | `main` `requirements.txt` is Python source, not a pip requirements list; main SHA `32471ea720edb5f10ca51aafaf9d45113d4e736c`. PR #1 repair is open/draft/unmerged; its CI passed 237 tests. PR #85 branch CI passed 1189 tests but is diverged from PR #1. | Maintainer reconciles valid pinned baseline with Professor dependencies on a clean approved branch; exact SHA and dependency install/test CI pass before runtime smoke |
+| R11 | Startup writes/schema mutation are not reviewed for an existing database | App lifespan imports bundled knowledge and registers sources in core storage; if tenant DB path is set, startup initializes schemas and reasoning-audit initializer may `ALTER TABLE` to add `metadata_json`. | Use only disposable local DB for smoke; review/version migration, backup and rollback before any existing/production DB; no production migration approved |
 
 ## Safe order to close blockers
 0. R10: reconcile the malformed main dependency baseline with the pinned dependency set on a clean, maintainer-approved branch; do not merge the current drafts automatically.
+0a. R11: use a fresh disposable local DB for smoke; no existing/production DB until startup schema writes and migration are reviewed, versioned and approved.
 1. R1: run local loopback smoke with provider off and execution disabled.
 2. R5: verify local tenant store initialization and isolation with tests.
 3. R2: enable a local self-hosted reasoning provider only after its endpoint is on the same trusted machine/network and test a real conversation.
