@@ -195,7 +195,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.8 VERIFY** — Ported the history boundary into PR #84 branch in five commits, latest d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73. Contract constant, API fetch limit, pipeline guard, long-history API regression, and pipeline 22-message acceptance/23-message rejection tests are present. Exact-head CI is not yet verifiable: PR-triggered workflow lookup returns none, combined status is empty, and this connector cannot list push-triggered runs. Do not mark DONE without exact-head CI.
 - **P5.9 DONE (audit only)** — Compared PR #84 branch to PR #48: diverged, 139 ahead/3 behind, merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1. Four changed-file overlaps: reasoning pipeline, chat HTML, chat UI tests, and pipeline tests. PR #84 branch includes PR #48 prompt-budget/context test changes but has additional hosted-session/auth and history-limit changes. No merge/rebase/bulk transfer attempted; connector cannot expose PR mergeability directly.
 - **P5.10 DONE (read-back audit)** — Read all five files from PR #84 exact branch head d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73; 9/9 assertions passed: shared 22-message constant, API limit, pipeline guard, API and pipeline regressions, and 23-message rejection. No residual API limit=23 found. CI still unverified.
-- **P5.11 IN PROGRESS** — Audit authenticated conversation scope enforcement and provider-failure persistence on the PR #84 branch. Intended result: verify the API does not persist partial user turns or leak provider details and identify any safe correction.
+- **P5.11 DONE (audit)** — PR #84 conversation endpoint checks verified principal plus explicit professor:chat scope before provider work; missing provider fails closed. Tests assert provider failure leaves zero conversation/message rows and >4000-character output leaves zero rows. Provider exception detail is not exposed; API returns a generic 503. append_turn writes the user/assistant pair atomically.
+- **P5.12 IN PROGRESS** — Inspect conversation + reasoning-audit persistence ordering for partial-state risk. Intended result: verify transaction boundaries and identify whether the response's retry warning accurately describes failure cases.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -214,3 +215,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — P5.10 read-back audit complete; P5.11 started
 - Read-back from PR #84 branch head d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73 verified all five files and 9 checks passed: shared history constant, API retrieval limit, pipeline validation/error text, long-conversation API test, max-history pipeline test, and 23-message rejection. No residual API retrieval limit of 23.
 - P5.10 DONE (repository read-back only). **P5.11 IN PROGRESS**: inspect auth/scope and failure persistence boundary with targeted source/tests; no runtime or provider activation.
+
+
+### 2026-11-22 — P5.11 scope/failure-path audit complete; P5.12 persistence audit started
+- PR #84 endpoint read-back: verified identity principal dependency and explicit professor:chat scope check precede provider work; service/config failure returns 503 before conversation creation; memory read requires memory:read; user and assistant turn writes are atomic through append_turn.
+- Regression tests exist for provider failure (0 conversation rows/0 messages), provider output over 4000 chars (0 rows), and missing chat scope (403). Provider exception detail is hidden behind a generic 503. P5.11 DONE (audit evidence only).
+- P5.12 IN PROGRESS: inspect conversation persistence and audit write ordering for potential consistency gap after provider success.
