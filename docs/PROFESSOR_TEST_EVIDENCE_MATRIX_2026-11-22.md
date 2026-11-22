@@ -18,7 +18,7 @@
 | #79 explicit feedback candidate | `afb962c` | 45046430157 | success | 783 passed | draft / unmerged |
 | #80 lesson → pending memory proposal | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged |
 | #81 chat/provider + learning integration | `2798b19` | 45046596722 | success | 786 passed | draft / unmerged; base #48 |
-| #82 worker/OIDC compatibility probe | `7aa6e9b` | 44178610630 | success | 1174 passed | mergeable draft; run verified against PR #64 base, not PR #82 combined base |
+| #82 worker/OIDC + chat/provider + learning integration | `7aa6e9b` | 45046895853 | success | 1179 passed | PR #82 merge-ref CI; draft/unmerged |
 
 ## Confirmed integration coverage
 - #46–#48: session/conversation integration, explicit chat capability, bounded prompt composition.
@@ -37,3 +37,6 @@
 - Finish the cross-stack dependency/reconciliation review.
 - Verify one complete authenticated conversation: login/verified principal → chat → provider → stored conversation → audit → explicit evaluation → pending lesson → independent approval → owner memory proposal → second approval → approved memory retrieved into next conversation.
 - Keep production/deployment/merge approval gates intact.
+
+### Combined integration evidence
+- PR #82 is mergeable/clean and its exact pull-request merge ref was tested in run 45046895853. Checkout log confirms `refs/remotes/pull/82/merge`; 1179 passed, 1 warning in 25.86s. This combines the PR #64 worker/OIDC branch with PR #81 chat/provider/learning base. Still no merge/deployment.
