@@ -159,3 +159,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.4 IN PROGRESS:** added draft PR #83 with tests for `/launch/readiness` missing configuration and the rule that configured identity/storage/provider does not substitute for a live provider round-trip. Tests-only change.
 - PR #83 refreshed to mergeable=true; exact-head workflow run 45049237138 is in progress. Do not mark complete until run conclusion and test evidence are checked.
 - If CI passes, mark P5.4 DONE; P5 live runtime remains BLOCKED.
+
+### 2026-11-22 — P5.5 execution boundary review
+- **P5.5 DONE:** reviewed the actual tenant `execute-next` route and registered capability runtime. The global kill switch is checked before plan inspection/handler dispatch; however, bounded handlers run in the API process and Crossref network work is in-process. This is now explicitly recorded as an isolation blocker R6; worker-host readiness does not prove independent isolation.
+- **P5.4 remains IN PROGRESS:** PR #83 mergeability refreshed to true; exact-head workflow run 45049237138 still in progress. Do not close until the test workflow finishes.
