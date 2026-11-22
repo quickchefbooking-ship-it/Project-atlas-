@@ -352,3 +352,16 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS. PR #85 exact merge-ref CI passed 1187 tests; inspect the targeted integration/security tests and reconcile against P5 release blocker register.
 - **Cost/scope:** GitHub-only read/audit; £0. No deployment, live credentials, provider calls, production data, merge, or external write.
 - **Next:** finish test/readiness evidence review, update status and next action.
+
+### 2026-11-22 — P5.23 DONE: integrated chat/session/learning coverage audit
+- PR #85 exact-head CI 45054846603 passed 1187 tests; the merge-ref included PR #85 head f7cc1 with PR #84 base c58f5856. This is branch-level composition evidence only.
+- `tests/test_professor_session_conversation_integration.py` SHA `acc689c1557e704c4410c91aa610e4c47dcdee01` exercises browser cookie + same-origin + CSRF session to tenant-scoped chat, fixture provider response, and persisted history. It does **not** run hosted OIDC login or a real provider; evidence retrieval is isolated in this test.
+- `tests/test_professor_conversation_api.py` exact head `f9969f1dd01d6a6f5a83c06ca7b01fdeb0b58b70` covers two-turn history, audit chain verification, approved-memory retrieval only, scope denial, cross-owner isolation, missing-provider fail-closed, and atomic rollback after audit insert.
+- Release blocker register read from ledger branch confirms R1 runtime smoke, R2 live provider, R3/R4 verified identity/hosted login, R5 persistent tenant storage, R6 independently isolated worker (current handlers in-process), R8 iPhone Safari, R9 release/rollback remain open. R7 capability scope remains narrow.
+- **P5.23 DONE (audit).** No runtime/deployment actions. Cost £0.
+
+### 2026-11-22 — P5.24 IN PROGRESS: refresh full-stack branch ancestry/overlap evidence
+- **Task ID:** P5.24. Intended result: compare PR #84 integration head against its PR #48 prompt-budget base, confirm whether the previously reported dirty/behind state persists, and identify a safe next action without merging.
+- **Status:** IN PROGRESS. Use exact current branch refs; avoid repeating the earlier overlap reconciliation.
+- **Cost/scope:** GitHub-only read/compare; £0. No merge, deployment, production migration, or external writes.
+- **Next:** verify branch refs and compare metadata/file overlap; if still dirty/unresolvable with available tools, document the precise blocker and move to another safe audit.
