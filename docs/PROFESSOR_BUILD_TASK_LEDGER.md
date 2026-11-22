@@ -163,3 +163,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — P5.5 execution boundary review
 - **P5.5 DONE:** reviewed the actual tenant `execute-next` route and registered capability runtime. The global kill switch is checked before plan inspection/handler dispatch; however, bounded handlers run in the API process and Crossref network work is in-process. This is now explicitly recorded as an isolation blocker R6; worker-host readiness does not prove independent isolation.
 - **P5.4 remains IN PROGRESS:** PR #83 mergeability refreshed to true; exact-head workflow run 45049237138 still in progress. Do not close until the test workflow finishes.
+
+### 2026-11-22 — P5.4 readiness regression guard verified
+- **P5.4 DONE:** PR #83 exact head `d101a6303422e2b73028847c5d6bbac97cf95fe3` run 45049237138 succeeded: **1181 passed, 1 warning in 21.30s**. PR refreshed mergeable=true. Tests cover absent configuration and prevent configured services from being confused with a verified live provider round-trip.
+- Updated the CI evidence matrix with PR #83. Tests-only branch, draft/unmerged.
+- **P5 still BLOCKED:** actual runtime smoke/provider/login/iPhone checks remain outstanding. Next safe task: review chat UI connection/error-state behavior and document any test gaps; no live provider activation.
