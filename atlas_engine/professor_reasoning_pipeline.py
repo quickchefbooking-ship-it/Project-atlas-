@@ -12,7 +12,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS, MAX_MESSAGE_CHARS, MAX_TURNS)
+from .conversation_contract import (ConversationInput, ConversationMessage, ConversationProvider, ConversationOutput, MAX_CONTEXT_CHARS, MAX_MESSAGE_CHARS, MAX_HISTORY_MESSAGES)
 from .cognitive_kernel import (
     ActionBoundary,
     CognitivePreparation,
@@ -227,8 +227,10 @@ class ProfessorReasoningPipeline:
         approved_memory: tuple[dict, ...] = (),
         conversation_history: tuple[ConversationMessage, ...] = (),
     ) -> ProfessorReasoningResult:
-        if not isinstance(conversation_history, tuple) or len(conversation_history) > MAX_TURNS - 1:
-            raise ValueError("Conversation history must be a tuple of at most 23 prior turns.")
+        if not isinstance(conversation_history, tuple) or len(conversation_history) > MAX_HISTORY_MESSAGES:
+            raise ValueError(
+                f"Conversation history must be a tuple of at most {MAX_HISTORY_MESSAGES} prior messages."
+            )
         if any(not isinstance(item, ConversationMessage) or item.role not in ("user", "assistant") for item in conversation_history):
             raise ValueError("Conversation history may contain only validated user and assistant messages.")
         if sum(len(item.content) for item in conversation_history) + len(request.task) > MAX_CONTEXT_CHARS:
