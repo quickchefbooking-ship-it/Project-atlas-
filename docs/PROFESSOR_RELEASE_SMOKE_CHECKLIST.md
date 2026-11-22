@@ -1,7 +1,7 @@
 # THE PROFESSOR — Live Release Smoke Checklist
 
 **Status:** Prepared; not run against a live deployment.  
-**Current branch evidence (2026-11-22):** PR #85 merge-ref CI run [45054846603](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45054846603) passed **1187 tests, 1 warning** for head `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d` on base `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`. This is branch-level evidence, not runtime/deployment proof. PR #84 is diverged from PR #48 (143 ahead / 3 behind; four overlapping files differ), so PR #85 is not a clean release source. PR #63 hosted-login composition and PR #83 readiness-test branches are separate drafts with their own passing CI; they are not included in PR #85.
+**Current branch evidence (2026-11-22):** PR #85 merge-ref CI run [45062228181](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062228181) passed **1189 tests, 1 warning** for head `f26cda77b83305a516a189d6ff4403e984cc8561` on base `c58f5856ed5a557c4deaa02333f5ec4e89825ecb` (matching push run [45062223936](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062223936)). This is branch-level evidence, not runtime/deployment proof. PR #84 is diverged from PR #48 (143 ahead / 3 behind; four overlapping files differ), so PR #85 is not a clean release source. PR #63 hosted-login composition and PR #83 readiness-test branches are separate drafts with their own passing CI; they are not included in PR #85.
 
 ## Gate 0 — Approval and environment
 - [ ] Ashley explicitly approves a deployment/runtime test environment and the target.
