@@ -13,7 +13,7 @@
 ## 1. Obtain and inspect the test source (currently approval-blocked)
 Do **not** assume PR #82 is the current or approved source. As of 22 November 2026:
 
-- PR #85 atomic conversation/audit draft head `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d` passed merge-ref CI run [45054846603](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45054846603) with 1187 tests, but it is stacked on PR #84 head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`.
+- PR #85 atomic conversation/audit draft latest head `f26cda77b83305a516a189d6ff4403e984cc8561` passed merge-ref CI run [45062228181](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062228181) with 1189 tests (and push run [45062223936](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45062223936)); it is stacked on PR #84 head `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`.
 - PR #84 diverges from PR #48 prompt-budget head: 143 commits ahead / 3 behind, with four differing overlapping files. PR #85 is not a clean release source.
 - PR #63 hosted OIDC startup composition head `167f9986124013608544a62cf27bbfc8de991095` passed run [44167021419](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/44167021419) (1101 tests) but is a separate diverged draft.
 - PR #83 readiness-test head `d101a6303422e2b73028847c5d6bbac97cf95fe3` passed run [45049237138](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45049237138) (1181 tests) but also differs from PR #85.
