@@ -155,7 +155,7 @@ def professor_conversation(
     except sqlite3.Error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Professor conversation storage is temporarily unavailable.",
+            detail="Professor storage is temporarily unavailable. Your turn may already be saved; refresh conversation history before retrying.",
         ) from None
     finally:
         db.close()
