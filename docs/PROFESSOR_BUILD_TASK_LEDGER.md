@@ -397,7 +397,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5.28 | DONE (audit) | Provider adapter + ConversationService + app lifespan read-back; provider is opt-in, bounded, tool-free, fail-closed; provider/API tests covered by exact PR #85 CI | No provider activation; next inspect runtime readiness/config docs |
 | P5.29 | DONE (audit) | Readiness audit confirms `/launch/readiness` hosted-login check only tests client ID + redirect URI; provider round-trip remains false. Existing PR #63 supplies startup composition/readiness-services fix and PR #83 adds release-readiness tests; avoid duplicate code. | Audit/CI/branch composition of PR #63/#83 vs #84/#85; no code transfer or merge |
 | P5.30 | DONE (audit) | PR #63 OIDC startup composition vs PR #84/#85 diverged; shared merge base 2e879fa6…; #63 is 13 commits ahead/72 behind #84 head comparison; overlapping app.py and OIDC integration tests require manual reconciliation | No branch rewrite or source transfer; verify #63/#83 exact-head CI and compare #83 stack before sequencing | 
-| P5.31 | IN PROGRESS | Validate existing PR #63/#83 exact-head CI and compare PR #83 release-readiness stack with PR #84/#85 to avoid duplicate integration work | Inspect exact CI run-head, test files, and compare ancestry/overlap; document safe next step |
+| P5.31 | DONE (audit) | PR #63 run 44167021419 exact head 167f9986… passed 1101 tests; PR #83 run 45049237138 exact head d101a630… passed 1181 tests. PR #83 vs #85 diverged 20 ahead/1 behind, merge-base ea80e8c3…; overlap: professor_conversation_api.py + its API tests. #63 vs #84 overlap: app.py, hosted OIDC routes doc, browser-flow + readiness tests. | No branch rewrite; next reconcile release smoke checklist evidence in durable docs |
 
 **Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
 
@@ -443,3 +443,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.31 IN PROGRESS:** exact-head CI and branch composition review of existing PR #63 hosted-login wiring and PR #83 release-readiness tests vs PR #84/#85 atomicity stack.
 - **Cost/scope:** GitHub read-only; £0. No code copy, merge, rebase, deployment, provider activation, migration, secret, payment or external write.
 - **Next:** confirm workflow run heads/test results and compare PR #83 ancestry/overlap; update task state.
+
+| P5.32 | IN PROGRESS | Reconcile the referenced release-smoke checklist and runtime blocker register against actual files on the ledger/integration branches; started before inspection | Verify file existence and content; correct ledger if prior checkpoint claims a checklist that is not present; list exact blockers/unblock actions |
+
+
+### 2026-11-22 — P5.31 DONE (audit); P5.32 IN PROGRESS: release-smoke evidence reconciliation
+- **P5.31 DONE (audit only):** PR #63 workflow 44167021419 is pull_request event on exact head `167f9986124013608544a62cf27bbfc8de991095`, success, **1101 passed, 1 warning**. PR #83 workflow 45049237138 is pull_request event on exact head `d101a6303422e2b73028847c5d6bbac97cf95fe3`, success, **1181 passed, 1 warning**. PR #83 vs #85 compare: diverged 20 ahead / 1 behind, merge base `ea80e8c35dc923afcd3ed1f3b19aea60e1931c12`; overlap is `atlas_engine/professor_conversation_api.py` and `tests/test_professor_conversation_api.py`. PR #63 vs PR #84 overlap includes `app.py`, `docs/security/hosted-oidc-browser-routes.md`, `tests/test_oidc_browser_flow_integration.py`, and `tests/test_oidc_login_readiness.py`. This means no clean stack path without conflict reconciliation; no merge/rebase performed.
+- **P5.32 IN PROGRESS:** validate whether the ledger's referenced release-smoke checklist exists on the authoritative ledger branch and/or integration branch, and reconcile any missing artifact claim.
+- **Cost/scope:** GitHub read-only + ledger docs; £0. No merge, deployment, source transfer, provider activation, migration, secret, payment or external write.
+- **Next:** inspect branch documentation inventory, verify checklist content if present, and update the ledger with exact file path/evidence and runtime blockers.
