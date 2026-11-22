@@ -299,3 +299,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - The standalone checkpoint path is absent; this ledger is the checkpoint source. No cost or prohibited action.
 
 - **Historical correction:** the P5.7 checkpoint correctly found the boundary fix absent from PR #84 at that moment. P5.8 later ported the fix and tests onto PR #84 branch; current status is VERIFY pending exact-head CI.
+
+### 2026-11-22 — P5.19 IN PROGRESS: exact-head integration CI refresh
+- **Task ID:** P5.19. Intended result: refresh the exact commit/head evidence for PR #84 full-stack integration (chat/provider + governed learning + worker/OIDC), determine whether an actionable CI status/run exists, and avoid treating branch read-back or historical CI as proof.
+- **Status:** IN PROGRESS. Work started with ledger inspection; PR #84 remains draft/unmerged and its previously reported head is `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`.
+- **Scope/cost:** GitHub-only read/audit and ledger documentation; £0; no deployment, merge, production changes, secrets, payments, or external writes.
+- **Next:** verify branch/head identity, fetch combined status and PR workflow runs, record exact result, then update status DONE only if evidence is complete; otherwise BLOCKED/VERIFY with precise reason.
