@@ -197,7 +197,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.10 DONE (read-back audit)** — Read all five files from PR #84 exact branch head d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73; 9/9 assertions passed: shared 22-message constant, API limit, pipeline guard, API and pipeline regressions, and 23-message rejection. No residual API limit=23 found. CI still unverified.
 - **P5.11 DONE (audit)** — PR #84 conversation endpoint checks verified principal plus explicit professor:chat scope before provider work; missing provider fails closed. Tests assert provider failure leaves zero conversation/message rows and >4000-character output leaves zero rows. Provider exception detail is not exposed; API returns a generic 503. append_turn writes the user/assistant pair atomically.
 - **P5.12 DONE (audit)** — Verified separate commits: append_turn commits the user/assistant pair first, then reasoning-audit append starts its own transaction. If the audit write fails, conversation content can remain saved without an audit record and API returns 503. This is a consistency gap; the UI already warns to refresh before retry. No atomic cross-repository transaction is implemented.
-- **P5.13 IN PROGRESS** — Improve 503 wording and add regression test for audit-write failure after successful turn persistence, so users are told to refresh before retrying. Intended result: explicit, accurate error guidance and test evidence.
+- **P5.13 VERIFY** — API storage-error guidance updated and a focused test added on PR #84 branch. Read-back checks pass, but exact-head CI is unavailable through this connector; the test intentionally documents current post-save audit failure state (turn saved, audit absent) and asserts refresh-before-retry guidance.
+- **P5.14 IN PROGRESS** — Focused transaction-boundary audit: determine the smallest safe way to make conversation turn and reasoning-audit writes atomic, and list acceptance tests. Intended result: prevent a persisted turn without its audit if the audit append fails.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -228,3 +229,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Confirmed API order: atomic conversation append_turn commits the user/assistant pair, then the separate audit repository appends. A post-turn audit failure can leave a persisted turn without an audit entry. This is not a provider failure; route returns storage 503.
 - Current UI warning already says server may have completed and to refresh before retry. API error wording is less precise. P5.12 DONE (audit only); cross-table atomicity is a remaining consistency gap.
 - **P5.13 IN PROGRESS** — tighten 503 guidance and add a focused regression for post-save audit failure; no external action or deployment.
+
+
+### 2026-11-22 — P5.13 code checkpoint; P5.14 transaction audit started
+- PR #84 API error guidance now says the turn may already be saved and directs refresh before retry; a test simulates audit append failure and checks generic error/no backend detail. Read-back of API + test passed 6 checks on exact branch head 40b27a11e3652442e4a7c41b28406292d5aeb073.
+- Exact-head CI remains unverified: PR-triggered runs/status checks are empty; push-run listing is unavailable. P5.13 VERIFY, not DONE.
+- **P5.14 IN PROGRESS** — evaluate atomic transaction design and regression criteria; safe read-only audit only.
