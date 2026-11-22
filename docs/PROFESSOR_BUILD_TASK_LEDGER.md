@@ -520,7 +520,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Cost/scope:** GitHub-only source/CI read; £0. No live provider, merge, deployment, migration, secret, payment or external write.
 - **Next:** fetch requirements/dependency files and PR #1 exact status/CI; document verified baseline and branch divergence.
 
-| P5.41 | IN PROGRESS | Update release blocker register/runtime bring-up guide with dependency baseline defect and exact PR #1/#85 CI, without authorizing merge or source transfer | Read-back verify R10 and source selection guidance; record document commits |
+| P5.41 | DONE | Added R10 to blocker register; updated bring-up source selection and latest exact-head evidence (PR #85 head f26cda77… 1189 tests; PR #1 head f8d6eac… 237 tests). Read-back verified docs. | No further doc action; next inspect current main CI for direct install evidence |
 
 
 ### 2026-11-22 — P5.40 DONE (audit); P5.41 IN PROGRESS: dependency baseline blocker
@@ -528,3 +528,12 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.41 IN PROGRESS:** refresh blocker register and bring-up guide with this dependency evidence, emphasizing main remains unrepaired and PR #1/#85 are not cleanly integrated.
 - **Cost/scope:** GitHub-only read and docs; £0. No merge, deployment, source transfer, migration, secret, payment, provider activation or external write.
 - **Next:** update docs and verify exact read-back.
+
+| P5.42 | IN PROGRESS | Verify latest main branch workflow status/run for malformed dependency baseline and record exact install/test evidence; task started before inspection | Fetch main runs, job/log, exact head; update blocker if CI confirms |
+
+
+### 2026-11-22 — P5.41 DONE; P5.42 IN PROGRESS: dependency blocker documentation
+- **P5.41 DONE:** blocker register R10 and runtime guide updated to state that main `requirements.txt` is malformed Python source, PR #1 is draft/unmerged, PR #85 has pinned dependencies but is diverged, and a clean maintainer-selected branch is required. Latest PR #85 exact CI evidence refreshed to head `f26cda77b83305a516a189d6ff4403e984cc8561`, run `45062228181`, 1189 passed; push run `45062223936`. Read-back verified register blob `43236cb058d423628e521e1131c1abeb32149f3a`; checklist update commit `f8afba42094528d8a9a4211131795f83d8a8eb61`; bring-up update commit `2ccd91496ef92fcf979eaf58314a2ad47acdd44d`.
+- **P5.42 IN PROGRESS:** check whether main's current workflow confirms the broken dependency file directly, rather than inferring install failure from source.
+- **Cost/scope:** GitHub read/docs only; £0. No merge, deployment, migration, source transfer, secret, payment, provider activation or external write.
+- **Next:** inspect main branch Actions run and install step; update task state.
