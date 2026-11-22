@@ -8,6 +8,8 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+
+from .sqlite_transaction import atomic_transaction
 from dataclasses import dataclass
 from .identity_policy import RequestPrincipal, authorize_tenant_resource
 
@@ -134,8 +136,8 @@ class TenantReasoningAuditRepository:
         response_hash = self.digest(response_text)
         context_hash = self.digest(context_text)
         encoded = json.dumps(safe_evidence, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        with self.db:
-            self.db.execute("BEGIN IMMEDIATE")
+        with atomic_transaction(self.db):
+
             previous = self.db.execute(
                 """SELECT record_hash FROM tenant_professor_reasoning_audit
                    WHERE tenant_id=? AND owner_key=? ORDER BY audit_id DESC LIMIT 1""",
