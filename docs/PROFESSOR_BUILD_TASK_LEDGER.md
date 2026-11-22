@@ -176,3 +176,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #84 full-stack probe created from the PR #82 merge stack and targets PR #48 chat/provider branch. GitHub reports `mergeable_state=dirty`; no merge-ref CI has been produced.
 - Compared overlap paths from PR #48 and PR #82: three core reasoning files and two lifecycle/context test files are identical at the current content hashes. Conflicts are isolated to chat UI, chat UI tests, and reasoning pipeline prompt-budget test; these were manually reconciled on the draft branch, preserving OIDC/CSRF auth, provider metadata, safe retry messaging, explicit `professor:chat` scope check, and structured conversation history test.
 - After reconciliation, PR #84 remains `dirty` and no CI run is available. **P4.4 BLOCKED** pending a clean branch integration/merge-ref. No merge/deploy.
+
+### 2026-11-22 — P5.6 chat UI fail-safe review
+- **P5.6 IN PROGRESS:** reviewed chat UI/API error flow. Found UI permission preflight omitted the API-required `professor:chat` scope; it could mark a user connected then fail only on send. Added explicit scope check on PR #84 integration branch.
+- Reconciled UI to show provider/model/reasoning/execution metadata only after a successful response; user message remains in input on failure, no fake assistant answer is inserted, and status warns the server may have completed the turn before retry.
+- Verified the updated UI/test files fetch back from GitHub. Full CI validation is blocked by PR #84's unresolved dirty merge state; do not mark P5.6 DONE until exact integration CI passes.
