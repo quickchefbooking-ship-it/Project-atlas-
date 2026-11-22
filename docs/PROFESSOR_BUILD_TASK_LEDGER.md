@@ -171,3 +171,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — integration ancestry correction and P4.4
 - Corrected the evidence matrix and ledger: PR #81 is chat/provider + learning (exact merge-ref run 45046847109, 786 passed); PR #82 is worker/OIDC + learning (exact merge-ref run 45046895853, 1179 passed); PR #83 readiness tests are on worker+learning, not chat.
 - **P4.4 IN PROGRESS:** PR #84 is the corrected full-stack integration probe, targeting PR #48 chat/provider with the PR #82 worker+learning merge stack. Exact merge-ref CI evidence is pending. Draft/unmerged; no deployment.
+
+### 2026-11-22 — P4.4 conflict reconciliation attempt
+- PR #84 full-stack probe created from the PR #82 merge stack and targets PR #48 chat/provider branch. GitHub reports `mergeable_state=dirty`; no merge-ref CI has been produced.
+- Compared overlap paths from PR #48 and PR #82: three core reasoning files and two lifecycle/context test files are identical at the current content hashes. Conflicts are isolated to chat UI, chat UI tests, and reasoning pipeline prompt-budget test; these were manually reconciled on the draft branch, preserving OIDC/CSRF auth, provider metadata, safe retry messaging, explicit `professor:chat` scope check, and structured conversation history test.
+- After reconciliation, PR #84 remains `dirty` and no CI run is available. **P4.4 BLOCKED** pending a clean branch integration/merge-ref. No merge/deploy.
