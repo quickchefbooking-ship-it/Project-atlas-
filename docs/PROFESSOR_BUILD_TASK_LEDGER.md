@@ -392,7 +392,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5.23 | DONE | Integrated session/chat/history/audit/approved-memory coverage audit; 1187 tests pass |
 | P5.24 | DONE | PR #84 diverged 143 ahead/3 behind; 4 overlapping files differ |
 | P5.25 | BLOCKED | Clean integration needs conflict resolution/branch integration beyond prohibited merge scope; approval/manual resolution required |
-| P5.26 | IN PROGRESS | Revalidate PR #85 atomicity evidence and inspect exact source/run details; started before execution | Fetch exact PR head, patch, CI run/job, and source read-back; document any gap |
+| P5.26 | DONE | PR #85 head f7cc1fa9…; PR workflow run 45054846603 exact head SHA, merge ref 1d766051… on base c58f5856…; job succeeded and logs report 1187 passed, 1 warning. Transaction helper/API/tests read-back confirms rollback after audit insert. | No remaining task for this verification; next identity provenance audit |
+| P5.27 | IN PROGRESS | Audit authenticated principal provenance, membership/scopes and cookie/bearer/session protections on PR #85 integration branch; task started before inspection | Read identity/session/OIDC/membership/app composition and relevant tests; record any security gaps or verified boundaries |
 
 **Latest ledger checkpoint:** commit `483e44dec442eef4e33dce260ca2e3f5f2ee76e9`. The durable ledger branch remains separate, open/draft/unmerged. Cost remains £0.
 
@@ -402,3 +403,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **Status:** IN PROGRESS before execution. Existing ledger shows P5.21/P5.22 DONE based on run 45054846603; PR #85 is draft/open and the branch is stacked on PR #84.
 - **Scope/cost:** GitHub-only source/CI read and ledger documentation; £0. No merge, deployment, production migration, secret, payment, provider activation, or external write.
 - **Next:** inspect PR #85 source diff and workflow job details; verify the CI run commit and head relationship; update task status based on evidence.
+
+
+### 2026-11-22 — P5.26 DONE; P5.27 IN PROGRESS: identity provenance audit
+- **P5.26 DONE:** PR #85 head `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d` was the exact workflow `head_sha` in run 45054846603; event was `pull_request`. Run succeeded on merge ref `1d766051d7725bd6a1964332426096afab6f158e` against PR #84 base `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`. Job `test` completed successfully; logs confirm **1187 passed, 1 warning in 19.91s**. Transaction helper/API/repository/test diff read-back confirms nested savepoints and whole-turn rollback after audit insert.
+- **P5.27 IN PROGRESS:** audit verified identity source, membership lookup, scope construction, browser session/cookie CSRF/origin protections, bearer verification and app composition; determine whether caller-supplied identity or tenant/scope can bypass verified principal.
+- **Cost/scope:** GitHub-only read and ledger documentation; £0. No deployment, merge, production migration, secret, payment, provider activation, or external write.
+- **Next:** inspect auth composition + tests; status DONE only for bounded audit with evidence, or BLOCKED if source/test evidence is insufficient.
