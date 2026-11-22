@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from .http_identity import require_verified_principal
 from .tenant_conversation_repository import ConversationNotFound, TenantConversationRepository
 from .tenant_evaluation_repository import TenantEvaluationRepository
+from .tenant_lesson_review import TenantLessonReviewRepository
 
 router = APIRouter()
 
@@ -54,8 +55,31 @@ def create_professor_evaluation(payload: EvaluationInput, request: Request,
             outcome=payload.outcome, rating=payload.rating, note=payload.note,
             evidence=payload.evidence,
         )
+        learning_candidate = None
+        # Explicit negative feedback can produce a deterministic review candidate.
+        # It is not approved, promoted, or inserted into runtime memory.
+        if (
+            payload.outcome in {"partially_helpful", "not_helpful", "unsuccessful"}
+            and payload.note.strip()
+            and "lessons:propose" in principal.scopes
+        ):
+            feedback_text = payload.note.strip()
+            if len(feedback_text) > 1_850:
+                feedback_text = feedback_text[:1_850] + " [feedback truncated]"
+            candidate_id = TenantLessonReviewRepository(db, principal).propose(
+                title=f"Feedback review: {payload.outcome}",
+                lesson_text=f"Explicit user feedback ({payload.outcome}; unverified): {feedback_text}",
+                evaluation_ids=[record.evaluation_id],
+            )
+            learning_candidate = {
+                "candidate_id": candidate_id,
+                "status": "pending",
+                "runtime_promotion": "disabled",
+                "review_required": "independent reviewer",
+            }
         return {
             "evaluation_id": record.evaluation_id,
+            "learning_candidate": learning_candidate,
             "subject_type": record.subject_type,
             "subject_id": record.subject_id,
             "outcome": record.outcome,
