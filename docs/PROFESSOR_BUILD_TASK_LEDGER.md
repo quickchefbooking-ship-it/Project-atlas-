@@ -295,7 +295,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 ### 2026-11-22 — P5.18 reconciliation complete
 - Consolidated the current P5.1–P5.18 statuses into a single table so the ledger no longer relies on historical checkpoint fragments for current state. P5.18 DONE.
-- Reconciled branch heads: PR #77 b02a6c18f334037df5d9c587b5c5a3e9d94db33f; PR #84 c58f5856ed5a557c4deaa02333f5ec4e89825ecb; ledger branch 579ce8abce013fb1066ec0f3f2917ef744a4f047. PR #84 CI remains VERIFY and runtime remains BLOCKED.
+- Reconciled branch heads: PR #77 b02a6c18f334037df5d9c587b5c5a3e9d94db33f; PR #84 c58f5856ed5a557c4deaa02333f5ec4e89825ecb; ledger branch checkpoint updated on PR #78. PR #84 CI remains VERIFY and runtime remains BLOCKED.
 - The standalone checkpoint path is absent; this ledger is the checkpoint source. No cost or prohibited action.
 
 - **Historical correction:** the P5.7 checkpoint correctly found the boundary fix absent from PR #84 at that moment. P5.8 later ported the fix and tests onto PR #84 branch; current status is VERIFY pending exact-head CI.
