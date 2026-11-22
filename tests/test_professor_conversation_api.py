@@ -10,7 +10,7 @@ from atlas_engine.identity_policy import RequestPrincipal
 from atlas_engine.professor_conversation_api import router
 from atlas_engine.professor_reasoning_audit_api import router as audit_router
 from atlas_engine.tenant_conversation_repository import TenantConversationRepository, initialize_tenant_conversation_schema
-from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
+from atlas_engine.tenant_reasoning_audit import TenantReasoningAuditRepository, initialize_reasoning_audit_schema
 from atlas_engine.tenant_professor_memory import TenantProfessorMemoryRepository, initialize_tenant_memory_schema
 
 
@@ -293,6 +293,38 @@ def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp
     assert messages == 0
 
 
+
+
+def test_audit_write_failure_warns_turn_may_be_saved_before_retry(tmp_path, monkeypatch):
+    client, db_path = make_client(tmp_path)
+
+    def fail_audit(self, **kwargs):
+        raise sqlite3.OperationalError("private audit backend detail")
+
+    monkeypatch.setattr(TenantReasoningAuditRepository, "append", fail_audit)
+    response = client.post("/professor/conversation", json={"message": "Check audit consistency"})
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "turn may already be saved" in detail
+    assert "refresh conversation history before retrying" in detail
+    assert "private audit backend detail" not in detail
+
+    db = sqlite3.connect(db_path)
+    conversations = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversations"
+    ).fetchone()[0]
+    messages = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_messages"
+    ).fetchone()[0]
+    audits = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_reasoning_audit"
+    ).fetchone()[0]
+    db.close()
+    # The known consistency gap is explicit: the successful turn persists even
+    # though the separate audit append failed. The response must guide refresh.
+    assert conversations == 1
+    assert messages == 2
+    assert audits == 0
 
 def test_provider_receives_professor_policy_context_not_just_raw_history(tmp_path):
     client, _db_path = make_client(tmp_path)
