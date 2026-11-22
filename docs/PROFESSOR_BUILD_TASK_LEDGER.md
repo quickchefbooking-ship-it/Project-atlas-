@@ -100,7 +100,11 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - PR #79 exact head verified: `afb962cbe8043cdf90c56417a69fb8195c31065c`; draft, open, mergeable, unmerged.
 - Workflow run 45046319590 completed with **success**. Test step passed; full job completed.
 - **P3.4 marked DONE.** Negative/partial explicit feedback now creates a pending, bounded, evidence-linked lesson candidate only when the principal has `lessons:propose`; positive feedback creates none. No automatic approval or runtime promotion.
-- **P3.5 IN PROGRESS:** add a separate explicit owner action that converts an independently approved lesson into a pending memory proposal (never directly into approved memory).
+- **P3.5 VERIFY:** draft PR #80 implements a separate explicit owner action to convert an independently approved lesson into a pending memory proposal (never directly into approved memory); exact-head CI run 45046500790 was in progress.
 
 ### 2026-11-22 — start P3.5
 - Task **IN PROGRESS**: explicit owner-controlled conversion of an independently reviewed approved lesson candidate into a pending memory proposal. This keeps two approval gates: lesson review and memory approval; no direct prompt promotion.
+
+### 2026-11-22 — P3.5 implementation checkpoint
+- PR #80 created on isolated branch `atlas/approved-lesson-memory-proposal-v1`, stacked on PR #79. It adds an owner-scoped method/API route, deterministic idempotency key, bounded copy into pending memory, and tests for second approval, repeat requests, pending rejection, and cross-owner denial.
+- Exact head: `21fb41630b21d0d09594da53b9d763414c1bb619`. Workflow run 45046500790 was in progress at checkpoint; **P3.5 VERIFY** until completed.
