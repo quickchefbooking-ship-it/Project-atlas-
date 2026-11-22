@@ -1,11 +1,12 @@
 # THE PROFESSOR — Live Release Smoke Checklist
 
 **Status:** Prepared; not run against a live deployment.  
-**Current branch evidence:** PR #82 merge-ref CI passed 1179 tests, but this is not deployment evidence.
+**Current branch evidence (2026-11-22):** PR #85 merge-ref CI run [45054846603](https://github.com/quickchefbooking-ship-it/Project-atlas-/actions/runs/45054846603) passed **1187 tests, 1 warning** for head `f7cc1fa9a0e9b2fbceac6055d6ffe02efc5ff51d` on base `c58f5856ed5a557c4deaa02333f5ec4e89825ecb`. This is branch-level evidence, not runtime/deployment proof. PR #84 is diverged from PR #48 (143 ahead / 3 behind; four overlapping files differ), so PR #85 is not a clean release source. PR #63 hosted-login composition and PR #83 readiness-test branches are separate drafts with their own passing CI; they are not included in PR #85.
 
 ## Gate 0 — Approval and environment
 - [ ] Ashley explicitly approves a deployment/runtime test environment and the target.
 - [ ] Confirm free/self-hosted target and cost before starting.
+- [ ] Maintainer selects a clean, review-approved source branch. Do not run the PR #85 draft as a release source until its base integration/conflicts are reconciled.
 - [ ] Confirm test tenant/user and safe disposable data.
 - [ ] No production migrations or external write integrations unless separately approved.
 
@@ -62,7 +63,8 @@
 - [ ] Deployment/merge is not authorized by this checklist itself.
 
 ## Current known blockers
-- Hosted login readiness reports services not yet configured/implemented in the current readiness code.
+- Hosted login composition is a separate draft PR #63; it is not in PR #85's base. Startup services remain unset on the current integration branch.
+- PR #84/#85 integration is diverged from PR #48 prompt-budget base; no canonical clean test source has been selected.
 - No live provider round-trip verified.
 - No deployed startup/build-revision parity verified.
 - No iPhone Safari live deployment test verified.
