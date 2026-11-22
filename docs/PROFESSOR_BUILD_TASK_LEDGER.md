@@ -112,3 +112,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 ### 2026-11-22 — CI defect and correction
 - PR #80 first full test run failed only because the security audit allowlist did not include the new verified-identity route. Log evidence: 785 passed, 1 failed (`test_every_private_api_route_declares_the_api_key_dependency`).
 - Added the new route to the verified-identity route set in `tests/test_security.py`; latest head is `2798b198934cb51fe6a80ededcdf673caad31e02`. Workflow run 45046596722 is pending.
+
+### 2026-11-22 — P3 governed learning completion
+- PR #80 exact head `2798b198934cb51fe6a80ededcdf673caad31e02` verified by workflow run 45046596722: **786 passed, 1 warning in 16.21s**; conclusion success.
+- Failure found during this cycle was the route-security allowlist missing the new identity-protected endpoint; corrected and exact-head CI passed.
+- P3.5 marked DONE. Combined branch stack implements explicit negative-feedback candidate capture, independent lesson review, owner-controlled conversion to pending memory, second memory approval before retrieval, idempotency, and owner isolation.
+- **P3 marked DONE at code/test level**; this is not a merge or deployment claim. P4 integration/security verification is now IN PROGRESS.
