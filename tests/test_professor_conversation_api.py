@@ -3,14 +3,14 @@ import sqlite3
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from atlas_engine.conversation_contract import ConversationOutput
+from atlas_engine.conversation_contract import ConversationMessage, ConversationOutput, MAX_HISTORY_MESSAGES
 from atlas_engine.conversation_service import ConversationService
 from atlas_engine.http_identity import require_verified_principal
 from atlas_engine.identity_policy import RequestPrincipal
 from atlas_engine.professor_conversation_api import router
 from atlas_engine.professor_reasoning_audit_api import router as audit_router
-from atlas_engine.tenant_conversation_repository import initialize_tenant_conversation_schema
-from atlas_engine.tenant_reasoning_audit import initialize_reasoning_audit_schema
+from atlas_engine.tenant_conversation_repository import TenantConversationRepository, initialize_tenant_conversation_schema
+from atlas_engine.tenant_reasoning_audit import TenantReasoningAuditRepository, initialize_reasoning_audit_schema
 from atlas_engine.tenant_professor_memory import TenantProfessorMemoryRepository, initialize_tenant_memory_schema
 
 
@@ -142,6 +142,45 @@ def test_two_turn_chat_passes_prior_messages_back_to_professor_and_verifies_audi
     assert payload["execution_enabled"] is False
 
 
+
+def test_long_conversation_trims_history_to_professor_message_budget(tmp_path):
+    client, db_path = make_client(tmp_path)
+    principal = RequestPrincipal(
+        "https://issuer.example.test", "alice", "tenant-a", True, SCOPES
+    )
+    db = sqlite3.connect(db_path)
+    db.row_factory = sqlite3.Row
+    repository = TenantConversationRepository(db, principal)
+    conversation_id = "long-history"
+    repository.create(conversation_id)
+    for turn in range(12):
+        repository.append(conversation_id, "user", f"Previous user turn {turn}")
+        repository.append(conversation_id, "assistant", f"Previous assistant turn {turn}")
+    db.close()
+
+    response = client.post(
+        "/professor/conversation",
+        json={"conversation_id": conversation_id, "message": "Continue after the history"},
+    )
+    assert response.status_code == 200
+
+    answer_call = client.app.state.test_provider.calls[-1]
+    assert len(answer_call.messages) == 24
+    assert answer_call.messages[0].role == "system"
+    expected_history = tuple(
+        ConversationMessage(role, content)
+        for turn in range(1, 12)
+        for role, content in (
+            ("user", f"Previous user turn {turn}"),
+            ("assistant", f"Previous assistant turn {turn}"),
+        )
+    )
+    assert len(expected_history) == MAX_HISTORY_MESSAGES
+    assert answer_call.messages[1:23] == expected_history
+    assert answer_call.messages[-1] == ConversationMessage(
+        "user", "Continue after the history"
+    )
+
 def test_conversation_cannot_be_read_by_another_owner(tmp_path):
     client, _db_path = make_client(tmp_path)
     created = client.post("/professor/conversation", json={"message": "Private"})
@@ -254,6 +293,38 @@ def test_provider_output_over_storage_limit_is_rejected_without_partial_turn(tmp
     assert messages == 0
 
 
+
+
+def test_audit_write_failure_warns_turn_may_be_saved_before_retry(tmp_path, monkeypatch):
+    client, db_path = make_client(tmp_path)
+
+    def fail_audit(self, **kwargs):
+        raise sqlite3.OperationalError("private audit backend detail")
+
+    monkeypatch.setattr(TenantReasoningAuditRepository, "append", fail_audit)
+    response = client.post("/professor/conversation", json={"message": "Check audit consistency"})
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "turn may already be saved" in detail
+    assert "refresh conversation history before retrying" in detail
+    assert "private audit backend detail" not in detail
+
+    db = sqlite3.connect(db_path)
+    conversations = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversations"
+    ).fetchone()[0]
+    messages = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_conversation_messages"
+    ).fetchone()[0]
+    audits = db.execute(
+        "SELECT COUNT(*) FROM tenant_professor_reasoning_audit"
+    ).fetchone()[0]
+    db.close()
+    # The known consistency gap is explicit: the successful turn persists even
+    # though the separate audit append failed. The response must guide refresh.
+    assert conversations == 1
+    assert messages == 2
+    assert audits == 0
 
 def test_provider_receives_professor_policy_context_not_just_raw_history(tmp_path):
     client, _db_path = make_client(tmp_path)

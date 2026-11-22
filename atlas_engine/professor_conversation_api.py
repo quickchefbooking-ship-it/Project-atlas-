@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from .conversation_contract import ConversationInput, ConversationMessage, build_conversation_input
+from .conversation_contract import MAX_HISTORY_MESSAGES, ConversationInput, ConversationMessage, build_conversation_input
 from .conversation_service import ConversationNotConfigured
 from .http_identity import require_verified_principal
 from .identity_policy import AuthorizationDenied, RequestPrincipal
@@ -70,7 +70,7 @@ def professor_conversation(
         if is_new_conversation:
             prior_messages = ()
         else:
-            prior = repository.get(conversation_id, limit=23)
+            prior = repository.get(conversation_id, limit=MAX_HISTORY_MESSAGES)
             prior_messages = tuple(
                 ConversationMessage(item.role, item.content)
                 for item in prior.messages
@@ -155,7 +155,7 @@ def professor_conversation(
     except sqlite3.Error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Professor conversation storage is temporarily unavailable.",
+            detail="Professor storage is temporarily unavailable. Your turn may already be saved; refresh conversation history before retrying.",
         ) from None
     finally:
         db.close()

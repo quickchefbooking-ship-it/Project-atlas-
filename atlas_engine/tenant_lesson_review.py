@@ -58,6 +58,28 @@ class TenantLessonReviewRepository:
         with self.db:
             self.db.execute("INSERT INTO tenant_lesson_candidate_decisions(candidate_id,tenant_id,owner_key,reviewer_key,decision,rationale) VALUES(?,?,?,?,?,?)",(candidate_id,self.p.tenant_id,self.key,self.key,decision,rationale.strip()))
         return decision
+    def approved_owned_candidate(self, candidate_id):
+        """Return an independently approved lesson owned by this principal."""
+        self._auth("lessons:read")
+        row = self.db.execute(
+            """SELECT candidate_id,title,lesson_text FROM tenant_lesson_candidates
+               WHERE candidate_id=? AND tenant_id=? AND owner_key=?""",
+            (candidate_id, self.p.tenant_id, self.key),
+        ).fetchone()
+        if row is None:
+            raise LookupError("Approved lesson candidate not found.")
+        decision = self.db.execute(
+            """SELECT decision,reviewer_key FROM tenant_lesson_candidate_decisions
+               WHERE candidate_id=? AND tenant_id=?
+               ORDER BY decision_id DESC LIMIT 1""",
+            (candidate_id, self.p.tenant_id),
+        ).fetchone()
+        if decision is None or decision["decision"] != "approved":
+            raise ValueError("Only approved lesson candidates can be converted to memory proposals.")
+        if decision["reviewer_key"] == self.key:
+            raise PermissionError("Lesson approval must come from an independent reviewer.")
+        return dict(row)
+
     def list(self, limit=50):
         self._auth("lessons:read")
         if type(limit) is not int or not 1<=limit<=100: raise ValueError("limit must be 1-100.")
