@@ -129,16 +129,15 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 
 ### 2026-11-22 — P4.2 combined chat/provider/learning verification
 - Compare confirmed PR #11 reasoning-provider branch is an ancestor of PR #48 prompt-budget/chat branch. This corrects the earlier assumption that these stacks were fully separate.
-- Draft integration PR #81 targets PR #48 with PR #80 learning changes. Its pull_request workflow run 45046596722 completed successfully: **786 passed, 1 warning**. The run metadata confirms base SHA `2f0e678a2a403502bce712d34d8e7917a01edf10` (PR #48) and head `2798b198934cb51fe6a80ededcdf673caad31e02` (learning branch).
+- Draft integration PR #81 targets PR #48 with PR #80 learning changes. Verified exact merge-ref workflow run **45046847109** checked out `refs/remotes/pull/81/merge` and passed **786 tests, 1 warning in 24.38s**.
 - **P2 marked DONE at branch/test level**; no live provider round-trip or deployment.
-- PR #82 created as a mergeability probe from worker-host readiness (#64) to chat+learning branch (#81). GitHub reports mergeable=true; however, the observed workflow run checks out PR #64's merge ref, not PR #82's integration merge, so combined CI is NOT yet verified.
+- PR #82 is a mergeability probe from worker-host readiness (#64) onto PR #80 learning branch. Its exact merge-ref CI run 45046895853 passed 1179 tests, but **does not include PR #81 chat/provider branch**. Earlier combined claim was incorrect and is corrected below.
 - **P4.3 IN PROGRESS:** identity/OIDC/worker stack integration and exact merge-ref CI evidence.
 
-### 2026-11-22 — P4.3 worker/OIDC integration verification
-- PR #82 mergeability refreshed: clean/mergeable. GitHub synthetic merge commit: `ea80e8c35dc923afcd3ed1f3b19aea60e1931c12`.
-- Crucially, found PR #82-specific pull_request run **45046895853**, which checked out `refs/remotes/pull/82/merge` (not PR #64's merge ref). Combined exact merge-ref test suite passed: **1179 passed, 1 warning in 25.86s**.
-- This merge-ref includes worker/OIDC readiness (#64 stack) with PR #81 base (chat/provider + governed learning). PR #82 remains draft/unmerged.
-- **P4 marked DONE at branch integration/test level.** P5 live end-to-end readiness is **BLOCKED** by lack of verified live runtime and deployment approval boundary.
+### 2026-11-22 — P4.3 worker/OIDC + learning integration verification (DONE, partial stack)
+- PR #82 exact merge-ref run **45046895853** checked out `refs/remotes/pull/82/merge` and passed **1179 passed, 1 warning in 25.86s**.
+- This integrates worker/OIDC readiness (#64) with learning (#80), but its base is #80, **not chat/provider PR #81**. Do not treat this as full-stack proof.
+- **P4 remains IN PROGRESS** until PR #84 verifies chat/provider + learning + worker/OIDC in one exact merge-ref.
 
 ### 2026-11-22 — P5.1 release smoke checklist
 - **P5.1 DONE:** created `docs/PROFESSOR_RELEASE_SMOKE_CHECKLIST.md` covering approvals, configuration/secrets, health/readiness, identity/tenancy, iPhone Safari, local reasoning, learning, worker safety, evidence and rollback.
@@ -168,3 +167,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P5.4 DONE:** PR #83 exact head `d101a6303422e2b73028847c5d6bbac97cf95fe3` run 45049237138 succeeded: **1181 passed, 1 warning in 21.30s**. PR refreshed mergeable=true. Tests cover absent configuration and prevent configured services from being confused with a verified live provider round-trip.
 - Updated the CI evidence matrix with PR #83. Tests-only branch, draft/unmerged.
 - **P5 still BLOCKED:** actual runtime smoke/provider/login/iPhone checks remain outstanding. Next safe task: review chat UI connection/error-state behavior and document any test gaps; no live provider activation.
+
+### 2026-11-22 — integration ancestry correction and P4.4
+- Corrected the evidence matrix and ledger: PR #81 is chat/provider + learning (exact merge-ref run 45046847109, 786 passed); PR #82 is worker/OIDC + learning (exact merge-ref run 45046895853, 1179 passed); PR #83 readiness tests are on worker+learning, not chat.
+- **P4.4 IN PROGRESS:** PR #84 is the corrected full-stack integration probe, targeting PR #48 chat/provider with the PR #82 worker+learning merge stack. Exact merge-ref CI evidence is pending. Draft/unmerged; no deployment.
