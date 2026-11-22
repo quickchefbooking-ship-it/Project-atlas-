@@ -1,11 +1,18 @@
 import hashlib
+import json
 import sqlite3
+
+import httpx
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from atlas_engine.conversation_contract import ConversationMessage, ConversationOutput, MAX_HISTORY_MESSAGES
 from atlas_engine.conversation_service import ConversationService
+from atlas_engine.openai_compatible_provider import (
+    OpenAICompatibleConfig,
+    OpenAICompatibleConversationProvider,
+)
 from atlas_engine.http_identity import require_verified_principal
 from atlas_engine.identity_policy import RequestPrincipal
 from atlas_engine.professor_conversation_api import router
@@ -482,3 +489,89 @@ def test_delete_retains_minimal_append_only_reasoning_audit_without_raw_content(
     assert request_text not in str(tuple(audit))
     assert response_text not in str(tuple(audit))
     assert len(audit[7]) == 64
+
+
+
+def test_authenticated_api_uses_http_mock_provider_through_reasoning_pipeline(tmp_path, monkeypatch):
+    from atlas_engine import professor_reasoning_context
+
+    monkeypatch.setattr(
+        professor_reasoning_context,
+        "build_reasoning_evidence",
+        lambda query, limit: [],
+    )
+    requests = []
+
+    def mock_endpoint(request):
+        payload = json.loads(request.content)
+        requests.append((request, payload))
+        latest = payload["messages"][-1]["content"]
+        if latest == "Create the structured reasoning decomposition now.":
+            content = '{"steps":[{"step_id":"answer","objective":"Return a concise answer"}]}'
+        else:
+            content = "The local mock reasoning provider is connected."
+        return httpx.Response(
+            200,
+            json={
+                "model": "local-test-model",
+                "choices": [{"message": {"content": content}}],
+            },
+        )
+
+    http_client = httpx.Client(transport=httpx.MockTransport(mock_endpoint))
+    provider = OpenAICompatibleConversationProvider(
+        OpenAICompatibleConfig(
+            endpoint_url="https://mock-provider.example.test/v1/chat/completions",
+            model="configured-test-model",
+            api_key="test-only-key",
+        ),
+        client=http_client,
+    )
+    client, db_path = make_client(tmp_path)
+    client.app.state.conversation_service = ConversationService(provider)
+    try:
+        response = client.post(
+            "/professor/conversation",
+            json={"message": "Tell me the local test provider is connected."},
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert result["response"] == "The local mock reasoning provider is connected."
+        assert result["provider"] == "openai-compatible"
+        assert result["model"] == "local-test-model"
+        assert result["execution_enabled"] is False
+        assert len(requests) == 2
+        assert all(req.headers["authorization"] == "Bearer test-only-key" for req, _ in requests)
+        assert requests[0][1]["stream"] is False
+        assert requests[0][1]["messages"][-1]["content"] == (
+            "Create the structured reasoning decomposition now."
+        )
+        assert requests[1][1]["messages"][-1]["content"] == (
+            "Tell me the local test provider is connected."
+        )
+
+        history = client.get(f"/professor/conversations/{result['conversation_id']}")
+        assert history.status_code == 200
+        assert [message["role"] for message in history.json()["messages"]] == [
+            "user", "assistant"
+        ]
+        assert history.json()["messages"][1]["content"] == result["response"]
+        audit = client.get(f"/professor/conversations/{result['conversation_id']}/audit")
+        assert audit.status_code == 200
+        assert audit.json()["audit"][0]["provider"] == "openai-compatible"
+        assert audit.json()["audit"][0]["model"] == "local-test-model"
+        assert audit.json()["audit"][0]["raw_content_stored"] is False
+        verification = client.get(
+            f"/professor/conversations/{result['conversation_id']}/audit/verify"
+        )
+        assert verification.status_code == 200
+        assert verification.json()["verification"]["valid"] is True
+        db = sqlite3.connect(db_path)
+        assert db.execute(
+            "SELECT COUNT(*) FROM tenant_professor_reasoning_audit"
+        ).fetchone()[0] == 1
+        db.close()
+    finally:
+        client.close()
+        provider.close()
+        http_client.close()
