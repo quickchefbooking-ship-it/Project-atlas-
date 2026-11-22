@@ -193,7 +193,8 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - P5.7 DONE: exact-head run 45046088812 on b02a6c18f334037df5d9c587b5c5a3e9d94db33f completed successfully. Job log confirms 931 passed, 1 deprecation warning, in 20.67s. Commit diff centralizes MAX_HISTORY_MESSAGES = MAX_TURNS - 2, applies the same limit to API repository retrieval, and tests a 12-turn stored conversation yields 22 prior messages + system + latest user = 24 provider messages.
 - Compare: PR #77 is 3 commits ahead of PR #48 head 2f0e678a2a403502bce712d34d8e7917a01edf10. PR #84 branch compare is diverged (134 ahead/6 behind) with merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1; inspected branch files confirm it has not incorporated the API history limit/regression.
 - **P5.8 VERIFY** — Ported the history boundary into PR #84 branch in five commits, latest d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73. Contract constant, API fetch limit, pipeline guard, long-history API regression, and pipeline 22-message acceptance/23-message rejection tests are present. Exact-head CI is not yet verifiable: PR-triggered workflow lookup returns none, combined status is empty, and this connector cannot list push-triggered runs. Do not mark DONE without exact-head CI.
-- **P5.9 IN PROGRESS** — Audit PR #84 merge conflicts/overlap against PR #48 and assess whether a clean full-stack integration is safely achievable without bulk branch transfer or merge. Intended result: precise conflict path inventory and safe next step.
+- **P5.9 DONE (audit only)** — Compared PR #84 branch to PR #48: diverged, 139 ahead/3 behind, merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1. Four changed-file overlaps: reasoning pipeline, chat HTML, chat UI tests, and pipeline tests. PR #84 branch includes PR #48 prompt-budget/context test changes but has additional hosted-session/auth and history-limit changes. No merge/rebase/bulk transfer attempted; connector cannot expose PR mergeability directly.
+- **P5.10 IN PROGRESS** — Read back the five history-boundary files on PR #84 exact branch head and verify intended code/test assertions are present. Intended result: repository content evidence and confirm no residual 23-message limit; CI remains separate.
 
 
 ### 2026-11-22 — P5.8 code port checkpoint; CI verification pending
@@ -201,3 +202,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - Five file commits were created on the existing integration draft branch; latest exact head d1686b0cf991b1aa3ddadbdeeaac9e0340f7fe73. Commit is present on GitHub; no merge/deployment.
 - CI evidence limitation: commit workflow lookup (PR-filtered) returned no run; combined status returned no checks. Push workflow is configured for atlas/**, but the GitHub connector cannot list push-triggered workflow runs, so exact-head verification remains VERIFY. The already-verified PR #77 run is not substituted for this branch's CI.
 - **P5.9 IN PROGRESS:** review overlaps/conflict paths between PR #84 full-stack branch and PR #48 target; do not attempt a bulk merge/rebase or source transfer.
+
+
+### 2026-11-22 — P5.9 conflict-scope audit complete; P5.10 read-back started
+- PR #48 changed paths: cognitive kernel, reasoning context/pipeline, chat HTML, chat UI tests, lifecycle integration, context tests, and pipeline tests. PR #84 changed paths overlap four of these: reasoning pipeline, chat HTML, chat UI tests, and pipeline tests.
+- PR #84 branch has 139 commits ahead and 3 behind PR #48 (merge base 0eaf6d0ea45805645d9430f56376f5f0223302d1). It is a broad worker/OIDC/learning stack, so no bulk branch integration was attempted. Conversation contract/API changes introduced by the history fix are now on the PR #84 draft branch.
+- P5.9 DONE as audit; mergeability remains not independently queryable through the available GitHub connector. **P5.10 IN PROGRESS** read-back verification of the port.
