@@ -17,19 +17,19 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | ID | Task | Status | Evidence / current state | Next action |
 |---|---|---|---|---|
 | P1 | Reconcile baseline and dependency stack | DONE (audit only) | Inventory, security/core review, dependency map documented. PR #1 remains draft/unmerged. | Merge/review decisions are approval-gated. |
-| P2 | Connect real Professor reasoning/chat path | IN PROGRESS | PR #11 provider composition and #46–#48 chat stack audited; CI evidence passes on heads. No live round-trip/deployed path verified; branches are separate drafts. | Reconcile integration branch dependencies and verify end-to-end. |
+| P2 | Connect real Professor reasoning/chat path | DONE (branch integration/tests) | PR #48 contains PR #11 provider foundation in ancestry; combined chat/provider stack exact-head CI passed (929 tests). No live provider round-trip/deployment. | Live runtime verification remains P5. |
 | P3 | Persistent, governed learning | DONE (branch implementation/tests) | PR #79 and #80 add explicit feedback candidate and two-step approval-to-memory proposal workflow. PR #80 exact-head CI: 786 passed. Not merged/deployed. | Integrate stack; live verification under P4/P5. |
 | P4 | Integration and security verification | IN PROGRESS | Exact-head CI evidence refreshed; PR #80 combined branch test suite passed. Full stack matrix and runtime security verification remain incomplete. | Build matrix and verify core dependencies, identity, tenancy, storage, recovery, chat, learning. |
 | P5 | Live end-to-end readiness | NOT STARTED | No live deployment/provider round-trip verified. | Safe runtime test environment; deployment remains approval-gated. |
 
 ## Active task
-**P4 — integration/security verification.** Build a concise test evidence matrix and refresh exact-head checks for the Professor-critical branches. P2 remains IN PROGRESS because the provider/chat work is split across draft stacks and no live conversation round-trip is verified.
+**P4 — integration/security verification.** P4.1 evidence matrix DONE; P4.2 chat + provider + learning combined branch CI DONE (PR #81, run 45046596722, 786 passed). P4.3 worker/OIDC/identity compatibility IN PROGRESS; mergeability probe PR #82 is mergeable, but no combined CI run targeting PR #82's base is confirmed.
 
 ### Subtask states
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
 - **P1.2 — focused core/security review: DONE.** Known limitations: shared API-key auth is not verified identity/RBAC/tenant isolation; actor labels are caller supplied; arithmetic-only executor; proposal testing not implemented; SQLite single host.
 - **P1.3 — dependency map: DONE.** Priority chain: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → hosted OIDC #49–#57/#63 → worker safety #58–#64. Source reconciliation #65 separate; market PRs #70–#76 deferred; #66 duplicate/ported.
-- **P2 audit: DONE.** PR #11 composes opt-in provider; exact-head CI #43733864615 passed. PR #48 exact-head CI #44475448752 passed. No live provider round-trip verified; integration remains IN PROGRESS.
+- **P2: DONE at branch/test level.** Compare confirms PR #11 is an ancestor of PR #48. PR #48 CI #44475448752 passed 929 tests; provider is opt-in. No live provider round-trip verified.
 - **P3.1–P3.5: DONE at code/test level on stacked draft branches.** PR #79 exact-head CI #45046430157 success; PR #80 exact-head CI #45046596722 success (786 passed, 1 warning). Pending lesson and memory approvals are separate; no automatic promotion or self-modification.
 
 ## Working protocol
@@ -126,3 +126,10 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P4.1 DONE:** added `docs/PROFESSOR_TEST_EVIDENCE_MATRIX_2026-11-22.md` with exact-head results for PRs #1, #11, #46–#49, #62–#64, #76, #79 and #80. All recorded workflows succeeded; the matrix distinguishes CI from integration/runtime proof.
 - Verified test counts from logs: #1 237; #46 925; #47 926; #48 929; #49 929; #11 781; #62 1151; #63 1101; #64 1174; #76 289; #79 783; #80 786. One non-blocking deprecation warning on each run.
 - **P4.2 IN PROGRESS:** cross-stack integration and security dependency review.
+
+### 2026-11-22 — P4.2 combined chat/provider/learning verification
+- Compare confirmed PR #11 reasoning-provider branch is an ancestor of PR #48 prompt-budget/chat branch. This corrects the earlier assumption that these stacks were fully separate.
+- Draft integration PR #81 targets PR #48 with PR #80 learning changes. Its pull_request workflow run 45046596722 completed successfully: **786 passed, 1 warning**. The run metadata confirms base SHA `2f0e678a2a403502bce712d34d8e7917a01edf10` (PR #48) and head `2798b198934cb51fe6a80ededcdf673caad31e02` (learning branch).
+- **P2 marked DONE at branch/test level**; no live provider round-trip or deployment.
+- PR #82 created as a mergeability probe from worker-host readiness (#64) to chat+learning branch (#81). GitHub reports mergeable=true; however, the observed workflow run checks out PR #64's merge ref, not PR #82's integration merge, so combined CI is NOT yet verified.
+- **P4.3 IN PROGRESS:** identity/OIDC/worker stack integration and exact merge-ref CI evidence.
