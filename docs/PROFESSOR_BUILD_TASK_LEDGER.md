@@ -19,11 +19,11 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P1 | Reconcile baseline and dependency stack | DONE (audit only) | Inventory, security/core review, dependency map documented. PR #1 remains draft/unmerged. | Merge/review decisions are approval-gated. |
 | P2 | Connect real Professor reasoning/chat path | DONE (branch integration/tests) | PR #48 contains PR #11 provider foundation in ancestry; combined chat/provider stack exact-head CI passed (929 tests). No live provider round-trip/deployment. | Live runtime verification remains P5. |
 | P3 | Persistent, governed learning | DONE (branch implementation/tests) | PR #79 and #80 add explicit feedback candidate and two-step approval-to-memory proposal workflow. PR #80 exact-head CI: 786 passed. Not merged/deployed. | Integrate stack; live verification under P4/P5. |
-| P4 | Integration and security verification | IN PROGRESS | Exact-head CI evidence refreshed; PR #80 combined branch test suite passed. Full stack matrix and runtime security verification remain incomplete. | Build matrix and verify core dependencies, identity, tenancy, storage, recovery, chat, learning. |
+| P4 | Integration and security verification | DONE (branch integration CI) | PR #82's merge ref combines PR #64 worker/OIDC stack with PR #81 chat/provider/learning; CI run 45046895853 passed 1179 tests. Draft/unmerged. | Live runtime and deployment verification remains P5. |
 | P5 | Live end-to-end readiness | NOT STARTED | No live deployment/provider round-trip verified. | Safe runtime test environment; deployment remains approval-gated. |
 
 ## Active task
-**P4 — integration/security verification.** P4.1 evidence matrix DONE; P4.2 chat + provider + learning combined branch CI DONE (PR #81, run 45046596722, 786 passed). P4.3 worker/OIDC/identity compatibility IN PROGRESS; mergeability probe PR #82 is mergeable, but no combined CI run targeting PR #82's base is confirmed.
+**P5 — live end-to-end readiness.** P1–P4 are DONE at audit/branch-test level. PR #82 is a mergeable draft and its merge-ref CI passed 1179 tests. P5 is BLOCKED: no live deployment/provider round-trip is verified, and deployment remains approval-gated.
 
 ### Subtask states
 - **P1.1 — PR inventory and exact-head CI refresh: DONE.**
@@ -133,3 +133,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P2 marked DONE at branch/test level**; no live provider round-trip or deployment.
 - PR #82 created as a mergeability probe from worker-host readiness (#64) to chat+learning branch (#81). GitHub reports mergeable=true; however, the observed workflow run checks out PR #64's merge ref, not PR #82's integration merge, so combined CI is NOT yet verified.
 - **P4.3 IN PROGRESS:** identity/OIDC/worker stack integration and exact merge-ref CI evidence.
+
+### 2026-11-22 — P4.3 worker/OIDC integration verification
+- PR #82 mergeability refreshed: clean/mergeable. GitHub synthetic merge commit: `ea80e8c35dc923afcd3ed1f3b19aea60e1931c12`.
+- Crucially, found PR #82-specific pull_request run **45046895853**, which checked out `refs/remotes/pull/82/merge` (not PR #64's merge ref). Combined exact merge-ref test suite passed: **1179 passed, 1 warning in 25.86s**.
+- This merge-ref includes worker/OIDC readiness (#64 stack) with PR #81 base (chat/provider + governed learning). PR #82 remains draft/unmerged.
+- **P4 marked DONE at branch integration/test level.** P5 live end-to-end readiness is **BLOCKED** by lack of verified live runtime and deployment approval boundary.
