@@ -23,7 +23,7 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 | P5 | Live end-to-end readiness | NOT STARTED | No current verified live deployment/runtime proof in this checkpoint. | Determine free-host/local startup path; test on a safe environment; deployment remains approval-gated. |
 
 ## Active task
-**P2 — reasoning/chat path audit.** P1 is complete as a reconciliation task, with merge/deployment still approval-gated. Next verify the actual conversation path and reasoning provider connection on exact PR heads, then identify the smallest safe missing integration.
+**P3 — persistent, governed learning audit/integration.** P2 audit subtask DONE, but P2 implementation/readiness remains IN PROGRESS due split draft stacks and no live round-trip. Next inspect memory persistence and lifecycle across #1 and #11, then define the narrowest safe integration/test task.
 
 ### Subtask states
 - **P1.1 — Refresh current PR heads and exact-head CI evidence: DONE.** Confirmed #1, #48, #64, #76 exact heads; each associated core-test workflow completed successfully. PR metadata refreshed for #46-#49, #57, #62-#65, #75, #76. No merge or deployment performed.
@@ -69,3 +69,9 @@ Every task must have an owner (Professor build engine), a status, evidence, and 
 - **P1.3 marked DONE:** dependency priority map recorded: baseline #1 → chat #46/#47/#48/#49 → identity/reasoning #10/#11 → OIDC #49–#57/#63 → worker safety #58–#64; source reconciliation #65 remains separate; market PRs #70–#76 deferred; #66 is duplicate/ported.
 - **P1 completed:** inventory, review, and dependency reconciliation. No merge/deployment permission exercised.
 - **P2 marked IN PROGRESS:** reasoning/chat path audit.
+
+### 2026-11-22 — reasoning/chat audit checkpoint
+- **P2 audit subtask DONE:** PR #11's app lifespan loads an explicitly configured OpenAI-compatible provider and injects it into ConversationService; provider config is opt-in, with fail-closed disabled behavior if configuration is invalid. Health/readiness explicitly reports live-provider round-trip as unverified.
+- PR #11 exact-head CI run 43733864615 passed. PR #48 exact-head CI run 44475448752 passed.
+- PR #46 adds integration tests; #47 requires explicit chat capability; #48 bounds evidence/memory and preserves task instructions within prompt budgets. The code is distributed across draft PR dependency stacks; no actual deployed conversation/provider round-trip is verified.
+- **P2 remains IN PROGRESS** until dependency-stack integration and live/tested connection are verified. P3 learning audit now IN PROGRESS.
