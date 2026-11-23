@@ -56,7 +56,7 @@ _RETRIEVAL_SYNONYMS = (
 def _memory_terms(value: str) -> set[str]:
     """Normalize Unicode letters/digits and remove common query noise."""
     return {
-        term for term in re.findall(r"[^\\W_]{3,}", value.casefold(), flags=re.UNICODE)
+        term for term in re.findall(r"\b[^\W_]{3,}\b", value.casefold(), flags=re.UNICODE)
         if term not in _RETRIEVAL_STOPWORDS
     }
 
@@ -340,7 +340,7 @@ class TenantProfessorMemoryRepository:
                            + 2 * len(terms.intersection(content_terms)))
             synonym_score = 2 * len(expanded_overlap - overlap)
             score = exact_score + synonym_score
-            if score >= 3:
+            if score >= 2:
                 matched_terms = overlap or (expanded_overlap - terms)
                 matched_fields = tuple(
                     field for field, field_terms in (
