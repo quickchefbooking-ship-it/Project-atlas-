@@ -55,7 +55,7 @@ def verify_answer(
         c for c in required_constraints if _norm(c) not in normalized
     )
     available = set(available_source_ids)
-    cited = set(re.findall(r"\\b[A-Z][A-Z0-9_-]*\\b", answer))
+    cited = set(re.findall(r"\b[A-Z][A-Z0-9_-]*\b", answer))
     missing_sources = tuple(
         sid for sid in required_source_ids
         if sid not in available or sid not in cited
