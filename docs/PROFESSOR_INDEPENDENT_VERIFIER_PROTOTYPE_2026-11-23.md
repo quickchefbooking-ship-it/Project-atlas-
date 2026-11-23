@@ -28,7 +28,7 @@ false positives/negatives. It is a test harness and a contract sketch.
 5. Adversarial text containing a contradiction fails.
 6. No-evidence abstention passes under explicit abstention fixture.
 7. Uncertainty does not satisfy a fact-bearing request.
-8. A fact-linked source must be cited even when available.
+8. A fact-linked source must be cited even when available.\n9. A negated supported phrase must be treated as a contradiction.
 
 ## Next gate
 If this characterization is useful, the next iteration should replace phrase rules
