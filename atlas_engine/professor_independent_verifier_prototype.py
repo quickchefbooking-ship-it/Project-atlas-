@@ -19,12 +19,12 @@ def _negated_phrase_present(text: str, phrase: str) -> bool:
     for i in range(len(tokens) - len(phrase_tokens) + 1):
         if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
             continue
-        prefix = tokens[max(0, i - 2):i]
+        prefix = tokens[max(0, i - 3):i]
         if prefix == ["not", "only"]:
             continue
         if prefix[-1:] in (["not"], ["never"], ["without"], ["no"]):
             return True
-        if len(prefix) == 2 and prefix in (["did", "not"], ["does", "not"], ["do", "not"], ["is", "not"], ["was", "not"]):
+        if any(prefix[-n:] == pattern for n, pattern in ((2, ["did", "not"]), (2, ["does", "not"]), (2, ["do", "not"]), (2, ["is", "not"]), (2, ["was", "not"]), (3, ["does", "not", "record"]), (3, ["did", "not", "record"]), (3, ["do", "not", "record"]))):
             return True
     return False
 
