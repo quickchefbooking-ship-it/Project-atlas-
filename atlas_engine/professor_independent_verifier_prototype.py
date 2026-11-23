@@ -10,6 +10,17 @@ def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+def _negated_phrase_present(text: str, phrase: str) -> bool:
+    """Detect a narrow, deterministic negation window before a supported phrase."""
+    phrase = _norm(phrase)
+    if not phrase:
+        return False
+    negation = r"(?:no|not|never|without|did not|does not|do not|is not|was not)"
+    # Allow up to three intervening normalized words. This is characterization,
+    # not general natural-language negation handling.
+    return bool(re.search(rf"\b{negation}\b(?:\w+\s+){{0,3}}{re.escape(phrase)}\b", text))
+
+
 @dataclass(frozen=True)
 class Fact:
     fact_id: str
@@ -43,8 +54,11 @@ def verify_answer(
     supported, missing, contradicted = [], [], []
     for fact in facts:
         matches = any(_norm(p) in normalized for p in fact.supported_phrases)
+        negated_matches = any(
+            _negated_phrase_present(normalized, p) for p in fact.supported_phrases
+        )
         conflicts = any(_norm(p) in normalized for p in fact.contradiction_phrases)
-        if conflicts:
+        if conflicts or negated_matches:
             contradicted.append(fact.fact_id)
         elif matches:
             supported.append(fact.fact_id)
