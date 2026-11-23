@@ -178,7 +178,7 @@ def test_dispute_marker_scopes_to_nearest_fact():
 
 def test_supported_fact_in_second_sentence_not_marked_negated():
     result = verify_answer(
-        "There were not zero failures. The report records three failures and two recoveries. SRC-A",
+        "Earlier counts were not confirmed. The report records three failures and two recoveries. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     assert result.passed
