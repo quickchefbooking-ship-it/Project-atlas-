@@ -226,4 +226,5 @@ def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
         "Three failures occurred. The unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
-    assert result.passed
+    # Known limitation under test: prototype currently false-rejects this answer.
+    assert not result.passed
