@@ -101,3 +101,37 @@ def test_not_only_supported_phrase_is_not_misread_as_negation():
     )
     assert result.passed
     assert result.contradicted_fact_ids == ()
+
+
+# Ten-point verifier hardening checklist: points 3–7 characterize context handling.
+
+def test_quoted_claim_marked_unverified_does_not_count_as_supported():
+    result = verify_answer(
+        "A draft claimed three failures, but this remains unverified. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+
+
+def test_hedged_supported_phrase_does_not_count_as_assertion():
+    result = verify_answer(
+        "Possibly three failures and two recoveries occurred. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+
+
+def test_disputed_phrase_does_not_count_as_established_fact():
+    result = verify_answer(
+        "Three failures are disputed, and two recoveries are reported. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+
+
+def test_phrase_mention_in_email_is_not_source_confirmation():
+    result = verify_answer(
+        "An email mentions three failures and two recoveries, but does not verify them. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
