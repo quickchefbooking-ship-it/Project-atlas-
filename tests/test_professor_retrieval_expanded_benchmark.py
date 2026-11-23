@@ -54,16 +54,32 @@ def test_expanded_labelled_benchmark_reports_per_query_retrieval():
     db, repo = _repo()
     try:
         failures = []
-        hits = 0
+        answerable = [(category, query, relevant) for category, query, relevant in CASES if relevant]
+        reciprocal_ranks = []
+        hits_at_3 = 0
+        precision_at_3_total = 0.0
         for category, query, relevant in CASES:
             ids = [item["proposal_id"] for item in repo.retrieve(query, limit=5)]
-            hit = bool(set(ids[:3]) & relevant) if relevant else not ids
-            hits += int(hit)
-            if not hit:
-                failures.append((category, query, sorted(relevant), ids))
-        # This is deliberately a transparent diagnostic gate, not a claim of
-        # semantic retrieval. A failing case is listed in the assertion.
-        assert hits >= 7, f"{hits}/{len(CASES)} cases passed; failures: {failures}"
+            if relevant:
+                rank = next((index for index, pid in enumerate(ids, start=1) if pid in relevant), None)
+                reciprocal_ranks.append(1.0 / rank if rank is not None else 0.0)
+                top3 = ids[:3]
+                hits_at_3 += int(bool(set(top3) & relevant))
+                precision_at_3_total += len(set(top3) & relevant) / max(1, len(top3))
+                if not set(top3) & relevant:
+                    failures.append((category, query, sorted(relevant), ids))
+            elif ids:
+                failures.append((category, query, sorted(relevant), ids)
+
+        recall_at_3 = hits_at_3 / len(answerable)
+        mean_reciprocal_rank = sum(reciprocal_ranks) / len(reciprocal_ranks)
+        precision_at_3 = precision_at_3_total / len(answerable)
+        # Transparent diagnostic gate; these lexical metrics do not establish
+        # semantic understanding. Keep per-query failures visible.
+        assert recall_at_3 >= 0.875, (
+            f"Recall@3={recall_at_3:.3f}; MRR={mean_reciprocal_rank:.3f}; "
+            f"Precision@3={precision_at_3:.3f}; failures={failures}"
+        )
         no_answer_ids = [item["proposal_id"] for item in repo.retrieve(CASES[-1][1], limit=5)]
         assert no_answer_ids == [], f"No-answer query retrieved unrelated memories: {no_answer_ids}"
     finally:
