@@ -10,42 +10,51 @@ def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+def _sentences(text: str) -> tuple[str, ...]:
+    return tuple(_norm(part) for part in re.split(r"[.!?;]+", text) if _norm(part))
+
+
 def _negated_phrase_present(text: str, phrase: str) -> bool:
-    """Detect a narrow negation immediately scoped to a supported phrase."""
+    """Detect narrow negation within the same sentence/semicolon clause."""
     phrase_tokens = _norm(phrase).split()
     if not phrase_tokens:
         return False
-    tokens = _norm(text).split()
-    for i in range(len(tokens) - len(phrase_tokens) + 1):
-        if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
-            continue
-        prefix = tokens[max(0, i - 3):i]
-        if prefix == ["not", "only"]:
-            continue
-        if prefix[-1:] in (["not"], ["never"], ["without"], ["no"]):
-            return True
-        if any(prefix[-n:] == pattern for n, pattern in ((2, ["did", "not"]), (2, ["does", "not"]), (2, ["do", "not"]), (2, ["is", "not"]), (2, ["was", "not"]), (3, ["does", "not", "record"]), (3, ["did", "not", "record"]), (3, ["do", "not", "record"]))):
-            return True
+    for tokens in (sentence.split() for sentence in _sentences(text)):
+        for i in range(len(tokens) - len(phrase_tokens) + 1):
+            if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
+                continue
+            prefix = tokens[max(0, i - 3):i]
+            if prefix[-2:] == ["not", "only"]:
+                continue
+            if prefix[-1:] in (["not"], ["never"], ["without"], ["no"]):
+                return True
+            if any(prefix[-n:] == pattern for n, pattern in (
+                (2, ["did", "not"]), (2, ["does", "not"]),
+                (2, ["do", "not"]), (2, ["is", "not"]),
+                (2, ["was", "not"]), (3, ["does", "not", "record"]),
+                (3, ["did", "not", "record"]), (3, ["do", "not", "record"]),
+            )):
+                return True
     return False
 
 
-
 def _unestablished_phrase_present(text: str, phrase: str) -> bool:
-    """Detect narrow fixture-level hedge/claim/mention context around a phrase."""
+    """Detect narrow hedge/claim/mention context within a sentence/clause."""
     phrase_tokens = _norm(phrase).split()
-    tokens = _norm(text).split()
     markers = {
         "possibly", "maybe", "alleged", "allegedly", "claimed", "claim",
         "claims", "draft", "unverified", "disputed", "mention", "mentions",
         "mentioned", "speculative", "uncertain",
     }
-    for i in range(len(tokens) - len(phrase_tokens) + 1):
-        if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
-            continue
-        prefix = tokens[max(0, i - 3):i]
-        suffix = tokens[i + len(phrase_tokens):i + len(phrase_tokens) + 4]
-        if markers.intersection(prefix) or markers.intersection(suffix):
-            return True
+    for sentence in _sentences(text):
+        tokens = sentence.split()
+        for i in range(len(tokens) - len(phrase_tokens) + 1):
+            if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
+                continue
+            prefix = tokens[max(0, i - 3):i]
+            suffix = tokens[i + len(phrase_tokens):i + len(phrase_tokens) + 4]
+            if markers.intersection(prefix) or markers.intersection(suffix):
+                return True
     return False
 
 @dataclass(frozen=True)
