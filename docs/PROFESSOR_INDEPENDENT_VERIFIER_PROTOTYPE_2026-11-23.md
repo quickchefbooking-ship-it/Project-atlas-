@@ -46,3 +46,8 @@ with a source-grounded claim extraction/verifier interface, while retaining
 independent fixture labels and adversarial tests. Any model-assisted verifier
 must be evaluated against a held-out set, report uncertainty, and remain
 non-authoritative until calibrated. No runtime integration is proposed here.
+
+
+## Evaluation expansion — 10 additional boundary cases
+
+The second iteration adds checks for sentence/clause scoping, fact isolation, marker leakage, irrelevant keywords, fixture-only paraphrase limits, quote handling, and per-fact contradiction. Sentence and semicolon boundaries now scope negation and uncertainty markers. Quote handling remains a known lexical limitation: quoted matching phrases are still counted as support. This does not establish semantic truth.
