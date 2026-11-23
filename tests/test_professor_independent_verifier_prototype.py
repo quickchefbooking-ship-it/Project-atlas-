@@ -73,3 +73,13 @@ def test_uncertain_answer_does_not_pass_when_facts_required():
         "I cannot verify the facts yet.", facts=FACTS,
     )
     assert not result.passed
+
+
+def test_fact_linked_source_must_be_cited_even_when_available():
+    result = verify_answer(
+        "The report records three failures and two recoveries.",
+        facts=FACTS,
+        available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_source_ids == ("SRC-A",)
