@@ -37,9 +37,37 @@ class MemoryProposal:
     created_at: str
 
 
+_RETRIEVAL_STOPWORDS = {
+    "what", "which", "how", "should", "could", "would", "can", "do", "does",
+    "did", "is", "are", "was", "were", "the", "a", "an", "and", "or", "to",
+    "of", "for", "on", "in", "with", "about", "we", "our", "it", "this",
+    "that", "from", "before", "after", "first", "thing", "please", "me", "my",
+    "you", "your", "they", "them", "their", "as", "at", "by", "into", "when",
+    "where", "who", "why", "all", "any", "more", "most",
+}
+
+_RETRIEVAL_SYNONYMS = (
+    {"reply", "replies", "response", "responses", "answer", "answers", "writing", "written", "style", "tone", "concise", "clear"},
+    {"safeguard", "safeguards", "protect", "protection", "secure", "security", "privacy", "data", "company", "customer", "customers", "enterprise", "gdpr", "soc", "isolation"},
+    {"cook", "cooks", "chef", "chefs", "onboard", "onboarding", "register", "registration", "reservation", "reservations", "booking", "bookings"},
+)
+
+
 def _memory_terms(value: str) -> set[str]:
-    """Normalize Unicode letters/digits for language-tolerant lexical matching."""
-    return set(re.findall(r"[^\W_]{3,}", value.casefold(), flags=re.UNICODE))
+    """Normalize Unicode letters/digits and remove common query noise."""
+    return {
+        term for term in re.findall(r"\b[^\W_]{3,}\b", value.casefold(), flags=re.UNICODE)
+        if term not in _RETRIEVAL_STOPWORDS
+    }
+
+
+def _expand_retrieval_terms(terms: set[str]) -> set[str]:
+    """Expand known paraphrase groups; deliberately conservative."""
+    expanded = set(terms)
+    for group in _RETRIEVAL_SYNONYMS:
+        if terms.intersection(group):
+            expanded.update(group)
+    return expanded
 
 
 def _utc_now() -> datetime:
@@ -284,6 +312,7 @@ class TenantProfessorMemoryRepository:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_MEMORY_LIMIT:
             raise ValueError(f"Memory retrieval limit must be between 1 and {MAX_MEMORY_LIMIT}.")
         terms = _memory_terms(query)
+        expanded_terms = _expand_retrieval_terms(terms)
         now = _utc_now().isoformat()
         rows = self.db.execute(
             """SELECT proposal_id,category,title,content,expires_at,created_at
@@ -303,17 +332,23 @@ class TenantProfessorMemoryRepository:
             category_terms = _memory_terms(row["category"])
             title_terms = _memory_terms(row["title"])
             content_terms = _memory_terms(row["content"])
-            overlap = terms.intersection(category_terms | title_terms | content_terms)
-            score = (3 * len(terms.intersection(title_terms))
-                     + 2 * len(terms.intersection(category_terms))
-                     + len(terms.intersection(content_terms)))
-            if overlap and score:
+            searchable = category_terms | title_terms | content_terms
+            overlap = terms.intersection(searchable)
+            expanded_overlap = expanded_terms.intersection(searchable)
+            exact_score = (4 * len(terms.intersection(title_terms))
+                           + 3 * len(terms.intersection(category_terms))
+                           + 2 * len(terms.intersection(content_terms)))
+            synonym_score = 2 * len(expanded_overlap - overlap)
+            score = exact_score + synonym_score
+            if score >= 2:
+                matched_terms = overlap or (expanded_overlap - terms)
+                # Report fields where original query terms matched, not fields reached only via synonym expansion.
                 matched_fields = tuple(
                     field for field, field_terms in (
                         ("title", title_terms), ("category", category_terms), ("content", content_terms)
                     ) if terms.intersection(field_terms)
                 )
-                ranked.append((score, row, overlap, matched_fields))
+                ranked.append((score, row, matched_terms, matched_fields))
         # Prefer stronger lexical relevance, then the most recently approved
         # memory for equal scores. The final ID key makes ties deterministic.
         ranked.sort(key=lambda item: (item[0], item[1]["created_at"], item[1]["proposal_id"]), reverse=True)
