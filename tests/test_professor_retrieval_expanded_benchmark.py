@@ -69,7 +69,7 @@ def test_expanded_labelled_benchmark_reports_per_query_retrieval():
                 if not set(top3) & relevant:
                     failures.append((category, query, sorted(relevant), ids))
             elif ids:
-                failures.append((category, query, sorted(relevant), ids)
+                failures.append((category, query, sorted(relevant), ids))
 
         recall_at_3 = hits_at_3 / len(answerable)
         mean_reciprocal_rank = sum(reciprocal_ranks) / len(reciprocal_ranks)
