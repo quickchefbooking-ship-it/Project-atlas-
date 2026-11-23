@@ -11,21 +11,20 @@ def _norm(text: str) -> str:
 
 
 def _negated_phrase_present(text: str, phrase: str) -> bool:
-    """Detect a narrow negation token before a supported phrase."""
-    phrase = _norm(phrase)
-    if not phrase:
+    """Detect a narrow negation immediately scoped to a supported phrase."""
+    phrase_tokens = _norm(phrase).split()
+    if not phrase_tokens:
         return False
-    tokens = text.split()
-    phrase_tokens = phrase.split()
+    tokens = _norm(text).split()
     for i in range(len(tokens) - len(phrase_tokens) + 1):
         if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
             continue
-        prefix = tokens[max(0, i - 4):i]
-        if "not only" in " ".join(prefix):
+        prefix = tokens[max(0, i - 2):i]
+        if prefix == ["not", "only"]:
             continue
-        if any(token in {"no", "not", "never", "without"} for token in prefix):
+        if prefix[-1:] in (["not"], ["never"], ["without"], ["no"]):
             return True
-        if any(" ".join(prefix[-n:]) in {"did not", "does not", "do not", "is not", "was not"} for n in (2,)):
+        if len(prefix) == 2 and prefix in (["did", "not"], ["does", "not"], ["do", "not"], ["is", "not"], ["was", "not"]):
             return True
     return False
 
