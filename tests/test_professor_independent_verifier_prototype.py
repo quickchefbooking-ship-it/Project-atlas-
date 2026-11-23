@@ -2,7 +2,7 @@ from atlas_engine.professor_independent_verifier_prototype import Fact, verify_a
 
 
 FACTS = (
-    Fact("failures", ("three failures",), ("zero failures", "no failures"), "SRC-A"),
+    Fact("failures", ("three failures",), ("zero failures", "no failures", "not three failures"), "SRC-A"),
     Fact("recoveries", ("two recoveries",), ("zero recoveries",), "SRC-A"),
 )
 
@@ -83,3 +83,12 @@ def test_fact_linked_source_must_be_cited_even_when_available():
     )
     assert not result.passed
     assert result.missing_source_ids == ("SRC-A",)
+
+
+def test_negated_supported_phrase_is_detected_as_contradiction():
+    result = verify_answer(
+        "The report does not record three failures; it records two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.contradicted_fact_ids == ("failures",)
