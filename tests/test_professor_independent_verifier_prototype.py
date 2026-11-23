@@ -135,3 +135,95 @@ def test_phrase_mention_in_email_is_not_source_confirmation():
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     assert not result.passed
+
+
+# Next ten-point evaluation expansion: scope, false positives, and boundary cases.
+
+def test_negation_of_one_fact_does_not_contaminate_other_fact():
+    result = verify_answer(
+        "The report does not record three failures; it records two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.contradicted_fact_ids == ("failures",)
+    assert result.supported_fact_ids == ("recoveries",)
+    assert not result.passed
+
+
+def test_unverified_marker_in_prior_sentence_does_not_contaminate_next_fact():
+    result = verify_answer(
+        "Three failures were alleged but unverified. The report records two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.missing_fact_ids == ("failures",)
+    assert result.supported_fact_ids == ("recoveries",)
+
+
+def test_hedge_in_prior_sentence_does_not_contaminate_next_fact():
+    result = verify_answer(
+        "Possibly three failures occurred. The report records two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.missing_fact_ids == ("failures",)
+    assert result.supported_fact_ids == ("recoveries",)
+
+
+def test_dispute_marker_scopes_to_nearest_fact():
+    result = verify_answer(
+        "Three failures are disputed. The report records two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.missing_fact_ids == ("failures",)
+    assert result.supported_fact_ids == ("recoveries",)
+
+
+def test_supported_fact_in_second_sentence_not_marked_negated():
+    result = verify_answer(
+        "There were not zero failures. The report records three failures and two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+
+
+def test_contradiction_for_recoveries_does_not_affect_failures():
+    result = verify_answer(
+        "Three failures occurred, but there were zero recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.supported_fact_ids == ("failures",)
+    assert result.contradicted_fact_ids == ("recoveries",)
+    assert not result.passed
+
+
+def test_irrelevant_keyword_in_an_unrelated_sentence_does_not_satisfy_fact():
+    result = verify_answer(
+        "Failures and recoveries are topics in this report. No counts are provided. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_fact_ids == ("failures", "recoveries")
+
+
+def test_paraphrase_not_in_fixture_is_not_assumed_supported():
+    result = verify_answer(
+        "The incident count was three and two events were resolved. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_fact_ids == ("failures", "recoveries")
+
+
+def test_fact_phrase_inside_quote_is_characterized_as_lexical_match():
+    result = verify_answer(
+        'The note says "three failures" and "two recoveries". SRC-A',
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    # Prototype limitation: quoted phrases are currently counted as support.
+    assert result.passed
+
+
+def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
+    result = verify_answer(
+        "Three failures occurred. The unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.passed
