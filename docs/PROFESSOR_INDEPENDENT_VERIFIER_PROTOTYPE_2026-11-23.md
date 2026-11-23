@@ -29,6 +29,16 @@ false positives/negatives. It is a test harness and a contract sketch.
 6. No-evidence abstention passes under explicit abstention fixture.
 7. Uncertainty does not satisfy a fact-bearing request.
 8. A fact-linked source must be cited even when available.\n9. A negated supported phrase must be treated as a contradiction.
+10. ‘Not only’ is not misread as negation.
+
+### Context-hardening extension (points 3–7)
+- A draft claim explicitly marked unverified does not count as established support.
+- Hedged facts (e.g. ‘possibly’) do not count as established support.
+- Disputed facts do not count as established support.
+- A mere mention in an email does not count as source confirmation.
+
+These are narrow lexical characterizations, not general language understanding. The
+phrase-window rules can still misclassify context and need broader held-out tests.
 
 ## Next gate
 If this characterization is useful, the next iteration should replace phrase rules
