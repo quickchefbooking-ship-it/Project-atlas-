@@ -248,3 +248,23 @@ def test_deleting_memory_removes_linked_supersession_metadata(memory_repos):
     owner.delete("old")
     assert owner.list_supersessions() == ()
     assert db.execute("SELECT COUNT(*) FROM tenant_professor_memory_supersessions").fetchone()[0] == 0
+
+
+def test_memory_retrieval_expands_common_paraphrases(memory_repos):
+    _db, owner, _other, _tenant = memory_repos
+    owner.propose("style", category="preference", title="Concise writing style",
+                  content="Clear concise answers without unnecessary repetition.")
+    owner.decide("style", decision="approved")
+    owner.propose("security", category="security", title="Enterprise security posture",
+                  content="SOC 2 readiness, UK GDPR and tenant isolation.")
+    owner.decide("security", decision="approved")
+    assert owner.retrieve("How should replies be written?")[0]["proposal_id"] == "style"
+    assert owner.retrieve("What safeguards protect company and customer data?")[0]["proposal_id"] == "security"
+
+
+def test_memory_retrieval_abstains_on_unrelated_low_signal_query(memory_repos):
+    _db, owner, _other, _tenant = memory_repos
+    owner.propose("style", category="preference", title="Concise writing style",
+                  content="Clear concise answers.")
+    owner.decide("style", decision="approved")
+    assert owner.retrieve("weather forecast rainfall tomorrow") == ()
