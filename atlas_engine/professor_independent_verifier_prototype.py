@@ -55,9 +55,11 @@ def verify_answer(
         c for c in required_constraints if _norm(c) not in normalized
     )
     available = set(available_source_ids)
-    cited = set(re.findall(r"\b[A-Z][A-Z0-9_-]*\b", answer))
+    cited = set(re.findall(r"\\b[A-Z][A-Z0-9_-]*\\b", answer))
+    fact_source_ids = tuple(f.source_id for f in facts if f.source_id)
+    source_requirements = tuple(dict.fromkeys((*required_source_ids, *fact_source_ids)))
     missing_sources = tuple(
-        sid for sid in required_source_ids
+        sid for sid in source_requirements
         if sid not in available or sid not in cited
     )
     # An abstention-only fixture passes only when there are no required facts,
