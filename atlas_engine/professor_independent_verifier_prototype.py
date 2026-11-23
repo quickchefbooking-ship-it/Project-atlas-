@@ -11,15 +11,23 @@ def _norm(text: str) -> str:
 
 
 def _negated_phrase_present(text: str, phrase: str) -> bool:
-    """Detect a narrow, deterministic negation window before a supported phrase."""
+    """Detect a narrow negation token before a supported phrase."""
     phrase = _norm(phrase)
     if not phrase:
         return False
-    negation = r"(?:no|not(?!\\s+only)|never|without|did not|does not|do not|is not|was not)"
-    # Allow up to three intervening normalized words. This is characterization,
-    # not general natural-language negation handling.
-    return bool(re.search(rf"\b{negation}\b(?:\w+\s+){{0,3}}{re.escape(phrase)}\b", text))
-
+    tokens = text.split()
+    phrase_tokens = phrase.split()
+    for i in range(len(tokens) - len(phrase_tokens) + 1):
+        if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
+            continue
+        prefix = tokens[max(0, i - 4):i]
+        if "not only" in " ".join(prefix):
+            continue
+        if any(token in {"no", "not", "never", "without"} for token in prefix):
+            return True
+        if any(" ".join(prefix[-n:]) in {"did not", "does not", "do not", "is not", "was not"} for n in (2,)):
+            return True
+    return False
 
 @dataclass(frozen=True)
 class Fact:
