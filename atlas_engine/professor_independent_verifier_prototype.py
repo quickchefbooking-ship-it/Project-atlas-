@@ -15,7 +15,7 @@ def _negated_phrase_present(text: str, phrase: str) -> bool:
     phrase = _norm(phrase)
     if not phrase:
         return False
-    negation = r"(?:no|not|never|without|did not|does not|do not|is not|was not)"
+    negation = r"(?:no|not(?!\\s+only)|never|without|did not|does not|do not|is not|was not)"
     # Allow up to three intervening normalized words. This is characterization,
     # not general natural-language negation handling.
     return bool(re.search(rf"\b{negation}\b(?:\w+\s+){{0,3}}{re.escape(phrase)}\b", text))
