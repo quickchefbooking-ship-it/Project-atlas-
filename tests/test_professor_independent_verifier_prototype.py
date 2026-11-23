@@ -92,3 +92,12 @@ def test_negated_supported_phrase_is_detected_as_contradiction():
     )
     assert not result.passed
     assert result.contradicted_fact_ids == ("failures",)
+
+
+def test_not_only_supported_phrase_is_not_misread_as_negation():
+    result = verify_answer(
+        "The report records not only three failures but also two recoveries. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+    assert result.contradicted_fact_ids == ()
