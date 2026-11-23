@@ -28,6 +28,26 @@ def _negated_phrase_present(text: str, phrase: str) -> bool:
             return True
     return False
 
+
+
+def _unestablished_phrase_present(text: str, phrase: str) -> bool:
+    """Detect narrow fixture-level hedge/claim/mention context around a phrase."""
+    phrase_tokens = _norm(phrase).split()
+    tokens = _norm(text).split()
+    markers = {
+        "possibly", "maybe", "alleged", "allegedly", "claimed", "claim",
+        "claims", "draft", "unverified", "disputed", "mention", "mentions",
+        "mentioned", "speculative", "uncertain",
+    }
+    for i in range(len(tokens) - len(phrase_tokens) + 1):
+        if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
+            continue
+        prefix = tokens[max(0, i - 3):i]
+        suffix = tokens[i + len(phrase_tokens):i + len(phrase_tokens) + 4]
+        if markers.intersection(prefix) or markers.intersection(suffix):
+            return True
+    return False
+
 @dataclass(frozen=True)
 class Fact:
     fact_id: str
@@ -64,9 +84,14 @@ def verify_answer(
         negated_matches = any(
             _negated_phrase_present(normalized, p) for p in fact.supported_phrases
         )
+        unestablished_matches = any(
+            _unestablished_phrase_present(normalized, p) for p in fact.supported_phrases
+        )
         conflicts = any(_norm(p) in normalized for p in fact.contradiction_phrases)
         if conflicts or negated_matches:
             contradicted.append(fact.fact_id)
+        elif unestablished_matches:
+            missing.append(fact.fact_id)
         elif matches:
             supported.append(fact.fact_id)
         else:
