@@ -342,10 +342,11 @@ class TenantProfessorMemoryRepository:
             score = exact_score + synonym_score
             if score >= 2:
                 matched_terms = overlap or (expanded_overlap - terms)
+                # Report fields where original query terms matched, not fields reached only via synonym expansion.
                 matched_fields = tuple(
                     field for field, field_terms in (
                         ("title", title_terms), ("category", category_terms), ("content", content_terms)
-                    ) if expanded_terms.intersection(field_terms)
+                    ) if terms.intersection(field_terms)
                 )
                 ranked.append((score, row, matched_terms, matched_fields))
         # Prefer stronger lexical relevance, then the most recently approved
