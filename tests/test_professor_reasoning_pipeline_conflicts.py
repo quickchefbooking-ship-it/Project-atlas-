@@ -1,9 +1,31 @@
+import json
+
+from atlas_engine.cognitive_kernel import CognitiveRequest
+from atlas_engine.conversation_contract import ConversationOutput
+from atlas_engine.professor_reasoning_pipeline import ProfessorReasoningPipeline
+
+
+class TwoPassProvider:
+    name = "fixture"
+
+    def __init__(self):
+        self.calls = []
+
+    def respond(self, conversation):
+        self.calls.append(conversation)
+        if len(self.calls) == 1:
+            text = json.dumps({"steps": [
+                {"step_id": "compare", "objective": "Compare the saved preferences"},
+                {"step_id": "clarify", "objective": "Identify whether clarification is needed", "depends_on": ["compare"]},
+            ]})
+        else:
+            text = ("The saved memories conflict. One says Hey Atlas; the other says Atlas. "
+                    "I need confirmation before treating either as the current preference.")
+        return ConversationOutput(text=text, provider="fixture", model="fixture-v1")
 
 
 def test_pipeline_preserves_conflicting_approved_memories_in_both_reasoning_passes():
-    provider = TwoPassProvider(
-        answer="The saved memories conflict. One says Hey Atlas; the other says Atlas. I need confirmation before treating either as the current preference."
-    )
+    provider = TwoPassProvider()
     approved = (
         {
             "proposal_id": "wake-phrase-a",
