@@ -258,3 +258,42 @@ def test_curly_quoted_fact_phrase_is_not_counted_as_assertion():
     )
     assert not result.passed
     assert result.missing_fact_ids == ("failures", "recoveries")
+
+
+
+def test_fact_source_citation_must_be_adjacent_to_claim():
+    result = verify_answer(
+        "The report records three failures. An unrelated paragraph discusses methodology. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_source_ids == ("SRC-A",)
+
+
+def test_fact_source_citation_in_immediately_following_sentence_is_allowed():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+
+
+def test_fact_source_citation_in_same_sentence_is_allowed():
+    result = verify_answer(
+        "The report records three failures (SRC-A).",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+
+
+def test_unavailable_fact_source_still_fails_even_when_adjacent():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=(),
+    )
+    assert not result.passed
+    assert result.missing_source_ids == ("SRC-A",)
