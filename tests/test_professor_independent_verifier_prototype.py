@@ -226,5 +226,15 @@ def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
         "Three failures occurred. The unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
-    # Known limitation under test: prototype currently false-rejects this answer.
-    assert not result.passed
+    # Sentence-scoped context fix: an unrelated marker must not false-reject.
+    assert result.passed
+    assert result.supported_fact_ids == ("failures", "recoveries")
+
+
+def test_unrelated_unverified_sentence_between_supported_facts_does_not_leak():
+    result = verify_answer(
+        "Three failures occurred. An unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+    assert result.supported_fact_ids == ("failures", "recoveries")
