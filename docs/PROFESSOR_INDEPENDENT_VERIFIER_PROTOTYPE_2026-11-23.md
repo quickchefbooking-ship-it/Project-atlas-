@@ -69,3 +69,21 @@ the answer is not sufficient to attribute it to the fact. Tests cover adjacent,
 same-sentence, distant, and unavailable-source cases. This is still only a
 lexical proximity heuristic: it does not read source contents, prove that a
 source supports a claim, or resolve complex multi-claim attribution.
+
+
+
+## Source-content evaluation — 2026-11-24
+
+The next fixture layer introduces explicit `SourceEvidence(source_id, text)`
+records. When source evidence is supplied, a fact-linked source must contain a
+matching supported phrase in a narrow asserted context. The evaluator
+characterizes denials, allegation/hedge markers, quoted or glossary/example
+mentions, absent evidence, wrong source IDs, partial coverage of multiple facts,
+and conflicting evidence. Conflicting evidence is surfaced rather than silently
+resolved.
+
+This remains a lexical fixture test, not semantic source understanding. It does
+not prove that the source is authentic, authoritative, current, complete, or
+truthful. It does not safely interpret complex grammar, paraphrases, speaker
+attribution, or multi-hop evidence. Source-content checking is opt-in for
+backward-compatible fixture cases and is not connected to the live Professor.
