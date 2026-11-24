@@ -1,4 +1,4 @@
-from atlas_engine.professor_independent_verifier_prototype import Fact, verify_answer
+from atlas_engine.professor_independent_verifier_prototype import Fact, SourceEvidence, verify_answer
 
 
 FACTS = (
@@ -297,3 +297,95 @@ def test_unavailable_fact_source_still_fails_even_when_adjacent():
     )
     assert not result.passed
     assert result.missing_source_ids == ("SRC-A",)
+
+
+
+# Source-content evaluation: fixture text is checked independently of citation proximity.
+
+def test_source_content_supports_claim_when_phrase_is_asserted():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "The report records three failures."),),
+    )
+    assert result.passed
+    assert result.unsupported_source_ids == ()
+
+
+def test_source_content_denial_does_not_support_claim():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "The report does not record three failures."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+
+
+def test_source_content_allegation_is_not_treated_as_established_support():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "An email alleged three failures, but this is unverified."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+
+
+def test_unrelated_source_with_matching_words_does_not_support_claim():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "The phrase three failures appears in the glossary as an example only."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+
+
+def test_source_that_only_supports_one_of_two_claims_fails_other_claim():
+    result = verify_answer(
+        "The report records three failures and two recoveries. SRC-A",
+        facts=FACTS,
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "The report records three failures."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+
+
+def test_conflicting_source_evidence_is_reported_not_silently_resolved():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+        source_evidence=(
+            SourceEvidence("SRC-A", "The report records three failures."),
+            SourceEvidence("SRC-A", "The report does not record three failures."),
+        ),
+    )
+    assert not result.passed
+    assert result.conflicting_source_ids == ("SRC-A",)
+
+
+def test_wrong_source_id_does_not_support_fact_linked_source():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A", "SRC-B"),
+        source_evidence=(SourceEvidence("SRC-B", "The report records three failures."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+
+
+def test_source_content_check_is_opt_in_for_backward_compatible_fixtures():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert result.passed
