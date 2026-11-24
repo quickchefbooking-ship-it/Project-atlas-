@@ -389,3 +389,53 @@ def test_source_content_check_is_opt_in_for_backward_compatible_fixtures():
         available_source_ids=("SRC-A",),
     )
     assert result.passed
+
+
+
+# Fact-level source coverage: a shared source ID must not hide partial support.
+
+def test_partial_source_support_identifies_exact_missing_fact():
+    result = verify_answer(
+        "The report records three failures and two recoveries. SRC-A",
+        facts=FACTS,
+        available_source_ids=("SRC-A",),
+        source_evidence=(SourceEvidence("SRC-A", "The report records three failures."),),
+    )
+    assert not result.passed
+    assert result.unsupported_source_ids == ("SRC-A",)
+    assert result.unsupported_fact_ids == ("recoveries",)
+    assert result.conflicting_fact_ids == ()
+
+
+def test_conflicting_source_content_identifies_exact_fact():
+    result = verify_answer(
+        "The report records three failures and two recoveries. SRC-A",
+        facts=FACTS,
+        available_source_ids=("SRC-A",),
+        source_evidence=(
+            SourceEvidence("SRC-A", "The report records three failures and two recoveries."),
+            SourceEvidence("SRC-A", "The report does not record two recoveries."),
+        ),
+    )
+    assert not result.passed
+    assert result.conflicting_fact_ids == ("recoveries",)
+    assert result.unsupported_fact_ids == ()
+
+
+def test_each_fact_can_be_supported_by_its_own_source():
+    facts = (
+        Fact("failures", ("three failures",), source_id="SRC-A"),
+        Fact("recoveries", ("two recoveries",), source_id="SRC-B"),
+    )
+    result = verify_answer(
+        "The report records three failures. SRC-A The report records two recoveries. SRC-B",
+        facts=facts,
+        available_source_ids=("SRC-A", "SRC-B"),
+        source_evidence=(
+            SourceEvidence("SRC-A", "The report records three failures."),
+            SourceEvidence("SRC-B", "The report records two recoveries."),
+        ),
+    )
+    assert result.passed
+    assert result.unsupported_fact_ids == ()
+    assert result.conflicting_fact_ids == ()
