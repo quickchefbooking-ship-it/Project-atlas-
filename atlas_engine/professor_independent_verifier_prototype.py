@@ -38,6 +38,33 @@ def _negated_phrase_present(text: str, phrase: str) -> bool:
     return False
 
 
+def _quoted_phrase_present(text: str, phrase: str) -> bool:
+    """Treat a matching phrase inside straight/curly quotation marks as reported speech."""
+    phrase_tokens = _norm(phrase).split()
+    if not phrase_tokens:
+        return False
+    for sentence in _sentences(text):
+        tokens = sentence.split()
+        for i in range(len(tokens) - len(phrase_tokens) + 1):
+            if tokens[i:i + len(phrase_tokens)] != phrase_tokens:
+                continue
+            # Locate the original phrase in its sentence and check quote parity.
+            original_parts = re.split(r"[.!?;]+", text)
+            for part in original_parts:
+                normalized_part = _norm(part)
+                if _norm(phrase) not in normalized_part:
+                    continue
+                before = part.lower().find(phrase.lower())
+                if before >= 0:
+                    prefix = part[:before]
+                    suffix = part[before + len(phrase):]
+                    if prefix.count('"') % 2 or suffix.count('"') % 2:
+                        return True
+                    if prefix.count("“") > prefix.count("”") or suffix.count("”") > suffix.count("“"):
+                        return True
+    return False
+
+
 def _unestablished_phrase_present(text: str, phrase: str) -> bool:
     """Detect narrow hedge/claim/mention context within a sentence/clause."""
     phrase_tokens = _norm(phrase).split()
@@ -94,7 +121,9 @@ def verify_answer(
             _negated_phrase_present(answer, p) for p in fact.supported_phrases
         )
         unestablished_matches = any(
-            _unestablished_phrase_present(answer, p) for p in fact.supported_phrases
+            _unestablished_phrase_present(answer, p)
+            or _quoted_phrase_present(answer, p)
+            for p in fact.supported_phrases
         )
         conflicts = any(_norm(p) in normalized for p in fact.contradiction_phrases)
         if conflicts or negated_matches:
