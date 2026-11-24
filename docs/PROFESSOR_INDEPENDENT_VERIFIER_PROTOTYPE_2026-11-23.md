@@ -59,3 +59,13 @@ The second iteration adds checks for sentence/clause scoping, fact isolation, ma
 - Regression tests cover straight quotes, curly quotes, and a phrase appearing both asserted and quoted.
 - The rule is intentionally conservative and may reject valid answers that quote a phrase while also asserting it elsewhere.
 - This remains a fixture-based lexical gate; it does not identify speakers, validate source attribution, or establish source truth.
+
+
+## Source-attribution evaluation — 2026-11-24
+
+Fact-linked source IDs must now appear in the same sentence as the matching claim
+or in the immediately following citation sentence. A source token elsewhere in
+the answer is not sufficient to attribute it to the fact. Tests cover adjacent,
+same-sentence, distant, and unavailable-source cases. This is still only a
+lexical proximity heuristic: it does not read source contents, prove that a
+source supports a claim, or resolve complex multi-claim attribution.
