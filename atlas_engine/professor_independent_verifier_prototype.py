@@ -85,7 +85,8 @@ def _unestablished_phrase_present(text: str, phrase: str) -> bool:
     markers = {
         "possibly", "maybe", "alleged", "allegedly", "claimed", "claim",
         "claims", "draft", "unverified", "disputed", "mention", "mentions",
-        "mentioned", "speculative", "uncertain",
+        "mentioned", "speculative", "uncertain", "example", "glossary",
+        "illustrative", "hypothetical",
     }
     for sentence in _sentences(text):
         tokens = sentence.split()
