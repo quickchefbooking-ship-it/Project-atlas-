@@ -224,7 +224,7 @@ def test_fact_phrase_inside_quote_is_characterized_as_lexical_match():
 
 def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
     result = verify_answer(
-        "Three failures occurred. The unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        "Three failures occurred. SRC-A The unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     # Sentence-scoped context fix: an unrelated marker must not false-reject.
@@ -234,7 +234,7 @@ def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
 
 def test_unrelated_unverified_sentence_between_supported_facts_does_not_leak():
     result = verify_answer(
-        "Three failures occurred. An unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        "Three failures occurred. SRC-A An unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     assert result.passed
