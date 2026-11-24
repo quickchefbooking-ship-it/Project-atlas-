@@ -91,10 +91,10 @@ def verify_answer(
     for fact in facts:
         matches = any(_norm(p) in normalized for p in fact.supported_phrases)
         negated_matches = any(
-            _negated_phrase_present(normalized, p) for p in fact.supported_phrases
+            _negated_phrase_present(answer, p) for p in fact.supported_phrases
         )
         unestablished_matches = any(
-            _unestablished_phrase_present(normalized, p) for p in fact.supported_phrases
+            _unestablished_phrase_present(answer, p) for p in fact.supported_phrases
         )
         conflicts = any(_norm(p) in normalized for p in fact.contradiction_phrases)
         if conflicts or negated_matches:
