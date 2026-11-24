@@ -224,7 +224,7 @@ def test_fact_phrase_inside_quote_is_characterized_as_lexical_match():
 
 def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
     result = verify_answer(
-        "Three failures occurred. The unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        "Three failures occurred. SRC-A The unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     # Sentence-scoped context fix: an unrelated marker must not false-reject.
@@ -234,7 +234,7 @@ def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
 
 def test_unrelated_unverified_sentence_between_supported_facts_does_not_leak():
     result = verify_answer(
-        "Three failures occurred. An unrelated draft is unverified. Two recoveries occurred. SRC-A",
+        "Three failures occurred. SRC-A An unrelated draft is unverified. Two recoveries occurred. SRC-A",
         facts=FACTS, available_source_ids=("SRC-A",),
     )
     assert result.passed
@@ -258,3 +258,42 @@ def test_curly_quoted_fact_phrase_is_not_counted_as_assertion():
     )
     assert not result.passed
     assert result.missing_fact_ids == ("failures", "recoveries")
+
+
+
+def test_fact_source_citation_must_be_adjacent_to_claim():
+    result = verify_answer(
+        "The report records three failures. An unrelated paragraph discusses methodology. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_source_ids == ("SRC-A",)
+
+
+def test_fact_source_citation_in_immediately_following_sentence_is_allowed():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+
+
+def test_fact_source_citation_in_same_sentence_is_allowed():
+    result = verify_answer(
+        "The report records three failures (SRC-A).",
+        facts=(FACTS[0],),
+        available_source_ids=("SRC-A",),
+    )
+    assert result.passed
+
+
+def test_unavailable_fact_source_still_fails_even_when_adjacent():
+    result = verify_answer(
+        "The report records three failures. SRC-A",
+        facts=(FACTS[0],),
+        available_source_ids=(),
+    )
+    assert not result.passed
+    assert result.missing_source_ids == ("SRC-A",)

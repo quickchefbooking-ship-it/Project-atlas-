@@ -65,6 +65,20 @@ def _quoted_phrase_present(text: str, phrase: str) -> bool:
     return False
 
 
+def _source_near_phrase(text: str, phrase: str, source_id: str) -> bool:
+    """Require a source token in the claim sentence or its immediately following citation sentence."""
+    parts = [part for part in re.split(r"[.!?;]+", text) if _norm(part)]
+    phrase_norm = _norm(phrase)
+    source_pattern = re.compile(r"(?<![A-Z0-9_-])" + re.escape(source_id) + r"(?![A-Z0-9_-])", re.IGNORECASE)
+    for index, part in enumerate(parts):
+        if phrase_norm not in _norm(part):
+            continue
+        for candidate in parts[index:index + 2]:
+            if source_pattern.search(candidate):
+                return True
+    return False
+
+
 def _unestablished_phrase_present(text: str, phrase: str) -> bool:
     """Detect narrow hedge/claim/mention context within a sentence/clause."""
     phrase_tokens = _norm(phrase).split()
@@ -142,10 +156,19 @@ def verify_answer(
     cited = set(re.findall(r"\b[A-Z][A-Z0-9_-]*\b", answer))
     fact_source_ids = tuple(f.source_id for f in facts if f.source_id)
     source_requirements = tuple(dict.fromkeys((*required_source_ids, *fact_source_ids)))
-    missing_sources = tuple(
+    missing_sources_list = [
         sid for sid in source_requirements
         if sid not in available or sid not in cited
-    )
+    ]
+    # A fact-linked source must be cited beside its claim, not merely elsewhere in the answer.
+    for fact in facts:
+        if fact.source_id and fact.source_id in available and not any(
+            _source_near_phrase(answer, phrase, fact.source_id)
+            for phrase in fact.supported_phrases
+        ):
+            if fact.source_id not in missing_sources_list:
+                missing_sources_list.append(fact.source_id)
+    missing_sources = tuple(missing_sources_list)
     # An abstention-only fixture passes only when there are no required facts,
     # no required constraints, and the answer explicitly signals inability.
     abstains = any(phrase in normalized for phrase in (
