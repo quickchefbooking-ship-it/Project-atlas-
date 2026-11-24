@@ -99,6 +99,13 @@ def _unestablished_phrase_present(text: str, phrase: str) -> bool:
     return False
 
 @dataclass(frozen=True)
+class SourceEvidence:
+    """Explicit source text supplied by a deterministic evaluation fixture."""
+    source_id: str
+    text: str
+
+
+@dataclass(frozen=True)
 class Fact:
     fact_id: str
     supported_phrases: tuple[str, ...]
@@ -115,6 +122,21 @@ class VerificationResult:
     missing_constraints: tuple[str, ...]
     missing_source_ids: tuple[str, ...]
     abstention_required: bool = False
+    unsupported_source_ids: tuple[str, ...] = ()
+    conflicting_source_ids: tuple[str, ...] = ()
+
+
+def _source_phrase_status(text: str, phrase: str) -> str:
+    """Return supported, denied, unestablished, or absent using narrow lexical rules."""
+    normalized = _norm(text)
+    phrase_norm = _norm(phrase)
+    if not phrase_norm or phrase_norm not in normalized:
+        return "absent"
+    if _negated_phrase_present(text, phrase):
+        return "denied"
+    if _unestablished_phrase_present(text, phrase) or _quoted_phrase_present(text, phrase):
+        return "unestablished"
+    return "supported"
 
 
 def verify_answer(
@@ -124,6 +146,7 @@ def verify_answer(
     required_constraints: tuple[str, ...] = (),
     available_source_ids: tuple[str, ...] = (),
     required_source_ids: tuple[str, ...] = (),
+    source_evidence: tuple[SourceEvidence, ...] = (),
     abstention_required: bool = False,
 ) -> VerificationResult:
     """Verify against explicit, fixture-owned phrase rules and source IDs."""
@@ -169,6 +192,41 @@ def verify_answer(
             if fact.source_id not in missing_sources_list:
                 missing_sources_list.append(fact.source_id)
     missing_sources = tuple(missing_sources_list)
+
+    unsupported_source_ids: list[str] = []
+    conflicting_source_ids: list[str] = []
+    if source_evidence:
+        evidence_by_id: dict[str, list[SourceEvidence]] = {}
+        for evidence in source_evidence:
+            evidence_by_id.setdefault(evidence.source_id, []).append(evidence)
+        for fact in facts:
+            if not fact.source_id:
+                continue
+            matching_phrases = [
+                phrase for phrase in fact.supported_phrases
+                if _norm(phrase) in _norm(answer)
+            ]
+            if not matching_phrases:
+                continue
+            evidence_items = evidence_by_id.get(fact.source_id, [])
+            if not evidence_items:
+                if fact.source_id not in unsupported_source_ids:
+                    unsupported_source_ids.append(fact.source_id)
+                continue
+            statuses = [
+                _source_phrase_status(item.text, phrase)
+                for item in evidence_items
+                for phrase in matching_phrases
+            ]
+            has_support = "supported" in statuses
+            has_denial = "denied" in statuses
+            if has_support and has_denial:
+                if fact.source_id not in conflicting_source_ids:
+                    conflicting_source_ids.append(fact.source_id)
+            elif not has_support:
+                if fact.source_id not in unsupported_source_ids:
+                    unsupported_source_ids.append(fact.source_id)
+
     # An abstention-only fixture passes only when there are no required facts,
     # no required constraints, and the answer explicitly signals inability.
     abstains = any(phrase in normalized for phrase in (
@@ -179,7 +237,8 @@ def verify_answer(
     )
     passed = (
         not missing and not contradicted and not missing_constraints
-        and not missing_sources and abstention_ok
+        and not missing_sources and not unsupported_source_ids
+        and not conflicting_source_ids and abstention_ok
     )
     return VerificationResult(
         passed=passed,
@@ -189,4 +248,6 @@ def verify_answer(
         missing_constraints=missing_constraints,
         missing_source_ids=missing_sources,
         abstention_required=abstention_required,
+        unsupported_source_ids=tuple(unsupported_source_ids),
+        conflicting_source_ids=tuple(conflicting_source_ids),
     )
