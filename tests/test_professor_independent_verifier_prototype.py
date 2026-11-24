@@ -217,8 +217,9 @@ def test_fact_phrase_inside_quote_is_characterized_as_lexical_match():
         'The note says "three failures" and "two recoveries". SRC-A',
         facts=FACTS, available_source_ids=("SRC-A",),
     )
-    # Prototype limitation: quoted phrases are currently counted as support.
-    assert result.passed
+    # A quoted phrase is reported speech, not an assertion by the answer.
+    assert not result.passed
+    assert result.missing_fact_ids == ("failures", "recoveries")
 
 
 def test_unrelated_marker_near_one_fact_is_characterized_for_false_positive():
@@ -238,3 +239,22 @@ def test_unrelated_unverified_sentence_between_supported_facts_does_not_leak():
     )
     assert result.passed
     assert result.supported_fact_ids == ("failures", "recoveries")
+
+
+def test_unquoted_assertion_is_not_rejected_because_same_phrase_is_also_quoted():
+    result = verify_answer(
+        'Three failures occurred. The note also says "three failures". Two recoveries occurred. SRC-A',
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    # Conservative rule: a quote of a required phrase makes that fact unestablished.
+    assert not result.passed
+    assert "failures" in result.missing_fact_ids
+
+
+def test_curly_quoted_fact_phrase_is_not_counted_as_assertion():
+    result = verify_answer(
+        "The note says “three failures” and “two recoveries”. SRC-A",
+        facts=FACTS, available_source_ids=("SRC-A",),
+    )
+    assert not result.passed
+    assert result.missing_fact_ids == ("failures", "recoveries")
