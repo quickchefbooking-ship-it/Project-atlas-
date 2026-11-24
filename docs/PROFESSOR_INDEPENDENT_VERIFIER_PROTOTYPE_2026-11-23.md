@@ -1,0 +1,53 @@
+# Independent deterministic verifier prototype — 2026-11-23
+
+## Goal
+Create a separate, testable gate for explicit fact coverage, contradictions,
+constraints, source availability/citation presence, and evidence-free abstention.
+
+## Scope
+This prototype is **not runtime-wired**. It uses fixture-defined phrase rules
+and source IDs. It is not semantic verification, cannot understand paraphrases,
+and cannot establish that a source itself is true. Phrase matching can produce
+false positives/negatives. It is a test harness and a contract sketch.
+
+## Behavior
+- Every expected fact must match one supported phrase.
+- Any listed contradiction phrase overrides a supported phrase for that fact.
+- Required constraints are checked by normalized phrase presence.
+- A required source must be both available in the fixture and cited by its ID.
+- A fact's declared `source_id` automatically becomes a source requirement, so the fact cannot pass without its source being available and cited.
+- When an evidence-free abstention is required, the answer must signal uncertainty
+  and there must be no required facts or constraints.
+- Adversarial text is treated as answer content, not executable instructions.
+
+## Test matrix
+1. Complete supported answer passes.
+2. Contradiction fails even if the correct phrase also appears.
+3. Missing fact and missing constraint fail.
+4. Citation-shaped token with no available source fails.
+5. Adversarial text containing a contradiction fails.
+6. No-evidence abstention passes under explicit abstention fixture.
+7. Uncertainty does not satisfy a fact-bearing request.
+8. A fact-linked source must be cited even when available.\n9. A negated supported phrase must be treated as a contradiction.
+10. ‘Not only’ is not misread as negation.
+
+### Context-hardening extension (points 3–7)
+- A draft claim explicitly marked unverified does not count as established support.
+- Hedged facts (e.g. ‘possibly’) do not count as established support.
+- Disputed facts do not count as established support.
+- A mere mention in an email does not count as source confirmation.
+
+These are narrow lexical characterizations, not general language understanding. The
+phrase-window rules can still misclassify context and need broader held-out tests.
+
+## Next gate
+If this characterization is useful, the next iteration should replace phrase rules
+with a source-grounded claim extraction/verifier interface, while retaining
+independent fixture labels and adversarial tests. Any model-assisted verifier
+must be evaluated against a held-out set, report uncertainty, and remain
+non-authoritative until calibrated. No runtime integration is proposed here.
+
+
+## Evaluation expansion — 10 additional boundary cases
+
+The second iteration adds checks for sentence/clause scoping, fact isolation, marker leakage, irrelevant keywords, fixture-only paraphrase limits, quote handling, and per-fact contradiction. Sentence and semicolon boundaries scope negation and uncertainty markers. A regression exposed that the verifier was passing normalized text into the context helpers, which erased sentence boundaries and caused unrelated markers to leak; this has been fixed by passing the original answer text. A regression test now requires an unrelated unverified sentence not to false-reject supported facts. Quote handling remains a known lexical limitation: quoted matching phrases are still counted as support. This does not establish semantic truth.
