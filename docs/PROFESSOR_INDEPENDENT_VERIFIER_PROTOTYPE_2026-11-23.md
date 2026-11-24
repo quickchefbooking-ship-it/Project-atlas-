@@ -50,4 +50,12 @@ non-authoritative until calibrated. No runtime integration is proposed here.
 
 ## Evaluation expansion — 10 additional boundary cases
 
-The second iteration adds checks for sentence/clause scoping, fact isolation, marker leakage, irrelevant keywords, fixture-only paraphrase limits, quote handling, and per-fact contradiction. Sentence and semicolon boundaries scope negation and uncertainty markers. A regression exposed that the verifier was passing normalized text into the context helpers, which erased sentence boundaries and caused unrelated markers to leak; this has been fixed by passing the original answer text. A regression test now requires an unrelated unverified sentence not to false-reject supported facts. Quote handling remains a known lexical limitation: quoted matching phrases are still counted as support. This does not establish semantic truth.
+The second iteration adds checks for sentence/clause scoping, fact isolation, marker leakage, irrelevant keywords, fixture-only paraphrase limits, quote handling, and per-fact contradiction. Sentence and semicolon boundaries scope negation and uncertainty markers. A regression exposed that the verifier was passing normalized text into the context helpers, which erased sentence boundaries and caused unrelated markers to leak; this has been fixed by passing the original answer text. A regression test now requires an unrelated unverified sentence not to false-reject supported facts. The next evaluation iteration now treats matching phrases inside straight or curly quotation marks as reported speech rather than asserted support. This is deliberately conservative: even a separate unquoted assertion of the same phrase may be rejected when a quoted occurrence is also present. Quote parsing remains a lexical heuristic, not a general model of attribution or speaker intent. This does not establish semantic truth.
+
+
+## Quotation-context evaluation — 2026-11-24
+
+- Matching required phrases inside straight or curly quotation marks are no longer accepted as assertions.
+- Regression tests cover straight quotes, curly quotes, and a phrase appearing both asserted and quoted.
+- The rule is intentionally conservative and may reject valid answers that quote a phrase while also asserting it elsewhere.
+- This remains a fixture-based lexical gate; it does not identify speakers, validate source attribution, or establish source truth.
