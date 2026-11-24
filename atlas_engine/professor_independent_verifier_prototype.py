@@ -125,6 +125,8 @@ class VerificationResult:
     abstention_required: bool = False
     unsupported_source_ids: tuple[str, ...] = ()
     conflicting_source_ids: tuple[str, ...] = ()
+    unsupported_fact_ids: tuple[str, ...] = ()
+    conflicting_fact_ids: tuple[str, ...] = ()
 
 
 def _source_phrase_status(text: str, phrase: str) -> str:
@@ -196,6 +198,8 @@ def verify_answer(
 
     unsupported_source_ids: list[str] = []
     conflicting_source_ids: list[str] = []
+    unsupported_fact_ids: list[str] = []
+    conflicting_fact_ids: list[str] = []
     if source_evidence:
         evidence_by_id: dict[str, list[SourceEvidence]] = {}
         for evidence in source_evidence:
@@ -213,6 +217,7 @@ def verify_answer(
             if not evidence_items:
                 if fact.source_id not in unsupported_source_ids:
                     unsupported_source_ids.append(fact.source_id)
+                unsupported_fact_ids.append(fact.fact_id)
                 continue
             statuses = [
                 _source_phrase_status(item.text, phrase)
@@ -224,9 +229,11 @@ def verify_answer(
             if has_support and has_denial:
                 if fact.source_id not in conflicting_source_ids:
                     conflicting_source_ids.append(fact.source_id)
+                conflicting_fact_ids.append(fact.fact_id)
             elif not has_support:
                 if fact.source_id not in unsupported_source_ids:
                     unsupported_source_ids.append(fact.source_id)
+                unsupported_fact_ids.append(fact.fact_id)
 
     # An abstention-only fixture passes only when there are no required facts,
     # no required constraints, and the answer explicitly signals inability.
@@ -251,4 +258,6 @@ def verify_answer(
         abstention_required=abstention_required,
         unsupported_source_ids=tuple(unsupported_source_ids),
         conflicting_source_ids=tuple(conflicting_source_ids),
+        unsupported_fact_ids=tuple(unsupported_fact_ids),
+        conflicting_fact_ids=tuple(conflicting_fact_ids),
     )

@@ -87,3 +87,15 @@ not prove that the source is authentic, authoritative, current, complete, or
 truthful. It does not safely interpret complex grammar, paraphrases, speaker
 attribution, or multi-hop evidence. Source-content checking is opt-in for
 backward-compatible fixture cases and is not connected to the live Professor.
+
+
+
+## Fact-level evidence coverage — 2026-11-24
+
+The evaluator now reports source-content gaps and conflicts at the individual
+fact ID level as well as the source ID level. This prevents a source ID that
+supports one fact from concealing that it does not support a second fact which
+happens to cite the same source. Tests cover partial support, fact-specific
+conflicts, and separate sources supporting separate facts. This remains a
+fixture-only lexical check and does not interpret compound natural-language
+claims or establish semantic entailment.
