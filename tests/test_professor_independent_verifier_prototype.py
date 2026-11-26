@@ -439,3 +439,96 @@ def test_each_fact_can_be_supported_by_its_own_source():
     assert result.passed
     assert result.unsupported_fact_ids == ()
     assert result.conflicting_fact_ids == ()
+
+
+
+# Caller-defined source provenance checks; metadata is not authentication.
+
+from atlas_engine.professor_independent_verifier_prototype import (
+    SourceProvenance, evaluate_source_provenance,
+)
+
+
+def test_complete_provenance_passes_with_caller_defined_authority():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-A", "publisher-site", "2026-11-20", "primary"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+        max_age_days=30,
+        known_authority_labels=("primary", "secondary"),
+    )
+    assert result == type(result)()
+
+
+def test_missing_provenance_fields_are_reported():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-A", origin=None, published_at="2026-11-20"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+    )
+    assert result.missing_provenance_ids == ("SRC-A",)
+
+
+def test_stale_evidence_uses_explicit_caller_threshold():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-A", "archive", "2026-01-01", "primary"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+        max_age_days=30,
+    )
+    assert result.stale_source_ids == ("SRC-A",)
+
+
+def test_freshness_is_not_assumed_without_a_configured_threshold():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-A", "archive", "2000-01-01", "primary"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+    )
+    assert result.stale_source_ids == ()
+
+
+def test_unknown_authority_is_judged_only_against_caller_vocabulary():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-A", "origin", "2026-11-20", "gold"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+        known_authority_labels=("primary", "secondary"),
+    )
+    assert result.unknown_authority_source_ids == ("SRC-A",)
+
+
+def test_source_id_mismatch_is_reported_in_both_directions():
+    result = evaluate_source_provenance(
+        (SourceProvenance("SRC-B", "origin", "2026-11-20", "primary"),),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+    )
+    assert result.mismatched_source_ids == ("SRC-A", "SRC-B")
+    assert result.missing_provenance_ids == ("SRC-A",)
+
+
+def test_conflicting_publication_dates_are_preserved_and_reported():
+    result = evaluate_source_provenance(
+        (
+            SourceProvenance("SRC-A", "origin", "2026-11-20", "primary"),
+            SourceProvenance("SRC-A", "origin", "2026-11-21", "primary"),
+        ),
+        expected_source_ids=("SRC-A",),
+        as_of_date="2026-11-26",
+    )
+    assert result.conflicting_date_source_ids == ("SRC-A",)
+
+
+def test_supersession_flags_old_source_without_deleting_it():
+    result = evaluate_source_provenance(
+        (
+            SourceProvenance("SRC-OLD", "archive", "2026-01-01", "primary"),
+            SourceProvenance("SRC-NEW", "publisher", "2026-11-20", "primary",
+                             supersedes_source_id="SRC-OLD"),
+        ),
+        expected_source_ids=("SRC-OLD", "SRC-NEW"),
+        as_of_date="2026-11-26",
+    )
+    assert result.superseded_source_ids == ("SRC-OLD",)
+    assert result.mismatched_source_ids == ()

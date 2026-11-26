@@ -261,3 +261,102 @@ def verify_answer(
         unsupported_fact_ids=tuple(unsupported_fact_ids),
         conflicting_fact_ids=tuple(conflicting_fact_ids),
     )
+
+
+# Provenance evaluation is deliberately separate from lexical claim support.
+# It validates only caller-supplied metadata; it cannot authenticate a source.
+from datetime import date
+
+
+@dataclass(frozen=True)
+class SourceProvenance:
+    """Caller-supplied provenance metadata for one source record."""
+    source_id: str
+    origin: str | None = None
+    published_at: str | None = None
+    authority_label: str | None = None
+    supersedes_source_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ProvenanceResult:
+    missing_provenance_ids: tuple[str, ...] = ()
+    stale_source_ids: tuple[str, ...] = ()
+    unknown_authority_source_ids: tuple[str, ...] = ()
+    mismatched_source_ids: tuple[str, ...] = ()
+    conflicting_date_source_ids: tuple[str, ...] = ()
+    superseded_source_ids: tuple[str, ...] = ()
+
+
+def evaluate_source_provenance(
+    records: tuple[SourceProvenance, ...],
+    *,
+    expected_source_ids: tuple[str, ...],
+    as_of_date: str,
+    max_age_days: int | None = None,
+    known_authority_labels: tuple[str, ...] = (),
+) -> ProvenanceResult:
+    """Evaluate fixture metadata without authenticating or ranking its sources.
+
+    Freshness is checked only when the caller supplies max_age_days. Authority
+    is unknown only when labels are supplied and a record's label is absent
+    from that caller-defined vocabulary. Superseded records remain visible.
+    """
+    as_of = date.fromisoformat(as_of_date)
+    if max_age_days is not None and max_age_days < 0:
+        raise ValueError("max_age_days must be non-negative or None")
+
+    expected = set(expected_source_ids)
+    record_ids = {record.source_id for record in records}
+    by_id: dict[str, list[SourceProvenance]] = {}
+    for record in records:
+        by_id.setdefault(record.source_id, []).append(record)
+
+    missing: list[str] = []
+    stale: list[str] = []
+    unknown_authority: list[str] = []
+    mismatched = sorted(record_ids.symmetric_difference(expected))
+    conflicting_dates: list[str] = []
+
+    for source_id in sorted(expected):
+        source_records = by_id.get(source_id, [])
+        if not source_records:
+            missing.append(source_id)
+            continue
+        dates = {record.published_at for record in source_records if record.published_at}
+        if len(dates) > 1:
+            conflicting_dates.append(source_id)
+        for record in source_records:
+            if not record.origin or not record.published_at or not record.authority_label:
+                if source_id not in missing:
+                    missing.append(source_id)
+            if record.published_at and max_age_days is not None:
+                try:
+                    published = date.fromisoformat(record.published_at)
+                    age = (as_of - published).days
+                    if age < 0 or age > max_age_days:
+                        if source_id not in stale:
+                            stale.append(source_id)
+                except ValueError:
+                    if source_id not in missing:
+                        missing.append(source_id)
+            if known_authority_labels and (
+                not record.authority_label
+                or record.authority_label not in known_authority_labels
+            ):
+                if source_id not in unknown_authority:
+                    unknown_authority.append(source_id)
+
+    superseded = sorted({
+        record.supersedes_source_id
+        for record in records
+        if record.supersedes_source_id and record.supersedes_source_id in record_ids
+    })
+    return ProvenanceResult(
+        missing_provenance_ids=tuple(sorted(missing)),
+        stale_source_ids=tuple(sorted(stale)),
+        unknown_authority_source_ids=tuple(sorted(unknown_authority)),
+        mismatched_source_ids=tuple(mismatched),
+        conflicting_date_source_ids=tuple(sorted(conflicting_dates)),
+        superseded_source_ids=tuple(superseded),
+    )

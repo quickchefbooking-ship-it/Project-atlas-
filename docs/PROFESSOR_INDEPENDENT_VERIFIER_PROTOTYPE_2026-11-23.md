@@ -99,3 +99,22 @@ happens to cite the same source. Tests cover partial support, fact-specific
 conflicts, and separate sources supporting separate facts. This remains a
 fixture-only lexical check and does not interpret compound natural-language
 claims or establish semantic entailment.
+
+
+
+## Source-provenance evaluation — 2026-11-26
+
+A separate deterministic metadata evaluator now accepts caller-supplied
+`SourceProvenance` records and reports missing provenance, stale records,
+unknown authority labels, source-ID mismatches, conflicting publication dates,
+and superseded source IDs. The caller must supply the evaluation date; freshness
+is evaluated only when an explicit `max_age_days` threshold is supplied.
+Authority labels are interpreted only against a caller-defined vocabulary.
+Superseded evidence is flagged, never removed or silently replaced.
+
+This layer is intentionally separate from source-text lexical support. It does
+not authenticate URLs, publishers, authors, source identity, authority, dates,
+or truth. Metadata is fixture input, not proof. It is not connected to the live
+Professor runtime. Regression tests cover complete and missing metadata,
+configurable freshness, unknown authority, mismatched IDs, conflicting dates,
+and retained superseded records.
